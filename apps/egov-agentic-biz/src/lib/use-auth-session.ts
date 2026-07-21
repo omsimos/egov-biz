@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { CitizenProfile } from "@/lib/citizen-profile";
+import { rememberAccount } from "@/lib/last-account";
 
 type AuthSessionResponse =
   | { authenticated: false; profile: null }
@@ -21,6 +22,7 @@ export function useAuthSession() {
       if (body.authenticated) {
         setProfile(body.profile);
         setStatus("authenticated");
+        rememberAccount(body.profile);
       } else {
         setProfile(null);
         setStatus("anonymous");

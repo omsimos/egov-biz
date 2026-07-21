@@ -1,8 +1,12 @@
 "use client";
 
-import { ArrowRight, ShieldCheck } from "@phosphor-icons/react";
+import { ArrowRight, ShieldCheck, UserFocus } from "@phosphor-icons/react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { EGovLogo } from "@/components/egov-logo";
+import { BagongPilipinasMark, CityscapeArt, DictSeal, NpcSeal } from "@/components/gov-seals";
+import { StatusBar } from "@/components/phone-chrome";
 import type { CitizenProfile } from "@/lib/citizen-profile";
+import { LastAccount, readLastAccount } from "@/lib/last-account";
 
 declare global {
   interface Window {
@@ -17,6 +21,11 @@ export function LoginScreen({ initialError }: { initialError?: string }) {
   const [error, setError] = useState(initialError ?? "");
   const [intentReady, setIntentReady] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [lastAccount, setLastAccount] = useState<LastAccount | null>(null);
+
+  useEffect(() => {
+    setLastAccount(readLastAccount());
+  }, []);
 
   useEffect(() => {
     if (initialError) setError(initialError);
@@ -95,34 +104,23 @@ export function LoginScreen({ initialError }: { initialError?: string }) {
 
   return (
     <div className="screen login-screen">
-      <div className="status-bar" aria-hidden="true">
-        <span>9:41</span>
-        <div className="status-icons">
-          <span className="signal" />
-          <span className="wifi">◒</span>
-          <span className="battery" />
-        </div>
-      </div>
+      <StatusBar />
       <main className="login-content" id="app-content">
         <div className="login-government-marks" aria-hidden="true">
-          <span className="login-seal login-seal-ph">
-            <i />
-          </span>
-          <span className="login-seal login-seal-dict">
-            <i>01</i>
-          </span>
-          <span className="login-seal login-seal-dpo">DPO</span>
+          <BagongPilipinasMark className="seal-bp" />
+          <DictSeal className="seal-dict" />
+          <NpcSeal className="seal-npc" />
         </div>
 
-        <div className="login-egov-logo" aria-label="eGovPH">
-          <span>eG</span>
-          <span className="login-logo-o">O</span>
-          <span>V</span>
-          <small>PH</small>
+        <div className="login-logo-row">
+          <EGovLogo size={46} />
         </div>
 
         <header className="login-welcome">
-          <h1>Welcome back</h1>
+          <h1>
+            Welcome back
+            {lastAccount ? `, ${lastAccount.firstName.toUpperCase()}` : ""}
+          </h1>
           <p>Enter your eGov exchange code</p>
         </header>
 
@@ -168,8 +166,12 @@ export function LoginScreen({ initialError }: { initialError?: string }) {
           rel="noreferrer"
           target="_blank"
         >
-          Generate a staging code
+          Forgot your code? Generate one
         </a>
+
+        <button className="faceid-pill" type="button">
+          <UserFocus weight="regular" /> Login with Face ID
+        </button>
 
         <section className="official-login" aria-label="eGovPH sign in">
           <span>or</span>
@@ -180,35 +182,20 @@ export function LoginScreen({ initialError }: { initialError?: string }) {
         </section>
 
         <div className="login-account-switch">
-          <small>Staging environment</small>
+          {lastAccount?.maskedMobile ? (
+            <small className="masked-chip">{lastAccount.maskedMobile}</small>
+          ) : (
+            <small>Staging environment</small>
+          )}
           <p>
-            Need another identity?{" "}
-            <a href="https://platforms.e.gov.ph/dashboard/api-catalogs/egov-sso">Switch account</a>
+            Not you?{" "}
+            <a href="https://platforms.e.gov.ph/dashboard/api-catalogs/egov-sso">Switch Account</a>
           </p>
         </div>
 
         <div className="login-cityscape" aria-hidden="true">
-          <div className="login-city-sun">
-            <i />
-          </div>
-          <div className="login-skyline-back">
-            <i />
-            <i />
-            <i />
-            <i />
-            <i />
-            <i />
-            <i />
-          </div>
-          <div className="login-skyline-front">
-            <i />
-            <i />
-            <i />
-            <i />
-            <i />
-            <i />
-          </div>
-          <div className="login-road" />
+          <BagongPilipinasMark className="cityscape-bp" />
+          <CityscapeArt className="cityscape-art" />
         </div>
       </main>
     </div>

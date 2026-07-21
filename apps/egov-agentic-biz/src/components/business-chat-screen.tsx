@@ -15,12 +15,13 @@ import {
   FileText,
   FlagCheckered,
   GlobeHemisphereWest,
+  Headset,
+  Info,
   ListChecks,
   MagnifyingGlass,
   PaperPlaneRight,
   PencilSimple,
   ShieldCheck,
-  Sparkle,
   StopCircle,
   Plus,
   CaretDown,
@@ -30,6 +31,7 @@ import {
 import { DefaultChatTransport, getToolName, isToolUIPart } from "ai";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
+import { StatusBar } from "@/components/phone-chrome";
 import type { BirFormArtifact } from "@/lib/bir-form/artifact";
 import {
   uniqueMessagesById,
@@ -446,7 +448,7 @@ function QuestionComposer({
   return (
     <form className="hitl-composer" onSubmit={submit}>
       <div className="hitl-batch-intro">
-        <Sparkle weight="fill" />
+        <ListChecks weight="bold" />
         <span>
           <strong>Complete this checkpoint</strong>
           <small>
@@ -646,7 +648,7 @@ function DtiFormCard({
         ))}
       </div>
       <div className="dti-help">
-        <Sparkle weight="fill" />
+        <Info weight="fill" />
         <span>
           {paid
             ? "Payment recorded. This application checkpoint is complete."
@@ -1161,17 +1163,13 @@ export function BusinessChatScreen({
 
   return (
     <div className="screen agent-chat-screen">
-      <div className="chat-status-bar" aria-hidden="true">
-        <span>9:41</span>
-        <span>● ◒ ▰</span>
-      </div>
+      <StatusBar />
       <header className="chat-header">
         <button onClick={onBack} aria-label="Go back">
           <ArrowLeft />
         </button>
         <div className="chat-agent-avatar">
-          <Sparkle weight="fill" />
-          <i />
+          <Headset weight="fill" />
         </div>
         <button className="chat-session-trigger" onClick={() => setHistoryOpen((open) => !open)}>
           <span>

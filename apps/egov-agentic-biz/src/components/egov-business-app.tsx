@@ -5,28 +5,21 @@ import {
   ArrowRight,
   BellSimple,
   Briefcase,
-  Buildings,
   Coffee,
   DotsThree,
-  FirstAid,
-  House,
-  IdentificationCard,
+  FolderOpen,
   Laptop,
-  MapPin,
-  MegaphoneSimple,
-  Newspaper,
-  Receipt,
   ShieldCheck,
   ShoppingBagOpen,
-  Sparkle,
   Storefront,
-  SuitcaseRolling,
   Trash,
-  UserCircle,
 } from "@phosphor-icons/react";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { BusinessChatScreen } from "@/components/business-chat-screen";
+import { EGovLogo } from "@/components/egov-logo";
+import { HomeScreen } from "@/components/home-screen";
 import { LoginScreen } from "@/components/login-screen";
+import { BottomNav, StatusBar } from "@/components/phone-chrome";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import type {
   BusinessConversation,
@@ -45,68 +38,6 @@ const suggestions = [
   "Help me open a small online shop",
 ];
 
-const serviceItems = [
-  { label: "NGAs", icon: Buildings },
-  { label: "LGUs", icon: Buildings },
-  { label: "Jobs", icon: Briefcase, badge: "New" },
-  { label: "Business", icon: Storefront, badge: "New", business: true },
-  { label: "Travel", icon: SuitcaseRolling },
-  { label: "Health", icon: FirstAid },
-  { label: "Report", icon: MegaphoneSimple },
-  { label: "More", icon: DotsThree },
-];
-
-function EGovLogo({ compact = false }: { compact?: boolean }) {
-  return (
-    <div className={`egov-logo ${compact ? "compact" : ""}`} aria-label="eGovPH">
-      <span>eG</span>
-      <span className="logo-sun">O</span>
-      <span>V</span>
-      <small>PH</small>
-    </div>
-  );
-}
-
-function StatusBar() {
-  return (
-    <div className="status-bar" aria-hidden="true">
-      <span>9:41</span>
-      <div className="status-icons">
-        <span className="signal" />
-        <span className="wifi">◒</span>
-        <span className="battery" />
-      </div>
-    </div>
-  );
-}
-
-function BottomNav({ active = "home" }: { active?: "home" | "business" }) {
-  return (
-    <nav className="bottom-nav" aria-label="Primary navigation">
-      <button className={active === "home" ? "active" : ""}>
-        <House weight={active === "home" ? "fill" : "regular"} />
-        <span>Home</span>
-      </button>
-      <button>
-        <Newspaper />
-        <span>News</span>
-      </button>
-      <button className="id-button" aria-label="Digital ID">
-        <IdentificationCard weight="duotone" />
-      </button>
-      <button>
-        <Receipt />
-        <i>5</i>
-        <span>History</span>
-      </button>
-      <button>
-        <UserCircle />
-        <span>Account</span>
-      </button>
-    </nav>
-  );
-}
-
 function Header({
   title,
   onBack,
@@ -123,7 +54,7 @@ function Header({
           <ArrowLeft />
         </button>
       ) : (
-        <EGovLogo compact />
+        <EGovLogo size={22} />
       )}
       {title ? <h1>{title}</h1> : <span />}
       {profile ? (
@@ -138,97 +69,7 @@ function Header({
   );
 }
 
-function HomeScreen({
-  profile,
-  onBusiness,
-  onLogout,
-}: {
-  profile: CitizenProfile;
-  onBusiness: () => void;
-  onLogout: () => void;
-}) {
-  return (
-    <div className="screen home-screen">
-      <StatusBar />
-      <div className="home-scroll" id="app-content">
-        <Header />
-        <section className="profile-hero">
-          <div className="profile-copy">
-            <ProfileAvatar profile={profile} />
-            <div>
-              <strong>Hi, {profile.firstName}</strong>
-              <span>{profile.mobile || profile.email}</span>
-              <button className="profile-signout" onClick={onLogout}>
-                Sign out
-              </button>
-            </div>
-          </div>
-          <div className="sun-card" aria-hidden="true">
-            <span className="sun-rays">✦</span>
-            <div className="sun-hill" />
-            <div className="sun-wave" />
-          </div>
-        </section>
-        <section className="service-grid" aria-label="eGovPH services">
-          {serviceItems.map(({ label, icon: Icon, badge, business }) => (
-            <button
-              key={label}
-              className={business ? "business-service" : ""}
-              onClick={business ? onBusiness : undefined}
-            >
-              <span className="service-icon">
-                <Icon weight="duotone" />
-                {badge && <i>{badge}</i>}
-              </span>
-              <span>{label}</span>
-            </button>
-          ))}
-        </section>
-        <button className="business-banner" onClick={onBusiness}>
-          <span className="banner-mark">
-            <Storefront weight="duotone" />
-          </span>
-          <span>
-            <small>NEW IN eGovPH</small>
-            <strong>Start and grow your business</strong>
-            <em>One guided path across government services</em>
-          </span>
-          <ArrowRight />
-        </button>
-        <section className="featured-section">
-          <div className="section-heading">
-            <div>
-              <small>CONNECTED SERVICES</small>
-              <h2>Featured for you</h2>
-            </div>
-            <button>See all</button>
-          </div>
-          <div className="feature-cards">
-            <article>
-              <span>National documents</span>
-              <strong>National Government Services</strong>
-              <div className="building-illustration">
-                <Buildings weight="duotone" />
-              </div>
-            </article>
-            <article>
-              <span>Near your address</span>
-              <strong>
-                {profile.city ? `${profile.city} Services` : "Local Government Services"}
-              </strong>
-              <div className="building-illustration">
-                <MapPin weight="duotone" />
-              </div>
-            </article>
-          </div>
-        </section>
-      </div>
-      <BottomNav />
-    </div>
-  );
-}
-
-function BusinessLanding({
+export function BusinessLanding({
   profile,
   businesses,
   businessesLoading,
@@ -262,9 +103,7 @@ function BusinessLanding({
       <div className="business-scroll" id="app-content">
         <section className="business-intro">
           <div className="assistant-orbit">
-            <Sparkle weight="fill" />
-            <i />
-            <i />
+            <Storefront weight="fill" />
           </div>
           <span className="secure-label">
             <ShieldCheck weight="fill" /> eGovPH
@@ -378,7 +217,7 @@ function BusinessLanding({
           </p>
         </section>
       </div>
-      <BottomNav active="business" />
+      <BottomNav active="none" />
     </div>
   );
 }
@@ -512,7 +351,7 @@ export function EgaphBusinessApp({
   return (
     <div className="prototype-stage">
       <div className="context-panel" aria-hidden="true">
-        <EGovLogo />
+        <EGovLogo size={36} />
         <p>Business</p>
         <h2>
           Start your business,
@@ -521,7 +360,7 @@ export function EgaphBusinessApp({
         </h2>
         <span>One clear path through government services.</span>
         <div className="context-foot">
-          <i />
+          <ShieldCheck weight="fill" />
           <span>Live eGov SSO</span>
         </div>
       </div>
@@ -542,9 +381,7 @@ export function EgaphBusinessApp({
                 <StatusBar />
                 <div className="loading-agent" role="status">
                   <div className="assistant-orbit">
-                    <Sparkle weight="fill" />
-                    <i />
-                    <i />
+                    <FolderOpen weight="fill" />
                   </div>
                   <h1>Opening your saved plan</h1>
                   <p>Restoring the conversation…</p>

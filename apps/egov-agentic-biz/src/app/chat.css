@@ -1,7 +1,7 @@
 /* Human-in-the-loop business chat */
 .agent-chat-screen {
   display: grid;
-  grid-template-rows: 26px 62px minmax(0, 1fr) auto;
+  grid-template-rows: 36px 62px minmax(0, 1fr) auto;
   background: #f4f6fa;
 }
 .chat-status-bar {
@@ -51,16 +51,6 @@
 }
 .chat-agent-avatar svg {
   width: 17px;
-}
-.chat-agent-avatar i {
-  position: absolute;
-  right: -1px;
-  bottom: 0;
-  width: 10px;
-  height: 10px;
-  border: 2px solid #fff;
-  border-radius: 50%;
-  background: #22a46d;
 }
 .chat-header h1 {
   margin: 0;
@@ -1130,7 +1120,7 @@
 /* Human-in-the-loop business chat */
 .agent-chat-screen {
   display: grid;
-  grid-template-rows: 26px 62px minmax(0, 1fr) auto;
+  grid-template-rows: 36px 62px minmax(0, 1fr) auto;
   background: #f4f6fa;
 }
 .chat-status-bar {
@@ -1180,16 +1170,6 @@
 }
 .chat-agent-avatar svg {
   width: 17px;
-}
-.chat-agent-avatar i {
-  position: absolute;
-  right: -1px;
-  bottom: 0;
-  width: 10px;
-  height: 10px;
-  border: 2px solid #fff;
-  border-radius: 50%;
-  background: #22a46d;
 }
 .chat-header h1 {
   margin: 0;
