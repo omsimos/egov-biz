@@ -9,6 +9,7 @@ import {
   Globe2,
   LoaderCircle,
   MessageSquarePlus,
+  Play,
   Search,
   Send,
   Sparkles,
@@ -81,9 +82,17 @@ function MessagePart({
             a: ({ href, children }) => {
               const timestampMatch = href?.match(/^#t=(\d+(?:\.\d+)?)$/);
               if (timestampMatch) {
+                const seconds = Number(timestampMatch[1]);
                 return (
-                  <button type="button" onClick={() => onSeek(Number(timestampMatch[1]))} className="inline font-mono text-[11px]">
-                    {children}
+                  <button
+                    type="button"
+                    onClick={() => onSeek(seconds)}
+                    className="citation-badge"
+                    aria-label={`Jump to cited moment at ${children?.toString() ?? `${seconds} seconds`}`}
+                    title="Open this citation in the hearing video"
+                  >
+                    <Play size={8} strokeWidth={2.5} fill="currentColor" aria-hidden="true" />
+                    <span>{children}</span>
                   </button>
                 );
               }
