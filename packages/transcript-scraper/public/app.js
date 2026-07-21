@@ -24,9 +24,7 @@ function formatDuration(totalSeconds) {
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = Math.floor(totalSeconds % 60);
 
-  return [hours, minutes, seconds]
-    .map((part) => String(part).padStart(2, "0"))
-    .join(":");
+  return [hours, minutes, seconds].map((part) => String(part).padStart(2, "0")).join(":");
 }
 
 function renderTranscript(result) {
@@ -86,9 +84,7 @@ async function extractTranscript(url) {
     status.textContent = `${body.result.segments.length.toLocaleString()} segments ready.`;
   } catch (error) {
     status.className = "status error";
-    status.textContent = error instanceof Error
-      ? error.message
-      : "Transcript extraction failed";
+    status.textContent = error instanceof Error ? error.message : "Transcript extraction failed";
   } finally {
     extractButton.disabled = false;
     exampleButton.disabled = false;

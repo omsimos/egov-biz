@@ -1,10 +1,6 @@
 const YOUTUBE_WEB_ORIGIN = "https://www.youtube.com";
 const WATCH_PAGE_MARKERS = {
-  initialData: [
-    "var ytInitialData = ",
-    'window["ytInitialData"] = ',
-    "ytInitialData = ",
-  ],
+  initialData: ["var ytInitialData = ", 'window["ytInitialData"] = ', "ytInitialData = "],
   playerResponse: [
     "var ytInitialPlayerResponse = ",
     'window["ytInitialPlayerResponse"] = ',
@@ -57,9 +53,7 @@ function findFirst(value, predicate) {
 }
 
 function timestampToSeconds(timestamp) {
-  return timestamp
-    .split(":")
-    .reduce((total, part) => total * 60 + Number(part), 0);
+  return timestamp.split(":").reduce((total, part) => total * 60 + Number(part), 0);
 }
 
 function secondsToSrtTimestamp(seconds) {
@@ -124,14 +118,9 @@ export function segmentsToSrt(segments, videoDuration = 0) {
   return `${segments
     .map((segment, index) => {
       const nextStart = segments[index + 1]?.start;
-      const fallbackEnd = videoDuration > segment.start
-        ? videoDuration
-        : segment.start + 10;
+      const fallbackEnd = videoDuration > segment.start ? videoDuration : segment.start + 10;
       const boundary = nextStart ?? fallbackEnd;
-      const end = Math.max(
-        segment.start + 0.25,
-        Math.min(boundary - 0.001, segment.start + 10),
-      );
+      const end = Math.max(segment.start + 0.25, Math.min(boundary - 0.001, segment.start + 10));
 
       return [
         index + 1,
@@ -160,30 +149,20 @@ export async function getYouTubeTranscript(input, options = {}) {
   }
 
   const html = await watchResponse.text();
-  const initialData = extractAssignedJson(
-    html,
-    WATCH_PAGE_MARKERS.initialData,
-  );
-  const playerResponse = extractAssignedJson(
-    html,
-    WATCH_PAGE_MARKERS.playerResponse,
-  );
+  const initialData = extractAssignedJson(html, WATCH_PAGE_MARKERS.initialData);
+  const playerResponse = extractAssignedJson(html, WATCH_PAGE_MARKERS.playerResponse);
 
   if (playerResponse.playabilityStatus?.status !== "OK") {
-    throw new Error(
-      playerResponse.playabilityStatus?.reason ?? "This video is unavailable",
-    );
+    throw new Error(playerResponse.playabilityStatus?.reason ?? "This video is unavailable");
   }
 
-  const transcriptWrapper = findFirst(
-    initialData,
-    (node) => Boolean(node.videoDescriptionTranscriptSectionRenderer),
+  const transcriptWrapper = findFirst(initialData, (node) =>
+    Boolean(node.videoDescriptionTranscriptSectionRenderer),
   );
-  const transcriptSection =
-    transcriptWrapper?.videoDescriptionTranscriptSectionRenderer;
+  const transcriptSection = transcriptWrapper?.videoDescriptionTranscriptSectionRenderer;
   const commands =
-    transcriptSection?.primaryButton?.buttonRenderer?.command
-      ?.commandExecutorCommand?.commands ?? [];
+    transcriptSection?.primaryButton?.buttonRenderer?.command?.commandExecutorCommand?.commands ??
+    [];
   const showPanel = commands.find(
     (command) => command.showEngagementPanelEndpoint,
   )?.showEngagementPanelEndpoint;
@@ -192,11 +171,7 @@ export async function getYouTubeTranscript(input, options = {}) {
     throw new Error("This video does not expose a transcript");
   }
 
-  const apiKey = getStringMatch(
-    html,
-    /"INNERTUBE_API_KEY":"([^"]+)"/,
-    "web client key",
-  );
+  const apiKey = getStringMatch(html, /"INNERTUBE_API_KEY":"([^"]+)"/, "web client key");
   const clientVersion = getStringMatch(
     html,
     /"INNERTUBE_CLIENT_VERSION":"([^"]+)"/,
@@ -230,25 +205,26 @@ export async function getYouTubeTranscript(input, options = {}) {
 
   const panelData = await panelResponse.json();
   const sectionContents =
-    panelData.content?.engagementPanelSectionListRenderer?.content
-      ?.sectionListRenderer?.contents ?? [];
+    panelData.content?.engagementPanelSectionListRenderer?.content?.sectionListRenderer?.contents ??
+    [];
 
   const segments = sectionContents
     .flatMap((section) => section.itemSectionRenderer?.contents ?? [])
     .flatMap((entry) => {
-      const item =
-        entry.macroMarkersPanelItemViewModel?.item?.timelineItemViewModel;
+      const item = entry.macroMarkersPanelItemViewModel?.item?.timelineItemViewModel;
       const segment = item?.contentItems
         ?.map((content) => content.transcriptSegmentViewModel)
         .find(Boolean);
       const timestamp = segment?.timestamp ?? item?.timestamp;
 
       return segment?.simpleText && timestamp
-        ? [{
-            start: timestampToSeconds(timestamp),
-            text: segment.simpleText,
-            timestamp,
-          }]
+        ? [
+            {
+              start: timestampToSeconds(timestamp),
+              text: segment.simpleText,
+              timestamp,
+            },
+          ]
         : [];
     })
     .sort((left, right) => left.start - right.start);
@@ -257,17 +233,13 @@ export async function getYouTubeTranscript(input, options = {}) {
     throw new Error("YouTube returned an empty transcript");
   }
 
-  const tracks =
-    playerResponse.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
-  const selectedTrack =
-    tracks.find((track) => track.kind === "asr") ?? tracks[0];
+  const tracks = playerResponse.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
+  const selectedTrack = tracks.find((track) => track.kind === "asr") ?? tracks[0];
   const trackName =
     selectedTrack?.name?.simpleText ??
     selectedTrack?.name?.runs?.map((run) => run.text).join("") ??
     "Transcript";
-  const durationSeconds = Number(
-    playerResponse.videoDetails?.lengthSeconds ?? 0,
-  );
+  const durationSeconds = Number(playerResponse.videoDetails?.lengthSeconds ?? 0);
 
   return {
     autogenerated: selectedTrack?.kind === "asr",

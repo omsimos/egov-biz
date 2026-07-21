@@ -8,7 +8,7 @@ public YouTube video. It previews timestamped segments and downloads SRT or JSON
 Requires Node.js 20 or newer.
 
 ```sh
-npm start
+bun run start
 ```
 
 Open <http://127.0.0.1:4173>, paste a YouTube URL, and select **Extract
@@ -17,7 +17,7 @@ transcript**.
 ## Test
 
 ```sh
-npm test
+bun test
 ```
 
 The extractor reads YouTube's public watch-page data and calls the same internal

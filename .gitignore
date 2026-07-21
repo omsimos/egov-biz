@@ -1,0 +1,9 @@
+.DS_Store
+.env
+.env.*
+!.env.sample
+.tmp/
+.turbo/
+node_modules/
+dist/
+*.tsbuildinfo

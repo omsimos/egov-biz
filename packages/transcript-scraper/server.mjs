@@ -62,17 +62,13 @@ async function handleTranscriptRequest(request, response) {
     sendJson(response, 200, { ok: true, result });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Extraction failed";
-    const statusCode = /valid YouTube|does not contain|does not expose/.test(message)
-      ? 400
-      : 502;
+    const statusCode = /valid YouTube|does not contain|does not expose/.test(message) ? 400 : 502;
     sendJson(response, statusCode, { error: message, ok: false });
   }
 }
 
 function handleDownloadRequest(pathname, response) {
-  const match = pathname.match(
-    /^\/api\/transcript\/([A-Za-z0-9_-]{11})\.(srt|json)$/,
-  );
+  const match = pathname.match(/^\/api\/transcript\/([A-Za-z0-9_-]{11})\.(srt|json)$/);
   if (!match) return false;
 
   const [, videoId, format] = match;
@@ -87,16 +83,14 @@ function handleDownloadRequest(pathname, response) {
   }
 
   const filename = `${videoId}-${result.languageCode}.${format}`;
-  const contents = format === "srt"
-    ? result.srt
-    : `${JSON.stringify({ ...result, srt: undefined }, null, 2)}\n`;
+  const contents =
+    format === "srt" ? result.srt : `${JSON.stringify({ ...result, srt: undefined }, null, 2)}\n`;
 
   response.writeHead(200, {
     "cache-control": "no-store",
     "content-disposition": `attachment; filename="${filename}"`,
-    "content-type": format === "srt"
-      ? "application/x-subrip; charset=utf-8"
-      : "application/json; charset=utf-8",
+    "content-type":
+      format === "srt" ? "application/x-subrip; charset=utf-8" : "application/json; charset=utf-8",
     "x-content-type-options": "nosniff",
   });
   response.end(contents);
