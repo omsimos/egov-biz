@@ -21,17 +21,23 @@ import {
   Sparkle,
   Storefront,
   SuitcaseRolling,
+  Trash,
   UserCircle,
 } from "@phosphor-icons/react";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { BusinessChatScreen } from "@/components/business-chat-screen";
 import { LoginScreen } from "@/components/login-screen";
 import { ProfileAvatar } from "@/components/profile-avatar";
+import type {
+  BusinessConversation,
+  ConversationSummary,
+  PaymentServiceType,
+} from "@/lib/business-chat";
 import type { CitizenProfile, RegisteredBusiness } from "@/lib/citizen-profile";
 import { useApi } from "@/lib/use-api";
 import { useAuthSession } from "@/lib/use-auth-session";
 
-type Screen = "home" | "business" | "chat";
+type Screen = "restoring" | "home" | "business" | "chat";
 
 const suggestions = [
   "I want to start a coffee subscription business in Makati",
@@ -226,16 +232,22 @@ function BusinessLanding({
   profile,
   businesses,
   businessesLoading,
+  conversations,
   initialPrompt,
   onBack,
   onSubmit,
+  onResume,
+  onDelete,
 }: {
   profile: CitizenProfile | null;
   businesses: RegisteredBusiness[] | null;
   businessesLoading: boolean;
+  conversations: ConversationSummary[];
   initialPrompt: string;
   onBack: () => void;
   onSubmit: (prompt: string) => void;
+  onResume: (id: string) => void;
+  onDelete: (conversation: ConversationSummary) => void;
 }) {
   const [prompt, setPrompt] = useState(initialPrompt);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -257,27 +269,63 @@ function BusinessLanding({
           <span className="secure-label">
             <ShieldCheck weight="fill" /> eGovPH
           </span>
-          <h2>Describe your business</h2>
-          <p>Tell us what you want to sell or do.</p>
+          <h2>Start a registration plan</h2>
+          <p>
+            Describe your business once. We’ll map the full route and gather important details
+            together.
+          </p>
         </section>
         <form className="prompt-box" onSubmit={submit}>
           <textarea
             ref={inputRef}
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
             placeholder="Describe your business idea…"
             rows={3}
             aria-label="Describe your business idea"
           />
           <div>
-            <span>
-              <ShieldCheck weight="fill" /> Your details stay private
-            </span>
             <button type="submit" disabled={!prompt.trim()} aria-label="Continue">
               <ArrowRight weight="bold" />
             </button>
           </div>
         </form>
+        {conversations.length > 0 && (
+          <section className="saved-plans">
+            <div className="section-heading">
+              <div>
+                <small>SAVED SESSIONS</small>
+                <h2>Registration plans</h2>
+              </div>
+            </div>
+            <div>
+              {conversations.map((conversation) => (
+                <div className="saved-plan-row" key={conversation.id}>
+                  <button className="saved-plan-open" onClick={() => onResume(conversation.id)}>
+                    <span>
+                      <strong>{conversation.title}</strong>
+                      <small>Updated {new Date(conversation.updatedAt).toLocaleDateString()}</small>
+                    </span>
+                    <ArrowRight />
+                  </button>
+                  <button
+                    className="saved-plan-delete"
+                    onClick={() => onDelete(conversation)}
+                    aria-label={`Delete ${conversation.title}`}
+                  >
+                    <Trash />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
         <section className="suggestions-section">
           <h3>Try asking</h3>
           <div className="suggestion-list">
@@ -301,7 +349,7 @@ function BusinessLanding({
         <section className="linked-businesses">
           <div className="section-heading">
             <div>
-              <small>YOUR EGOVPH ACCOUNT</small>
+              <small>LINKED TO YOUR TIN</small>
               <h2>Your businesses</h2>
             </div>
             <button aria-label="Show business options">
@@ -310,8 +358,8 @@ function BusinessLanding({
           </div>
           {businessesLoading ? (
             <div className="business-record skeleton-card" />
-          ) : businesses?.length ? (
-            businesses.map((business) => (
+          ) : (
+            businesses?.map((business) => (
               <article className="business-record" key={business.id}>
                 <span className="record-icon">
                   <Briefcase weight="duotone" />
@@ -324,17 +372,9 @@ function BusinessLanding({
                 <i>{business.status}</i>
               </article>
             ))
-          ) : (
-            <div className="business-empty">
-              <Briefcase weight="duotone" />
-              <div>
-                <strong>No linked businesses yet</strong>
-                <span>Your first registration will appear here after it is submitted.</span>
-              </div>
-            </div>
           )}
           <p>
-            <ShieldCheck weight="fill" /> Signed in as {profile?.fullName ?? "an eGovPH citizen"}.
+            <ShieldCheck weight="fill" /> Matched to your eGovPH account.
           </p>
         </section>
       </div>
@@ -343,20 +383,127 @@ function BusinessLanding({
   );
 }
 
-export function EgaphBusinessApp() {
-  const [screen, setScreen] = useState<Screen>("home");
-  const [prompt, setPrompt] = useState("");
+export function EgaphBusinessApp({
+  initialConversation = null,
+  requestedChatId = null,
+}: {
+  initialConversation?: BusinessConversation | null;
+  requestedChatId?: string | null;
+}) {
+  const [screen, setScreen] = useState<Screen>(
+    initialConversation ? "chat" : requestedChatId ? "restoring" : "home",
+  );
+  const [prompt, setPrompt] = useState(initialConversation?.initialPrompt ?? "");
+  const [conversation, setConversation] = useState<BusinessConversation | null>(
+    initialConversation,
+  );
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
+  const [paymentService, setPaymentService] = useState<PaymentServiceType | null>(null);
   const { error: authError, logout, profile, status } = useAuthSession();
   const { data: businesses, loading: businessesLoading } = useApi<RegisteredBusiness[]>(
     "/api/businesses",
     status === "authenticated",
   );
+  const refreshConversations = useCallback(async () => {
+    const response = await fetch("/api/conversations");
+    if (response.ok)
+      setConversations(
+        ((await response.json()) as { conversations: ConversationSummary[] }).conversations,
+      );
+  }, []);
+  const openConversation = useCallback(
+    async (id: string, status?: string | null, serviceType?: PaymentServiceType | null) => {
+      const response = await fetch(`/api/conversations/${encodeURIComponent(id)}`);
+      if (!response.ok) return;
+      const current = ((await response.json()) as { conversation: BusinessConversation })
+        .conversation;
+      setConversation(current);
+      setPrompt(current.initialPrompt);
+      setPaymentStatus(status ?? null);
+      setPaymentService(serviceType ?? null);
+      setScreen("chat");
+      const url = new URL(window.location.href);
+      url.search = "";
+      url.searchParams.set("chat", current.id);
+      window.history.replaceState({}, "", url);
+      await refreshConversations();
+    },
+    [refreshConversations],
+  );
+  useEffect(() => {
+    void (async () => {
+      await refreshConversations();
+      const url = new URL(window.location.href);
+      const id = url.searchParams.get("chat");
+      if (!id) {
+        setScreen("home");
+        return;
+      }
+      const paymentReturn = url.searchParams.get("payment") === "return";
+      if (initialConversation?.id === id && !paymentReturn) return;
+      let status: string | null = null;
+      let serviceType: PaymentServiceType | null = null;
+      const transactionId = url.searchParams.get("transactionId");
+      if (paymentReturn && transactionId) {
+        const paymentResponse = await fetch(
+          `/api/payments/egovpay/status?transactionId=${encodeURIComponent(transactionId)}`,
+        );
+        if (paymentResponse.ok) {
+          const payment = (
+            (await paymentResponse.json()) as {
+              payment?: { status?: string; serviceType?: PaymentServiceType };
+            }
+          ).payment;
+          status = payment?.status ?? "pending";
+          serviceType = payment?.serviceType ?? null;
+        }
+      }
+      await openConversation(id, status, serviceType);
+      setScreen((current) => (current === "restoring" ? "business" : current));
+    })();
+  }, [initialConversation?.id, openConversation, refreshConversations]);
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [screen]);
-  const startChat = (value: string) => {
+  const startChat = async (value: string) => {
+    const response = await fetch("/api/conversations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ initialPrompt: value }),
+    });
+    if (!response.ok) return;
+    const created = ((await response.json()) as { conversation: BusinessConversation })
+      .conversation;
+    setConversation(created);
     setPrompt(value);
+    setPaymentStatus(null);
+    setPaymentService(null);
+    setPaymentService(null);
     setScreen("chat");
+    window.history.pushState({}, "", `?chat=${encodeURIComponent(created.id)}`);
+    await refreshConversations();
+  };
+  const leaveChat = () => {
+    setScreen("business");
+    setConversation(null);
+    setPaymentStatus(null);
+    window.history.pushState({}, "", window.location.pathname);
+    void refreshConversations();
+  };
+  const deleteSession = async (item: ConversationSummary) => {
+    if (
+      !window.confirm(
+        `Delete “${item.title}”? This will permanently remove its messages and payment history.`,
+      )
+    )
+      return;
+    const response = await fetch(`/api/conversations/${encodeURIComponent(item.id)}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) return;
+    setConversations((current) => current.filter(({ id }) => id !== item.id));
+    if (conversation?.id === item.id) leaveChat();
   };
   const signOut = async () => {
     await logout();
@@ -386,31 +533,61 @@ export function EgaphBusinessApp() {
             </div>
             <p>Restoring your secure session…</p>
           </div>
+        ) : !profile ? (
+          <LoginScreen initialError={authError} />
         ) : (
           <>
-            {!profile && <LoginScreen initialError={authError} />}
-            {profile && screen === "home" && (
+            {screen === "restoring" && (
+              <div className="screen restoring-chat-screen">
+                <StatusBar />
+                <div className="loading-agent" role="status">
+                  <div className="assistant-orbit">
+                    <Sparkle weight="fill" />
+                    <i />
+                    <i />
+                  </div>
+                  <h1>Opening your saved plan</h1>
+                  <p>Restoring the conversation…</p>
+                  <div className="loading-bars" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                </div>
+              </div>
+            )}
+            {screen === "home" && (
               <HomeScreen
                 profile={profile}
                 onBusiness={() => setScreen("business")}
                 onLogout={() => void signOut()}
               />
             )}
-            {profile && screen === "business" && (
+            {screen === "business" && (
               <BusinessLanding
                 profile={profile}
                 businesses={businesses}
                 businessesLoading={businessesLoading}
+                conversations={conversations}
                 initialPrompt={prompt}
                 onBack={() => setScreen("home")}
                 onSubmit={startChat}
+                onResume={(id) => void openConversation(id)}
+                onDelete={(item) => void deleteSession(item)}
               />
             )}
-            {profile && screen === "chat" && (
+            {screen === "chat" && conversation && (
               <BusinessChatScreen
-                initialPrompt={prompt}
+                key={conversation.id}
+                conversation={conversation}
+                conversations={conversations}
                 profile={profile}
-                onBack={() => setScreen("business")}
+                paymentStatus={paymentStatus}
+                paymentService={paymentService}
+                onBack={leaveChat}
+                onNewConversation={leaveChat}
+                onSelectConversation={(id) => void openConversation(id)}
+                onDeleteConversation={(item) => void deleteSession(item)}
               />
             )}
           </>

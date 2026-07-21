@@ -1,5 +1,6 @@
 import { eGovPayApi } from "@repo/egov/eGovPay";
 import { egovPayBaseUrl, PaymentUrlConfigurationError } from "@/lib/payment-urls";
+import { getPaymentByUuid, updatePaymentStatus } from "@/server/payments";
 
 export const dynamic = "force-dynamic";
 
@@ -18,10 +19,14 @@ export async function POST(request: Request) {
     );
     if (!transactionUuid)
       return Response.json({ error: "Missing transaction reference" }, { status: 400 });
+    if (!getPaymentByUuid(transactionUuid))
+      return Response.json({ error: "Unknown transaction reference" }, { status: 404 });
+
     const transaction = await eGovPayApi
       .fromEnv({ baseUrl })
       .getTransaction(transactionUuid, { signal: AbortSignal.timeout(12_000) });
-    // Fulfillment must rely on this server-to-server status, never callback payload claims.
+    // Fulfillment relies on this server-to-server status, never callback payload claims.
+    updatePaymentStatus(transactionUuid, transaction.data.payment_status, transaction.data.paid_at);
     return Response.json({ received: true, paymentStatus: transaction.data.payment_status });
   } catch (error) {
     if (error instanceof PaymentUrlConfigurationError) {

@@ -2858,3 +2858,75 @@ a:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Persisted registration plans */
+.saved-plans {
+  margin: 24px 0 28px;
+}
+.saved-plans > div:last-child {
+  display: grid;
+  gap: 8px;
+}
+.saved-plan-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+}
+.saved-plan-open {
+  min-width: 0;
+  min-height: 58px;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+.saved-plan-open > span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.saved-plan-delete {
+  width: 42px;
+  border: 0;
+  border-left: 1px solid var(--line);
+  color: #9a493e;
+  background: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.saved-plan-delete:hover {
+  background: #fff1ef;
+}
+.saved-plan-delete svg {
+  width: 15px;
+}
+.saved-plans strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.saved-plans small {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.saved-plans svg {
+  width: 16px;
+  color: var(--blue);
+}
+.restoring-chat-screen {
+  background: #f4f6fa;
+}
+.restoring-chat-screen .loading-agent {
+  height: calc(100% - 26px);
+}

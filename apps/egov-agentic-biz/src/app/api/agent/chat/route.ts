@@ -5,11 +5,11 @@ import {
   createGateway,
   createUIMessageStream,
   createUIMessageStreamResponse,
-  generateObject,
   stepCountIs,
   streamText,
   tool,
   type UIMessage,
+  type UIMessageStreamWriter,
 } from "ai";
 import { z } from "zod";
 import { fallbackQuestionFor, inferCategory } from "@/lib/business-rules";
@@ -20,18 +20,22 @@ import {
   resolveBusinessLocation,
   selectRdo,
 } from "@/lib/government-data";
-import type {
-  BusinessChatMessage,
-  DtiBusinessNameForm,
-  RegistrationPlan,
-  UserInfoOutput,
+import {
+  uniqueMessagesById,
+  type BarangayClearance,
+  type BusinessChatMessage,
+  type DtiBusinessNameForm,
+  type EbplsBusinessPermitReceipt,
+  type PaymentServiceType,
+  type RegistrationPlan,
+  type UserInfoOutput,
 } from "@/lib/business-chat";
 import { readSession } from "@/lib/auth/session";
 import { createBirFormArtifact } from "@/lib/bir-form/artifact";
 import { isExplicitBirFormRequest } from "@/lib/bir-form/request";
-import type { CitizenProfile } from "@/lib/citizen-profile";
 import { initialRegistrationPlan } from "@/lib/registration-plan";
 import { dtiRegistrationFee, formatPeso } from "@/lib/dti-fees";
+import type { CitizenProfile } from "@/lib/citizen-profile";
 import {
   availableUserInfoFields,
   extractExplicitBusinessAddress,
@@ -39,9 +43,49 @@ import {
   resolveBusinessFormAddress,
 } from "@/lib/form-prefill";
 import type { BusinessPlan, IntakeAnswer, IntakeQuestion } from "@/lib/questions";
+import { getConversation, saveMessages, setActiveStream } from "@/server/conversations";
+import {
+  getLatestPaymentForConversation,
+  getLatestPaymentForService,
+  isPaidStatus,
+} from "@/server/payments";
+import { getResumableContext } from "@/server/resumable";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 120;
+
+const BARANGAY_CLEARANCE_MOCK_DELAY_MS = 2_000;
+const EBPLS_PERMIT_MOCK_DELAY_MS = 5_000;
+
+const PLACEHOLDER_ANSWER =
+  /^(?:a+s+s+|asdf+|test(?:ing)?|sample|placeholder|none|n\/?a|not sure|unknown|idk|tbd|xxx+|-+)$/i;
+
+function normalizedAnswerText(value: string | string[]) {
+  return (Array.isArray(value) ? value.join(" ") : value).trim().replace(/\s+/g, " ");
+}
+
+function isMeaningfulBusinessName(value: string) {
+  const text = value.trim().replace(/\s+/g, " ");
+  return text.length >= 3 && /[a-z\d]/i.test(text) && !PLACEHOLDER_ANSWER.test(text);
+}
+
+function isCompleteBusinessAddress(value: string) {
+  const text = value.trim().replace(/\s+/g, " ");
+  if (text.length < 10 || PLACEHOLDER_ANSWER.test(text)) return false;
+  const addressMarker =
+    /\b(?:\d{1,5}|unit|room|floor|block|lot|house|street|st\.?|road|rd\.?|avenue|ave\.?|drive|highway|building|bldg\.?|plaza|village|subdivision|purok|sitio|poblacion|barangay|brgy\.?)\b/i.test(
+      text,
+    );
+  return addressMarker && (text.includes(",") || text.split(" ").length >= 4);
+}
+
+function isUsableIntakeAnswer(answer: IntakeAnswer) {
+  const text = normalizedAnswerText(answer.value);
+  if (!text || PLACEHOLDER_ANSWER.test(text)) return false;
+  if (answer.questionId === "business-address") return isCompleteBusinessAddress(text);
+  if (answer.questionId === "proposed-business-name") return isMeaningfulBusinessName(text);
+  return true;
+}
 
 const optionSchema = z.object({
   id: z.string().min(1).max(60),
@@ -78,15 +122,44 @@ const questionSchema = z
   });
 const dtiFormSchema = z.object({
   applicationType: z.literal("New registration"),
-  status: z.enum(["Draft", "Ready to submit", "Submitted"]),
-  proposedName: z.string(),
-  businessActivity: z.string(),
+  status: z.enum(["Ready to submit", "Submitted"]),
+  proposedName: z
+    .string()
+    .trim()
+    .refine(isMeaningfulBusinessName, "A complete proposed business name is required"),
+  businessActivity: z.string().trim().min(1),
   territorialScope: z.enum(["Barangay", "City / municipality", "Regional", "National"]),
+  ownerName: z.string().trim().min(1),
+  businessAddress: z
+    .string()
+    .trim()
+    .refine(isCompleteBusinessAddress, "A complete business address is required"),
+  city: z.string().trim().min(1),
+  feeLabel: z.string().trim().min(1),
+  missingFields: z.array(z.string()).max(0),
+});
+const barangayClearanceApplicationSchema = z.object({
+  businessName: z.string(),
   ownerName: z.string(),
+  businessActivity: z.string(),
   businessAddress: z.string(),
+  barangay: z.string(),
   city: z.string(),
-  feeLabel: z.string(),
-  missingFields: z.array(z.string()),
+  registrationDocument: z.string(),
+  supportingDocuments: z.array(z.string()),
+});
+const ebplsBusinessPermitApplicationSchema = z.object({
+  system: z.literal("EBPLS"),
+  permitType: z.literal("New business permit"),
+  businessName: z.string(),
+  ownerName: z.string(),
+  businessActivity: z.string(),
+  businessAddress: z.string(),
+  barangay: z.string(),
+  city: z.string(),
+  barangayClearanceReference: z.string(),
+  registrationDocument: z.string(),
+  attachments: z.array(z.string()),
 });
 const planStepSchema = z.object({
   id: z.string().min(1).max(60),
@@ -95,35 +168,28 @@ const planStepSchema = z.object({
 });
 const registrationPlanSchema = z.object({
   title: z.string().min(1).max(120),
-  steps: z.array(planStepSchema).min(2).max(8),
+  steps: z.array(planStepSchema).min(2).max(12),
 });
+const paymentServiceSchema = z.enum([
+  "dti-business-name",
+  "barangay-clearance",
+  "ebpls-business-permit",
+]);
 const requestSchema = z.object({
+  id: z.string().uuid(),
   messages: z.array(z.unknown()),
   initialPrompt: z.string().trim().min(1).max(2_000),
+  event: z.enum(["payment-completed"]).optional(),
+  paymentService: paymentServiceSchema.optional(),
 });
-const generatedRouteSchema = z.object({
-  businessLabel: z.string().min(1).max(100),
-  registrationType: z.enum(["Sole proprietor", "Self-employed", "Company", "Needs review"]),
-  category: z.enum([
-    "professional-services",
-    "retail",
-    "food-service",
-    "food-manufacturing",
-    "vehicle-rental",
-    "general-services",
-  ]),
-  flags: z.array(
-    z.enum(["food", "food-manufacturing", "physical-premises", "vehicles", "employees"]),
-  ),
-  setup: z.array(z.string().max(100)).max(4),
-  people: z.number().int().min(1).max(100_000),
-});
-const intakeDecisionSchema = z.object({
-  status: z.enum(["question", "ready"]),
-  question: questionSchema.nullable(),
-  route: generatedRouteSchema.nullable(),
-});
-type GeneratedRoute = z.infer<typeof generatedRouteSchema>;
+type GeneratedRoute = {
+  businessLabel: string;
+  registrationType: "Sole proprietor" | "Self-employed" | "Company" | "Needs review";
+  category: BusinessPlan["category"];
+  flags: BusinessPlan["flags"];
+  setup: string[];
+  people: number;
+};
 
 function userText(messages: UIMessage[]) {
   return messages
@@ -132,27 +198,6 @@ function userText(messages: UIMessage[]) {
       message.parts.filter((part) => part.type === "text").map((part) => part.text),
     )
     .join("\n");
-}
-
-function latestUserText(messages: UIMessage[]) {
-  const message = messages.findLast((item) => item.role === "user");
-  return (
-    message?.parts
-      .filter((part) => part.type === "text")
-      .map((part) => part.text)
-      .join("\n") ?? ""
-  );
-}
-
-function businessAddressQuestion(city: string): IntakeQuestion {
-  return {
-    id: "business-address",
-    eyebrow: "Last detail",
-    title: `What is the business address in ${city}?`,
-    helpText: "Include the street or building and barangay.",
-    type: "text",
-    placeholder: `Street or building, barangay, ${city}`,
-  };
 }
 
 function profileAddressQuestion(): IntakeQuestion {
@@ -183,22 +228,415 @@ function addressPreference(answers: IntakeAnswer[]) {
   );
 }
 
+function lastBarangayClearance(messages: UIMessage[]) {
+  for (const message of [...messages].reverse())
+    for (const part of [...message.parts].reverse()) {
+      if (part.type === "tool-submitBarangayClearance" && part.state === "output-available")
+        return (part.output as { clearance: BarangayClearance }).clearance;
+    }
+  return null;
+}
+
+function lastEbplsReceipt(messages: UIMessage[]) {
+  for (const message of [...messages].reverse())
+    for (const part of [...message.parts].reverse()) {
+      if (part.type === "tool-submitEbplsBusinessPermit" && part.state === "output-available")
+        return (part.output as { receipt: EbplsBusinessPermitReceipt }).receipt;
+    }
+  return null;
+}
+
+function planAfterPermitIssued(plan: RegistrationPlan): RegistrationPlan {
+  return normalizePlan({
+    ...plan,
+    steps: plan.steps.map((step) => ({
+      ...step,
+      status: [
+        "details",
+        "structure",
+        "name-registration",
+        "local-clearance",
+        "business-permit",
+      ].includes(step.id)
+        ? "completed"
+        : step.id === "bir"
+          ? "in_progress"
+          : "pending",
+    })),
+  });
+}
+
+function questionsForIncompleteDtiForm(
+  form: DtiBusinessNameForm,
+  profile: CitizenProfile | null,
+  answers: IntakeAnswer[],
+) {
+  const answered = new Set(answers.map((answer) => answer.questionId));
+  const questions: IntakeQuestion[] = [];
+  if (!isMeaningfulBusinessName(form.proposedName) && !answered.has("proposed-business-name"))
+    questions.push(proposedNameQuestion());
+  if (!isCompleteBusinessAddress(form.businessAddress) && !answered.has("business-address"))
+    questions.push(
+      businessAddressQuestion(form.city || profile?.city || "your city or municipality"),
+    );
+  return questions;
+}
+
+function describesBusinessIdea(prompt: string) {
+  const value = prompt.toLowerCase();
+  return (
+    /\b(business|company|shop|store|clinic|practice|restaurant|bakery|cafe|coffee|food|catering|dental|dentist|medical|doctor|consulting|consultant|freelance|designer|developer|photograph|accounting|retail|rental|salon|laundry|agency|sole propriet|corporation|partnership)\b/.test(
+      value,
+    ) ||
+    /\b(?:sell|selling|offer|offering|provide|providing)\b.{0,50}\b(?:service|services|product|products|food|drinks|online)\b/.test(
+      value,
+    )
+  );
+}
+
+function latestUserText(messages: UIMessage[]) {
+  for (const message of [...messages].reverse()) {
+    if (message.role !== "user") continue;
+    const text = message.parts
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("\n")
+      .trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function planAfterBarangayClearance(plan: RegistrationPlan): RegistrationPlan {
+  return normalizePlan({
+    ...plan,
+    steps: plan.steps.map((step) => ({
+      ...step,
+      status:
+        step.id === "details" ||
+        step.id === "structure" ||
+        step.id === "name-registration" ||
+        step.id === "local-clearance"
+          ? "completed"
+          : step.id === "business-permit"
+            ? "in_progress"
+            : "pending",
+    })),
+  });
+}
+
+function planAfterEbplsSubmission(plan: RegistrationPlan): RegistrationPlan {
+  return normalizePlan({
+    ...plan,
+    steps: plan.steps.map((step) => ({
+      ...step,
+      status:
+        step.id === "details" ||
+        step.id === "structure" ||
+        step.id === "name-registration" ||
+        step.id === "local-clearance"
+          ? "completed"
+          : step.id === "business-permit"
+            ? "in_progress"
+            : "pending",
+    })),
+  });
+}
+
+function wait(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function mockReference(prefix: string) {
+  return `${prefix}-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+}
+
+function mockBarangayClearance(
+  payment: NonNullable<ReturnType<typeof getLatestPaymentForConversation>>,
+  form: DtiBusinessNameForm | null,
+  profile: CitizenProfile | null,
+): BarangayClearance {
+  const submittedAt = new Date();
+  const barangay = profile?.barangay || "Business-address barangay";
+  const city = form?.city || profile?.city || "Local government unit";
+  return {
+    businessName: payment.proposedName,
+    ownerName: payment.ownerName || profile?.fullName || "Registered owner",
+    businessActivity: form?.businessActivity || "Business activity on registration record",
+    businessAddress:
+      form?.businessAddress || profile?.address || "Business address on registration record",
+    barangay,
+    city,
+    registrationDocument: `DTI Business Name Certificate — ${payment.proposedName}`,
+    supportingDocuments: [
+      "DTI Business Name Certificate",
+      "Government-issued ID",
+      "Proof of business address",
+      "Owner consent or lease, if applicable",
+    ],
+    status: "Payment required",
+    referenceNumber: mockReference("BCLR"),
+    submittedAt: submittedAt.toISOString(),
+    approvedAt: null,
+    validUntil: null,
+    feeLabel: formatPeso(500),
+    usedFor: [
+      "Supporting document for the EBPLS mayor’s/business permit application",
+      "Proof of barangay approval for the declared business location",
+      "Local inspection and permit-record verification",
+    ],
+  };
+}
+
+function mockEbplsReceipt(clearance: BarangayClearance): EbplsBusinessPermitReceipt {
+  const submittedAt = new Date();
+  return {
+    system: "EBPLS",
+    permitType: "New business permit",
+    businessName: clearance.businessName,
+    ownerName: clearance.ownerName,
+    businessActivity: clearance.businessActivity,
+    businessAddress: clearance.businessAddress,
+    barangay: clearance.barangay,
+    city: clearance.city,
+    barangayClearanceReference: clearance.referenceNumber,
+    registrationDocument: clearance.registrationDocument,
+    attachments: [
+      clearance.registrationDocument,
+      `Barangay Clearance ${clearance.referenceNumber}`,
+      "Government-issued ID",
+      "Proof of business address",
+    ],
+    status: "Payment required",
+    referenceNumber: mockReference("EBPLS"),
+    submittedAt: submittedAt.toISOString(),
+    issuedAt: null,
+    validUntil: null,
+    feeLabel: formatPeso(2_500),
+    nextAction:
+      "Pay the assessed LGU fees through eGovPay so EBPLS can issue the mock mayor’s/business permit.",
+  };
+}
+
+function approveBarangayClearance(clearance: BarangayClearance): BarangayClearance {
+  const approvedAt = new Date();
+  const validUntil = new Date(approvedAt);
+  validUntil.setFullYear(validUntil.getFullYear() + 1);
+  return {
+    ...clearance,
+    status: "Approved",
+    approvedAt: approvedAt.toISOString(),
+    validUntil: validUntil.toISOString(),
+  };
+}
+
+function issueEbplsPermit(receipt: EbplsBusinessPermitReceipt): EbplsBusinessPermitReceipt {
+  const issuedAt = new Date();
+  const validUntil = new Date(issuedAt.getFullYear(), 11, 31, 23, 59, 59);
+  return {
+    ...receipt,
+    status: "Permit issued",
+    issuedAt: issuedAt.toISOString(),
+    validUntil: validUntil.toISOString(),
+    nextAction: "Continue to BIR registration and retain this permit with the business records.",
+  };
+}
+
+function planAfterPayment(plan: RegistrationPlan | null): RegistrationPlan {
+  const source = plan ?? initialRegistrationPlan;
+  return normalizePlan({
+    ...source,
+    steps: source.steps.map((step) => ({
+      ...step,
+      status:
+        step.id === "details" || step.id === "structure" || step.id === "name-registration"
+          ? "completed"
+          : step.id === "local-clearance"
+            ? "in_progress"
+            : "pending",
+    })),
+  });
+}
+
+function resumableConsumer(conversationId: string) {
+  return async ({ stream }: { stream: ReadableStream<string> }) => {
+    const streamId = crypto.randomUUID();
+    setActiveStream(conversationId, streamId);
+    try {
+      await getResumableContext().createNewResumableStream(streamId, () => stream);
+    } catch (error) {
+      setActiveStream(conversationId, null);
+      console.error("Business chat resumable stream failed", error);
+    }
+  };
+}
+
+function manualResponse(
+  conversationId: string,
+  messages: BusinessChatMessage[],
+  execute: (writer: UIMessageStreamWriter<BusinessChatMessage>) => Promise<void> | void,
+) {
+  const stream = createUIMessageStream<BusinessChatMessage>({
+    originalMessages: messages,
+    execute: ({ writer }) => execute(writer),
+    onEnd: ({ messages: completeMessages }) => {
+      saveMessages(conversationId, completeMessages);
+      setActiveStream(conversationId, null);
+    },
+  });
+  return createUIMessageStreamResponse({
+    stream,
+    consumeSseStream: resumableConsumer(conversationId),
+  });
+}
+
+function proposedNameQuestion(): IntakeQuestion {
+  return {
+    id: "proposed-business-name",
+    eyebrow: "Business identity",
+    title: "What business name do you want to register?",
+    helpText: "Enter the complete proposed name. You can still revise it before payment.",
+    type: "text",
+    placeholder: "Proposed trade name",
+  };
+}
+
+function isRegistrationStart(prompt: string) {
+  const value = prompt.toLowerCase();
+  const action = /\b(start|open|launch|set\s*up|establish|register|formalize|apply|create)\b/.test(
+    value,
+  );
+  const subject =
+    /\b(business|company|shop|store|clinic|practice|restaurant|bakery|cafe|service|freelance|sole propriet|corporation|partnership|permit|registration)\b/.test(
+      value,
+    );
+  return action && subject;
+}
+
+function promptHasWorkSetup(prompt: string) {
+  return /\b(home[- ]based|from home|at home|online|remote(?:ly)?|virtual|storefront|shop|office|clinic|commercial (?:space|unit|kitchen)|physical (?:shop|location|premises))\b/i.test(
+    prompt,
+  );
+}
+
+function promptHasStaffing(prompt: string) {
+  return /\b(no employees?|without employees?|work alone|working alone|just me|by myself|solo|hire|hiring|employees?|staff|workers?|team of \d+|\d+ (?:employees?|staff|workers?|people))\b/i.test(
+    prompt,
+  );
+}
+
+function intakeBatch(prompt: string, profile: CitizenProfile | null, answers: IntakeAnswer[]) {
+  const answered = new Set(answers.map((answer) => answer.questionId));
+  const location = resolveBusinessLocation(prompt, profile?.city ?? "Philippines", answers);
+  const questions: IntakeQuestion[] = [];
+  if (
+    !selectRdo(location, answers, `${prompt} ${profile?.barangay ?? ""}`) &&
+    location.rdos.length > 1
+  )
+    questions.push(locationQuestion(location.city, location.rdos));
+  const activityQuestion = fallbackQuestionFor(prompt, 0);
+  if (!answered.has(activityQuestion.id) && !promptHasWorkSetup(prompt))
+    questions.push(activityQuestion);
+  if (!answered.has("workers") && !promptHasStaffing(prompt))
+    questions.push(fallbackQuestionFor(prompt, 1));
+  const explicitAddress = extractExplicitBusinessAddress(prompt);
+  const preference = addressPreference(answers);
+  if (!explicitAddress && !preference && profile?.address.trim())
+    questions.push(profileAddressQuestion());
+  if (
+    !explicitAddress &&
+    !answered.has("business-address") &&
+    (!profile?.address.trim() || preference === "different")
+  )
+    questions.push(businessAddressQuestion(location.city));
+  const promptName =
+    prompt
+      .match(
+        /(?:called|named|name is|business name(?: is|:)?|trade name(?: is|:)?)\s+[“"]?([^.”"\n]+)/i,
+      )?.[1]
+      ?.trim() ?? "";
+  if (!answered.has("proposed-business-name") && !isMeaningfulBusinessName(promptName))
+    questions.push(proposedNameQuestion());
+  return questions;
+}
+
+function businessAddressQuestion(city: string): IntakeQuestion {
+  return {
+    id: "business-address",
+    eyebrow: "Location",
+    title: `What is the complete business address in ${city}?`,
+    helpText: "Include the house, unit, street, or building and the barangay—not just the city.",
+    type: "text",
+    placeholder: `Street or building, barangay, ${city}`,
+  };
+}
+
 function toolAnswers(messages: UIMessage[]): IntakeAnswer[] {
   const answers = new Map<string, IntakeAnswer>();
   for (const message of messages)
     for (const part of message.parts) {
       if (part.type !== "tool-askUser" || part.state !== "output-available") continue;
-      const input = part.input as { question: IntakeQuestion };
-      const output = part.output as { value: string | string[]; labels: string[] };
-      answers.set(input.question.id, {
-        toolCallId: part.toolCallId,
-        questionId: input.question.id,
-        question: input.question.title,
-        value: output.value,
-        labels: output.labels,
-      });
+      const input = part.input as { questions?: IntakeQuestion[]; question?: IntakeQuestion };
+      const output = part.output as {
+        answers?: { questionId: string; value: string | string[]; labels: string[] }[];
+        value?: string | string[];
+        labels?: string[];
+      };
+      const questions = input.questions ?? (input.question ? [input.question] : []);
+      const submitted =
+        output.answers ??
+        (questions[0] && output.value !== undefined
+          ? [{ questionId: questions[0].id, value: output.value, labels: output.labels ?? [] }]
+          : []);
+      for (const answer of submitted) {
+        const question = questions.find((item) => item.id === answer.questionId);
+        if (!question) continue;
+        const intakeAnswer = {
+          toolCallId: part.toolCallId,
+          questionId: question.id,
+          question: question.title,
+          value: answer.value,
+          labels: answer.labels,
+        };
+        if (isUsableIntakeAnswer(intakeAnswer)) answers.set(question.id, intakeAnswer);
+        else answers.delete(question.id);
+      }
     }
   return [...answers.values()];
+}
+
+function invalidIntakeAnswerIds(messages: UIMessage[]) {
+  const invalid = new Set<string>();
+  for (const message of messages)
+    for (const part of message.parts) {
+      if (part.type !== "tool-askUser" || part.state !== "output-available") continue;
+      const input = part.input as { questions?: IntakeQuestion[]; question?: IntakeQuestion };
+      const output = part.output as {
+        answers?: { questionId: string; value: string | string[]; labels: string[] }[];
+        value?: string | string[];
+        labels?: string[];
+      };
+      const questions = input.questions ?? (input.question ? [input.question] : []);
+      const submitted =
+        output.answers ??
+        (questions[0] && output.value !== undefined
+          ? [{ questionId: questions[0].id, value: output.value, labels: output.labels ?? [] }]
+          : []);
+      for (const answer of submitted) {
+        const question = questions.find((item) => item.id === answer.questionId);
+        if (!question) continue;
+        const intakeAnswer: IntakeAnswer = {
+          toolCallId: part.toolCallId,
+          questionId: question.id,
+          question: question.title,
+          value: answer.value,
+          labels: answer.labels,
+        };
+        if (isUsableIntakeAnswer(intakeAnswer)) invalid.delete(question.id);
+        else invalid.add(question.id);
+      }
+    }
+  return invalid;
 }
 
 function lastRegistrationPlan(messages: UIMessage[]): RegistrationPlan | null {
@@ -255,15 +693,15 @@ function planForAnswers(
           ? detailsComplete
             ? "completed"
             : "in_progress"
-          : step.id === "official-check"
+          : step.id === "structure"
             ? hasSearched
               ? "completed"
               : detailsComplete
                 ? "in_progress"
                 : "pending"
-            : step.id === "application"
+            : step.id === "name-registration"
               ? hasForm
-                ? "completed"
+                ? "in_progress"
                 : hasSearched
                   ? "in_progress"
                   : "pending"
@@ -281,14 +719,6 @@ function lastDtiForm(messages: UIMessage[]) {
   return null;
 }
 
-function redactDtiFormForModel(form: DtiBusinessNameForm): DtiBusinessNameForm {
-  return {
-    ...form,
-    ownerName: form.ownerName ? "[server-prefilled verified name]" : "",
-    businessAddress: form.businessAddress ? "[server-confirmed business address]" : "",
-  };
-}
-
 function makePlan(
   prompt: string,
   profile: CitizenProfile | null,
@@ -299,10 +729,14 @@ function makePlan(
   const location = resolveBusinessLocation(prompt, profile?.city ?? "Philippines", answers);
   const rdo = selectRdo(location, answers, `${prompt} ${profile?.barangay ?? ""}`);
   const labels = answers.flatMap((answer) => answer.labels);
-  const hasEmployees = labels.some(
-    (label) => /yes|employee|worker/i.test(label) && !/no /i.test(label),
-  );
-  const hasPremises = labels.some((label) => /shop|office|commercial/i.test(label));
+  const hasEmployees =
+    labels.some((label) => /yes|employee|worker/i.test(label) && !/no /i.test(label)) ||
+    /\b(?:hire|hiring|team of \d+|\d+ (?:employees?|staff|workers?))\b/i.test(prompt);
+  const hasPremises =
+    labels.some((label) => /shop|office|commercial/i.test(label)) ||
+    /\b(?:clinic|shop|office|storefront|commercial (?:space|unit)|physical (?:location|premises))\b/i.test(
+      prompt,
+    );
   const flags = [
     ...new Set([
       ...inferred.flags,
@@ -367,16 +801,18 @@ function makeDtiForm(
   const proposedNameMatch = prompt.match(
     /(?:called|named|name is|business name(?: is|:)?|trade name(?: is|:)?)\s+[“"]?([^.”"\n]+)/i,
   );
-  const proposedName =
+  const rawProposedName =
     answerText(answers, /proposed.*name|business.*name|trade.*name/i) ||
     proposedNameMatch?.[1]?.trim() ||
     "";
-  const businessAddress = resolveBusinessFormAddress(
+  const proposedName = isMeaningfulBusinessName(rawProposedName) ? rawProposedName : "";
+  const rawBusinessAddress = resolveBusinessFormAddress(
     extractExplicitBusinessAddress(prompt) ||
       answerText(answers, /business.*address|operating.*address|exact.*address/i),
     profile,
     usesProfileAddress,
   );
+  const businessAddress = isCompleteBusinessAddress(rawBusinessAddress) ? rawBusinessAddress : "";
   const scope: DtiBusinessNameForm["territorialScope"] = /nationwide|national/i.test(prompt)
     ? "National"
     : /region(?:al|wide)/i.test(prompt)
@@ -402,90 +838,25 @@ function makeDtiForm(
   };
 }
 
-function repeatedQuestion(question: IntakeQuestion, answers: IntakeAnswer[]) {
-  const normalize = (value: string) =>
-    value
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, " ")
-      .trim();
-  return answers.some(
-    (answer) =>
-      answer.questionId === question.id || normalize(answer.question) === normalize(question.title),
-  );
-}
-
-async function decideIntake(prompt: string, city: string, answers: IntakeAnswer[]) {
-  const inferred = inferCategory(prompt);
-  const result = await generateObject({
-    model: createGateway({ apiKey: process.env.AI_GATEWAY_API_KEY! }).chat(
-      process.env.CHAT_MODEL ?? "google/gemini-2.5-flash-lite",
-    ),
-    schema: intakeDecisionSchema,
-    system: `You are the intake router for Philippine business registration. Return one structured decision, not conversational prose.
-
-Use the citizen's description and prior answers. Infer obvious facts instead of asking the citizen to classify the business. Ask exactly one question only when its answer can materially change the registration route, tax-office jurisdiction, permit path, or regulated-agency checks. Tailor it to this specific activity. Do not run a fixed questionnaire. Do not routinely ask about employees, premises, ownership, or address when those facts do not affect the path. Never repeat a known or answered fact. Never ask for a TIN or other sensitive identifier.
-
-For a question, use a stable semantic kebab-case ID, short plain language, and the best input type. Choice questions need 2–6 complete options. Set route to null. If the registration path is already clear, return ready immediately, set question to null, and return the inferred route. One-owner trade-name, product, food, subscription, or rental activity is normally Sole proprietor. Independent professional work under the person's own name is normally Self-employed. Explicit partners or a corporation use Company. Do not ask the citizen to choose among these labels when the activity already makes it clear.`,
-    prompt: `Business description and citizen updates:\n${prompt}\n\nResolved business city: ${city}\nCatalog hint: ${inferred.category}; ${inferred.flags.join(", ") || "no flags"}\nPrior structured answers: ${answers.length ? JSON.stringify(answers.map(({ questionId, question, labels }) => ({ questionId, question, labels }))) : "None"}`,
-    abortSignal: AbortSignal.timeout(20_000),
-  });
-  const decision = result.object;
-  if (
-    decision.status === "question" &&
-    decision.question &&
-    !repeatedQuestion(decision.question, answers) &&
-    !/\b(?:tin|taxpayer identification)\b/i.test(decision.question.title)
-  )
-    return decision;
-  if (decision.status === "ready" && decision.route) return decision;
-  throw new Error("The intake router returned an invalid or repeated decision");
-}
-
 function deterministicNext(
   prompt: string,
   profile: CitizenProfile | null,
   answers: IntakeAnswer[],
 ) {
-  const location = resolveBusinessLocation(prompt, profile?.city ?? "Philippines", answers);
-  const preference = addressPreference(answers);
-  if (
-    !selectRdo(location, answers, `${prompt} ${profile?.barangay ?? ""}`) &&
-    location.rdos.length > 1
-  )
-    return { question: locationQuestion(location.city, location.rdos) };
-  const answered = new Set(answers.map((answer) => answer.questionId));
-  const firstQuestion = fallbackQuestionFor(prompt, 0);
-  if (!answered.has(firstQuestion.id)) return { question: firstQuestion };
-  if (!answered.has("workers")) return { question: fallbackQuestionFor(prompt, 1) };
-  if (!preference) return { question: profileAddressQuestion() };
-  if (!answered.has("business-address") && preference === "different")
-    return { question: businessAddressQuestion(location.city) };
+  const questions = intakeBatch(prompt, profile, answers);
+  if (questions.length) return { questions };
   const plan = makePlan(prompt, profile, answers);
   if (plan.registrationType !== "Sole proprietor") return { plan };
-  const proposedNameMatch = prompt.match(/(?:called|named|name is)\s+[“"]?([^.”"\n]+)/i);
-  const businessAddress = resolveBusinessFormAddress(
-    extractExplicitBusinessAddress(prompt) ||
-      answers.find((answer) => answer.questionId === "business-address")?.labels.join(", ") ||
-      "",
+  const form = makeDtiForm(
+    prompt,
+    prompt,
     profile,
-    preference === "profile",
+    answers,
+    plan,
+    addressPreference(answers) === "profile",
   );
-  const missingFields = [
-    ...(!proposedNameMatch ? ["Proposed business name"] : []),
-    ...(!businessAddress ? ["Business address"] : []),
-  ];
-  const form: DtiBusinessNameForm = {
-    applicationType: "New registration",
-    status: missingFields.length ? "Draft" : "Ready to submit",
-    proposedName: proposedNameMatch?.[1]?.trim() ?? "",
-    businessActivity: prompt.slice(0, 160),
-    territorialScope: "City / municipality",
-    ownerName: profile?.fullName ?? "",
-    businessAddress,
-    city: plan.city,
-    feeLabel: formatPeso(dtiRegistrationFee("City / municipality")),
-    missingFields,
-  };
+  const missingQuestions = questionsForIncompleteDtiForm(form, profile, answers);
+  if (missingQuestions.length) return { questions: missingQuestions };
   return { plan, form };
 }
 
@@ -525,7 +896,7 @@ async function searchOfficialWeb(query: string, numResults = 5) {
 function agentTools(
   request: Request,
   prompt: string,
-  profile: CitizenProfile | null,
+  profile: CitizenProfile,
   rawProfile: EgovSsoCitizenProfile,
   userInfo: UserInfoOutput,
   hasUserInfo: boolean,
@@ -565,8 +936,8 @@ function agentTools(
     }),
     askUser: tool({
       description:
-        "Ask one consequential structured question. This is a client-side tool. Stop after calling it.",
-      inputSchema: z.object({ question: questionSchema }),
+        "Ask one compact batch of consequential structured questions. This is a client-side tool. Stop after calling it.",
+      inputSchema: z.object({ questions: z.array(questionSchema).min(1).max(6) }),
     }),
     webSearch: tool({
       description: "Search official Philippine government sources when current evidence is useful.",
@@ -578,31 +949,28 @@ function agentTools(
     }),
     editDtiBusinessNameForm: tool({
       description:
-        "Create or revise the citizen's DTI Business Name Registration draft. Call this whenever the user asks to create, view, or correct the form.",
+        "Create or revise a complete DTI Business Name Registration form. Never call with blank or missing fields; use askUser first for every unresolved required field.",
       inputSchema: z.object({ form: dtiFormSchema, note: z.string().max(180) }),
       execute: ({ form }) => {
         const businessAddress = resolveBusinessFormAddress(
-          confirmedBusinessAddress,
+          confirmedBusinessAddress || form.businessAddress,
           profile,
           usesProfileAddress,
         );
-        const missingFields = [
-          ...new Set([
-            ...form.missingFields.filter((field) => !/owner|fee/i.test(field)),
-            ...(!form.proposedName.trim() ? ["Proposed business name"] : []),
-            ...(!businessAddress.trim() ? ["Business address"] : []),
-          ]),
-        ];
+        if (!isCompleteBusinessAddress(businessAddress))
+          throw new Error(
+            "Ask the user for the complete business address before creating the DTI form.",
+          );
         return {
           form: {
             ...form,
-            ownerName: profile?.fullName ?? form.ownerName,
+            ownerName: profile.fullName,
             businessActivity: prompt.slice(0, 160),
             businessAddress,
             city: businessCity,
             feeLabel: formatPeso(dtiRegistrationFee(form.territorialScope)),
-            missingFields,
-            status: missingFields.length ? ("Draft" as const) : ("Ready to submit" as const),
+            missingFields: [],
+            status: "Ready to submit" as const,
           },
         };
       },
@@ -611,13 +979,21 @@ function agentTools(
         value: {
           form: {
             ...output.form,
-            ownerName: output.form.ownerName ? "[server-prefilled verified name]" : "",
-            businessAddress: output.form.businessAddress
-              ? "[server-confirmed business address]"
-              : "",
+            ownerName: "[server-prefilled verified name]",
+            businessAddress: "[server-confirmed business address]",
           },
         },
       }),
+    }),
+    submitBarangayClearance: tool({
+      description:
+        "Submit an electronic barangay business-clearance request and return the clearance response.",
+      inputSchema: z.object({ application: barangayClearanceApplicationSchema }),
+    }),
+    submitEbplsBusinessPermit: tool({
+      description:
+        "Submit a mayor's or business-permit application through EBPLS (Electronic Business Permits and Licensing System).",
+      inputSchema: z.object({ application: ebplsBusinessPermitApplicationSchema }),
     }),
     updatePlan: tool({
       description: "Create or update the concise registration checklist whenever progress changes.",
@@ -633,21 +1009,26 @@ export async function POST(request: Request) {
 
   const parsed = requestSchema.safeParse(await request.json());
   if (!parsed.success) return Response.json({ error: "Invalid chat request" }, { status: 400 });
-  const messages = parsed.data.messages as BusinessChatMessage[];
+  const conversation = getConversation(parsed.data.id);
+  if (!conversation) return Response.json({ error: "Chat session not found" }, { status: 404 });
+  const messages = uniqueMessagesById(parsed.data.messages as BusinessChatMessage[]);
+  saveMessages(conversation.id, messages);
+  setActiveStream(conversation.id, null);
   const profile = session.profile;
   const userInfoOutput: UserInfoOutput = {
     availableFields: availableUserInfoFields(profile),
     source: "eGov SSO",
   };
   const conversationText = userText(messages).trim();
-  const latestPrompt = latestUserText(messages).trim();
   const prompt = conversationText || parsed.data.initialPrompt;
+  const latestPrompt = latestUserText(messages) || parsed.data.initialPrompt;
   const answers = toolAnswers(messages);
+  const invalidAnswers = invalidIntakeAnswerIds(messages);
+  const initialLocation = resolveBusinessLocation(prompt, profile?.city ?? "Philippines", answers);
   const preference = addressPreference(answers);
   const confirmedBusinessAddress =
-    answerText(answers, /business.*address|operating.*address|exact.*address/i) ||
-    extractExplicitBusinessAddress(prompt);
-  const initialLocation = resolveBusinessLocation(prompt, profile?.city ?? "Philippines", answers);
+    extractExplicitBusinessAddress(prompt) ||
+    answerText(answers, /business.*address|operating.*address|exact.*address/i);
   const existingPlan = lastRegistrationPlan(messages);
   const hasSearched = messages.some((message) =>
     message.parts.some(
@@ -660,50 +1041,6 @@ export async function POST(request: Request) {
       (part) => part.type === "tool-user_info" && part.state === "output-available",
     ),
   );
-  const location = initialLocation;
-
-  if (isExplicitBirFormRequest(latestPrompt)) {
-    const stream = createUIMessageStream<BusinessChatMessage>({
-      originalMessages: messages,
-      execute: async ({ writer }) => {
-        if (!hasUserInfo) emitTool(writer, "user_info", {}, userInfoOutput);
-        const toolCallId = crypto.randomUUID();
-        writer.write({
-          type: "tool-input-available",
-          toolCallId,
-          toolName: "generate_bir_form",
-          input: {},
-        });
-
-        let text: string;
-        try {
-          const output = {
-            artifact: await createBirFormArtifact(request, session.rawProfile),
-            source: "Authenticated eGov SSO profile" as const,
-          };
-          writer.write({ type: "tool-output-available", toolCallId, output });
-          text = "Your prefilled BIR Form 1901 is ready. Select the PDF to preview it.";
-        } catch (error) {
-          console.warn("BIR form artifact generation failed", {
-            name: error instanceof Error ? error.name : "UnknownError",
-          });
-          writer.write({
-            type: "tool-output-error",
-            toolCallId,
-            errorText: "The PDF could not be generated.",
-          } as never);
-          text = "I couldn’t generate the BIR form PDF. Please try again.";
-        }
-
-        const textId = crypto.randomUUID();
-        writer.write({ type: "text-start", id: textId });
-        writer.write({ type: "text-delta", id: textId, delta: text });
-        writer.write({ type: "text-end", id: textId });
-      },
-    });
-    return createUIMessageStreamResponse({ stream });
-  }
-
   const tools = agentTools(
     request,
     prompt,
@@ -715,162 +1052,349 @@ export async function POST(request: Request) {
     preference === "profile",
     confirmedBusinessAddress,
   );
+  const previousClearance = lastBarangayClearance(messages);
+  const previousEbplsReceipt = lastEbplsReceipt(messages);
+  const location = initialLocation;
 
-  if (!process.env.AI_GATEWAY_API_KEY) {
-    const next = deterministicNext(prompt, profile, answers);
-    const stream = createUIMessageStream<BusinessChatMessage>({
-      originalMessages: messages,
-      execute: ({ writer }) => {
-        const textId = crypto.randomUUID();
-        writer.write({ type: "text-start", id: textId });
-        const text =
-          "question" in next
-            ? "I need one detail before I prepare your registration."
-            : "I prepared the next step from the details you shared.";
-        writer.write({ type: "text-delta", id: textId, delta: text });
-        writer.write({ type: "text-end", id: textId });
-        if ("question" in next)
-          writer.write({
-            type: "tool-input-available",
-            toolCallId: crypto.randomUUID(),
-            toolName: "askUser",
-            input: { question: next.question },
-          });
-        else {
-          if (next.form) {
-            emitTool(writer, "user_info", {}, userInfoOutput);
-            const id = crypto.randomUUID();
-            writer.write({
-              type: "tool-input-available",
-              toolCallId: id,
-              toolName: "editDtiBusinessNameForm",
-              input: {
-                form: redactDtiFormForModel(next.form),
-                note: "Prepared from your profile and conversation.",
-              },
-            });
-            writer.write({
-              type: "tool-output-available",
-              toolCallId: id,
-              output: { form: next.form },
-            });
-          }
-          writer.write({ type: "data-plan", id: crypto.randomUUID(), data: { plan: next.plan } });
-        }
-      },
-    });
-    return createUIMessageStreamResponse({ stream });
-  }
-
-  let generatedRoute: GeneratedRoute | undefined;
-  if (!lastForm) {
-    try {
-      const decision = await decideIntake(prompt, location.city, answers);
-      if (decision.status === "question" && decision.question) {
-        const currentPlan = planForAnswers(answers, hasSearched, false, false);
-        const stream = createUIMessageStream<BusinessChatMessage>({
-          originalMessages: messages,
-          execute: ({ writer }) => {
-            if (!existingPlan || JSON.stringify(existingPlan) !== JSON.stringify(currentPlan))
-              emitTool(
-                writer,
-                "updatePlan",
-                { ...currentPlan, note: "Updated for the current registration step." },
-                { plan: currentPlan },
-              );
-            const textId = crypto.randomUUID();
-            writer.write({ type: "text-start", id: textId });
-            writer.write({
-              type: "text-delta",
-              id: textId,
-              delta: "One detail could change your registration path.",
-            });
-            writer.write({ type: "text-end", id: textId });
-            writer.write({
-              type: "tool-input-available",
-              toolCallId: crypto.randomUUID(),
-              toolName: "askUser",
-              input: { question: decision.question },
-            });
+  if (parsed.data.event === "payment-completed") {
+    const paymentService: PaymentServiceType = parsed.data.paymentService ?? "dti-business-name";
+    const payment = getLatestPaymentForService(conversation.id, paymentService);
+    if (!payment || !isPaidStatus(payment.status))
+      return Response.json({ error: "Payment has not been marked paid." }, { status: 409 });
+    if (paymentService === "barangay-clearance") {
+      if (!previousClearance)
+        return Response.json(
+          { error: "Barangay clearance assessment not found." },
+          { status: 409 },
+        );
+      const clearance = approveBarangayClearance(previousClearance);
+      const permitPlan = planAfterBarangayClearance(existingPlan ?? planAfterPayment(null));
+      return manualResponse(conversation.id, messages, async (writer) => {
+        const barangayId = crypto.randomUUID();
+        writer.write({
+          type: "tool-input-available",
+          toolCallId: barangayId,
+          toolName: "submitBarangayClearance",
+          input: {
+            application: {
+              businessName: clearance.businessName,
+              ownerName: clearance.ownerName,
+              businessActivity: clearance.businessActivity,
+              businessAddress: clearance.businessAddress,
+              barangay: clearance.barangay,
+              city: clearance.city,
+              registrationDocument: clearance.registrationDocument,
+              supportingDocuments: clearance.supportingDocuments,
+            },
           },
         });
-        return createUIMessageStreamResponse({ stream });
-      }
-      generatedRoute = decision.route ?? undefined;
-    } catch (error) {
-      console.warn("Business intake routing failed; using controlled fallback", {
-        name: error instanceof Error ? error.name : "UnknownError",
-      });
-      const next = deterministicNext(prompt, profile, answers);
-      if ("question" in next) {
-        const fallbackPlan = planForAnswers(answers, hasSearched, false, false);
-        const stream = createUIMessageStream<BusinessChatMessage>({
-          originalMessages: messages,
-          execute: ({ writer }) => {
-            if (!existingPlan || JSON.stringify(existingPlan) !== JSON.stringify(fallbackPlan))
-              emitTool(
-                writer,
-                "updatePlan",
-                { ...fallbackPlan, note: "Updated for the current registration step." },
-                { plan: fallbackPlan },
-              );
-            const textId = crypto.randomUUID();
-            writer.write({ type: "text-start", id: textId });
-            writer.write({
-              type: "text-delta",
-              id: textId,
-              delta: "I need one detail before I continue.",
-            });
-            writer.write({ type: "text-end", id: textId });
-            writer.write({
-              type: "tool-input-available",
-              toolCallId: crypto.randomUUID(),
-              toolName: "askUser",
-              input: { question: next.question },
-            });
-          },
+        await wait(BARANGAY_CLEARANCE_MOCK_DELAY_MS);
+        writer.write({
+          type: "tool-output-available",
+          toolCallId: barangayId,
+          output: { clearance },
         });
-        return createUIMessageStreamResponse({ stream });
-      }
-    }
-  }
-
-  const businessPlan = makePlan(prompt, profile, answers, generatedRoute);
-  const currentPlan = planForAnswers(answers, hasSearched, Boolean(lastForm), true);
-
-  const requiredAddressQuestion = confirmedBusinessAddress
-    ? null
-    : !profile.address.trim()
-      ? businessAddressQuestion(location.city)
-      : !preference
-        ? profileAddressQuestion()
-        : preference === "different"
-          ? businessAddressQuestion(location.city)
-          : null;
-  if (!lastForm && businessPlan.registrationType === "Sole proprietor" && requiredAddressQuestion) {
-    const stream = createUIMessageStream<BusinessChatMessage>({
-      originalMessages: messages,
-      execute: ({ writer }) => {
+        emitTool(
+          writer,
+          "updatePlan",
+          {
+            ...permitPlan,
+            note: "Barangay clearance paid and approved. Starting EBPLS assessment.",
+          },
+          { plan: permitPlan },
+        );
         const textId = crypto.randomUUID();
         writer.write({ type: "text-start", id: textId });
         writer.write({
           type: "text-delta",
           id: textId,
-          delta: "I need one address choice before I prepare the application.",
+          delta:
+            "The barangay clearance is paid and approved. I’m attaching it to the mayor’s/business permit application through **EBPLS — Electronic Business Permits and Licensing System**.",
+        });
+        writer.write({ type: "text-end", id: textId });
+        const receipt = mockEbplsReceipt(clearance);
+        const ebplsId = crypto.randomUUID();
+        writer.write({
+          type: "tool-input-available",
+          toolCallId: ebplsId,
+          toolName: "submitEbplsBusinessPermit",
+          input: {
+            application: {
+              system: receipt.system,
+              permitType: receipt.permitType,
+              businessName: receipt.businessName,
+              ownerName: receipt.ownerName,
+              businessActivity: receipt.businessActivity,
+              businessAddress: receipt.businessAddress,
+              barangay: receipt.barangay,
+              city: receipt.city,
+              barangayClearanceReference: receipt.barangayClearanceReference,
+              registrationDocument: receipt.registrationDocument,
+              attachments: receipt.attachments,
+            },
+          },
+        });
+        await wait(EBPLS_PERMIT_MOCK_DELAY_MS);
+        writer.write({ type: "tool-output-available", toolCallId: ebplsId, output: { receipt } });
+        emitTool(
+          writer,
+          "updatePlan",
+          {
+            ...planAfterEbplsSubmission(permitPlan),
+            note: "EBPLS assessment complete. LGU fee payment is required.",
+          },
+          { plan: planAfterEbplsSubmission(permitPlan) },
+        );
+      });
+    }
+    if (paymentService === "ebpls-business-permit") {
+      if (!previousEbplsReceipt)
+        return Response.json({ error: "EBPLS assessment not found." }, { status: 409 });
+      const receipt = issueEbplsPermit(previousEbplsReceipt);
+      const issuedPlan = planAfterPermitIssued(existingPlan ?? initialRegistrationPlan);
+      return manualResponse(conversation.id, messages, async (writer) => {
+        const ebplsId = crypto.randomUUID();
+        writer.write({
+          type: "tool-input-available",
+          toolCallId: ebplsId,
+          toolName: "submitEbplsBusinessPermit",
+          input: {
+            application: {
+              system: receipt.system,
+              permitType: receipt.permitType,
+              businessName: receipt.businessName,
+              ownerName: receipt.ownerName,
+              businessActivity: receipt.businessActivity,
+              businessAddress: receipt.businessAddress,
+              barangay: receipt.barangay,
+              city: receipt.city,
+              barangayClearanceReference: receipt.barangayClearanceReference,
+              registrationDocument: receipt.registrationDocument,
+              attachments: receipt.attachments,
+            },
+          },
+        });
+        await wait(EBPLS_PERMIT_MOCK_DELAY_MS);
+        writer.write({ type: "tool-output-available", toolCallId: ebplsId, output: { receipt } });
+        emitTool(
+          writer,
+          "updatePlan",
+          { ...issuedPlan, note: "Mayor’s/business permit issued. Moving to BIR registration." },
+          { plan: issuedPlan },
+        );
+        const textId = crypto.randomUUID();
+        writer.write({ type: "text-start", id: textId });
+        writer.write({
+          type: "text-delta",
+          id: textId,
+          delta:
+            "Your mock mayor’s/business permit has been issued through **EBPLS**. The next checkpoint is BIR registration with the correct RDO.",
+        });
+        writer.write({ type: "text-end", id: textId });
+      });
+    }
+    const paidPlan = planAfterPayment(existingPlan);
+    return manualResponse(conversation.id, messages, async (writer) => {
+      emitTool(
+        writer,
+        "updatePlan",
+        { ...paidPlan, note: "Payment recorded. Moving to local clearance requirements." },
+        { plan: paidPlan },
+      );
+      const textId = crypto.randomUUID();
+      writer.write({ type: "text-start", id: textId });
+      writer.write({
+        type: "text-delta",
+        id: textId,
+        delta: `Payment is marked paid for **${payment.proposedName}**. Next, I’m submitting the barangay business-clearance request electronically using the registration and address details already on file.`,
+      });
+      writer.write({ type: "text-end", id: textId });
+      const clearance = mockBarangayClearance(payment, lastForm, profile);
+      const barangayId = crypto.randomUUID();
+      writer.write({
+        type: "tool-input-available",
+        toolCallId: barangayId,
+        toolName: "submitBarangayClearance",
+        input: {
+          application: {
+            businessName: clearance.businessName,
+            ownerName: clearance.ownerName,
+            businessActivity: clearance.businessActivity,
+            businessAddress: clearance.businessAddress,
+            barangay: clearance.barangay,
+            city: clearance.city,
+            registrationDocument: clearance.registrationDocument,
+            supportingDocuments: clearance.supportingDocuments,
+          },
+        },
+      });
+      await wait(BARANGAY_CLEARANCE_MOCK_DELAY_MS);
+      writer.write({
+        type: "tool-output-available",
+        toolCallId: barangayId,
+        output: { clearance },
+      });
+      emitTool(
+        writer,
+        "updatePlan",
+        { ...paidPlan, note: "Barangay clearance assessed. Payment is required before approval." },
+        { plan: paidPlan },
+      );
+    });
+  }
+
+  if (isExplicitBirFormRequest(latestPrompt))
+    return manualResponse(conversation.id, messages, async (writer) => {
+      if (!hasUserInfo) emitTool(writer, "user_info", {}, userInfoOutput);
+      const toolCallId = crypto.randomUUID();
+      writer.write({
+        type: "tool-input-available",
+        toolCallId,
+        toolName: "generate_bir_form",
+        input: {},
+      });
+
+      let text: string;
+      try {
+        const output = {
+          artifact: await createBirFormArtifact(request, session.rawProfile),
+          source: "Authenticated eGov SSO profile" as const,
+        };
+        writer.write({ type: "tool-output-available", toolCallId, output });
+        text = "Your prefilled BIR Form 1901 is ready. Select the PDF to preview it.";
+      } catch (error) {
+        console.warn("BIR form artifact generation failed", {
+          name: error instanceof Error ? error.name : "UnknownError",
+        });
+        writer.write({
+          type: "tool-output-error",
+          toolCallId,
+          errorText: "The PDF could not be generated.",
+        } as never);
+        text = "I couldn’t generate the BIR form PDF. Please try again.";
+      }
+
+      const textId = crypto.randomUUID();
+      writer.write({ type: "text-start", id: textId });
+      writer.write({ type: "text-delta", id: textId, delta: text });
+      writer.write({ type: "text-end", id: textId });
+    });
+
+  const firstTurn =
+    messages.filter((message) => message.role === "user").length === 1 &&
+    answers.length === 0 &&
+    !lastForm;
+  const continuingIntake =
+    answers.length > 0 ||
+    isRegistrationStart(latestPrompt) ||
+    (firstTurn && describesBusinessIdea(parsed.data.initialPrompt));
+
+  if (!lastForm && continuingIntake) {
+    const questions = intakeBatch(prompt, profile, answers);
+    if (questions.length) {
+      const currentPlan = planForAnswers(answers, hasSearched, false, false);
+      return manualResponse(conversation.id, messages, (writer) => {
+        if (!existingPlan || JSON.stringify(existingPlan) !== JSON.stringify(currentPlan))
+          emitTool(
+            writer,
+            "updatePlan",
+            { ...currentPlan, note: "Mapped the complete registration route." },
+            { plan: currentPlan },
+          );
+        const textId = crypto.randomUUID();
+        writer.write({ type: "text-start", id: textId });
+        const retryingInvalidAnswer = questions.some((question) => invalidAnswers.has(question.id));
+        writer.write({
+          type: "text-delta",
+          id: textId,
+          delta: retryingInvalidAnswer
+            ? questions.length === 1
+              ? "That answer looks incomplete. Please enter the full detail below."
+              : "Some answers look incomplete. Please enter the full details below."
+            : questions.length === 1
+              ? "I only need this remaining detail."
+              : `I only need these ${questions.length} remaining details.`,
         });
         writer.write({ type: "text-end", id: textId });
         writer.write({
           type: "tool-input-available",
           toolCallId: crypto.randomUUID(),
           toolName: "askUser",
-          input: { question: requiredAddressQuestion },
+          input: { questions },
         });
-      },
-    });
-    return createUIMessageStreamResponse({ stream });
+      });
+    }
   }
 
-  if (!hasSearched && !lastForm && businessPlan.registrationType === "Sole proprietor") {
+  if (!process.env.AI_GATEWAY_API_KEY) {
+    if (!continuingIntake && !lastForm)
+      return manualResponse(conversation.id, messages, (writer) => {
+        const textId = crypto.randomUUID();
+        writer.write({ type: "text-start", id: textId });
+        writer.write({
+          type: "text-delta",
+          id: textId,
+          delta:
+            "I can help with that without starting a registration workflow. The conversational answer service is unavailable in this local setup right now; when you’re ready to register a business, tell me what you plan to start and I’ll build the route.",
+        });
+        writer.write({ type: "text-end", id: textId });
+      });
+    const next = deterministicNext(prompt, profile, answers);
+    return manualResponse(conversation.id, messages, (writer) => {
+      const textId = crypto.randomUUID();
+      writer.write({ type: "text-start", id: textId });
+      const text =
+        "questions" in next
+          ? "Please complete these details together before I prepare your registration."
+          : "I prepared this checkpoint. Next, review the application details and continue to payment when they are correct.";
+      writer.write({ type: "text-delta", id: textId, delta: text });
+      writer.write({ type: "text-end", id: textId });
+      if ("questions" in next)
+        writer.write({
+          type: "tool-input-available",
+          toolCallId: crypto.randomUUID(),
+          toolName: "askUser",
+          input: { questions: next.questions },
+        });
+      else {
+        if (next.form) {
+          emitTool(writer, "user_info", {}, userInfoOutput);
+          const id = crypto.randomUUID();
+          writer.write({
+            type: "tool-input-available",
+            toolCallId: id,
+            toolName: "editDtiBusinessNameForm",
+            input: { form: next.form, note: "Prepared from your profile and conversation." },
+          });
+          writer.write({
+            type: "tool-output-available",
+            toolCallId: id,
+            output: { form: next.form },
+          });
+        }
+        writer.write({ type: "data-plan", id: crypto.randomUUID(), data: { plan: next.plan } });
+        emitTool(
+          writer,
+          "updatePlan",
+          {
+            ...planForAnswers(answers, false, Boolean(next.form), true),
+            note: "Application prepared. Next, review and pay.",
+          },
+          { plan: planForAnswers(answers, false, Boolean(next.form), true) },
+        );
+      }
+    });
+  }
+
+  const businessPlan = makePlan(prompt, profile, answers);
+  const currentPlan = planForAnswers(answers, hasSearched, Boolean(lastForm), true);
+
+  if (
+    continuingIntake &&
+    !hasSearched &&
+    !lastForm &&
+    businessPlan.registrationType === "Sole proprietor"
+  ) {
     const form = makeDtiForm(
       parsed.data.initialPrompt,
       prompt,
@@ -879,65 +1403,78 @@ export async function POST(request: Request) {
       businessPlan,
       preference === "profile",
     );
-    const stream = createUIMessageStream<BusinessChatMessage>({
-      originalMessages: messages,
-      execute: async ({ writer }) => {
-        if (!hasUserInfo) emitTool(writer, "user_info", {}, userInfoOutput);
-        emitTool(
-          writer,
-          "updatePlan",
-          { ...currentPlan, note: "Checking current DTI guidance." },
-          { plan: currentPlan },
-        );
-        const query = `site:dti.gov.ph OR site:bnrs.dti.gov.ph business name registration ${form.territorialScope}`;
-        const searchId = crypto.randomUUID();
-        writer.write({
-          type: "tool-input-available",
-          toolCallId: searchId,
-          toolName: "webSearch",
-          input: { query, numResults: 5 },
-        });
-        const search = await searchOfficialWeb(query, 5);
-        writer.write({ type: "tool-output-available", toolCallId: searchId, output: search });
-        const afterSearch = planForAnswers(answers, true, false, true);
-        emitTool(
-          writer,
-          "updatePlan",
-          { ...afterSearch, note: "Official guidance checked. Preparing the application." },
-          { plan: afterSearch },
-        );
-        const formId = crypto.randomUUID();
-        writer.write({
-          type: "tool-input-available",
-          toolCallId: formId,
-          toolName: "editDtiBusinessNameForm",
-          input: {
-            form: redactDtiFormForModel(form),
-            note: "Prepared from your profile and confirmed answers.",
-          },
-        });
-        writer.write({ type: "tool-output-available", toolCallId: formId, output: { form } });
-        writer.write({ type: "data-plan", id: crypto.randomUUID(), data: { plan: businessPlan } });
-        const readyPlan = planForAnswers(answers, true, true, true);
-        emitTool(
-          writer,
-          "updatePlan",
-          { ...readyPlan, note: "The DTI application is ready for review." },
-          { plan: readyPlan },
-        );
+    const missingQuestions = questionsForIncompleteDtiForm(form, profile, answers);
+    if (missingQuestions.length)
+      return manualResponse(conversation.id, messages, (writer) => {
         const textId = crypto.randomUUID();
         writer.write({ type: "text-start", id: textId });
         writer.write({
           type: "text-delta",
           id: textId,
-          delta: form.missingFields.length
-            ? "I prepared your DTI business name application. Add the missing fields or correct anything here before payment."
-            : "Your DTI business name application is ready to review. You can correct any field here before continuing to eGovPay.",
+          delta:
+            missingQuestions.length === 1
+              ? "I need one required detail before I can create the business-name registration form."
+              : "I need these required details before I can create the business-name registration form.",
         });
         writer.write({ type: "text-end", id: textId });
-      },
+        writer.write({
+          type: "tool-input-available",
+          toolCallId: crypto.randomUUID(),
+          toolName: "askUser",
+          input: { questions: missingQuestions },
+        });
+      });
+    return manualResponse(conversation.id, messages, async (writer) => {
+      emitTool(
+        writer,
+        "updatePlan",
+        { ...currentPlan, note: "Checking current DTI guidance." },
+        { plan: currentPlan },
+      );
+      const query = `site:dti.gov.ph OR site:bnrs.dti.gov.ph business name registration ${form.territorialScope}`;
+      const searchId = crypto.randomUUID();
+      writer.write({
+        type: "tool-input-available",
+        toolCallId: searchId,
+        toolName: "webSearch",
+        input: { query, numResults: 5 },
+      });
+      const search = await searchOfficialWeb(query, 5);
+      writer.write({ type: "tool-output-available", toolCallId: searchId, output: search });
+      const afterSearch = planForAnswers(answers, true, false, true);
+      emitTool(
+        writer,
+        "updatePlan",
+        { ...afterSearch, note: "Official guidance checked. Preparing the application." },
+        { plan: afterSearch },
+      );
+      const formId = crypto.randomUUID();
+      emitTool(writer, "user_info", {}, userInfoOutput);
+      writer.write({
+        type: "tool-input-available",
+        toolCallId: formId,
+        toolName: "editDtiBusinessNameForm",
+        input: { form, note: "Prepared from your profile and confirmed answers." },
+      });
+      writer.write({ type: "tool-output-available", toolCallId: formId, output: { form } });
+      writer.write({ type: "data-plan", id: crypto.randomUUID(), data: { plan: businessPlan } });
+      const readyPlan = planForAnswers(answers, true, true, true);
+      emitTool(
+        writer,
+        "updatePlan",
+        { ...readyPlan, note: "The DTI application is ready for review." },
+        { plan: readyPlan },
+      );
+      const textId = crypto.randomUUID();
+      writer.write({ type: "text-start", id: textId });
+      writer.write({
+        type: "text-delta",
+        id: textId,
+        delta:
+          "Your DTI business name application is ready. Next, review the fields and continue to eGovPay; after payment, we’ll move to local clearances and permits.",
+      });
+      writer.write({ type: "text-end", id: textId });
     });
-    return createUIMessageStreamResponse({ stream });
   }
 
   const model = createGateway({ apiKey: process.env.AI_GATEWAY_API_KEY }).chat(
@@ -958,21 +1495,27 @@ export async function POST(request: Request) {
 
 Intake questions are handled by the API router before this response. Never call askUser. Never print A/B/C choices in prose. Never ask users to provide a TIN.
 
-Use updatePlan whenever registration progress changes. Keep 3–6 concise steps, preserve stable step IDs, mark finished work completed, and keep at most one step in_progress. The current plan is ${JSON.stringify(existingPlan ?? currentPlan)}.
+Use updatePlan whenever registration progress changes. Keep the comprehensive 8–12 checkpoint plan, preserve stable step IDs, mark finished work completed, and keep at most one step in_progress. The current plan is ${JSON.stringify(existingPlan ?? currentPlan)}.
 
-The user_info tool returns JSON metadata listing which authenticated eGov SSO fields are available for server-side form prefilling; it never returns the field values to the model. It is ${hasUserInfo ? "already loaded in this conversation" : "not loaded yet"}. Before creating or editing any government form, call user_info first if it has not been loaded. Form tools apply matching verified values on the server, so do not ask for information that is already available unless explicit consent or a business-specific value is required.
+The user_info tool reports which authenticated eGov SSO fields are available for server-side form prefilling; it never returns their values to the model. It is ${hasUserInfo ? "already loaded in this conversation" : "not loaded yet"}. Call it before a government form tool when it has not already completed.
 
-generate_bir_form creates a prefilled BIR Form 1901 PDF artifact. Invoke it only when the citizen's latest message explicitly asks to generate, create, prepare, fill, or prefill that BIR form. Never invoke it proactively, for informational questions, or merely because BIR registration is part of the plan. Call user_info in an earlier tool step first when it is not already loaded. The tool takes no citizen data as input and applies authenticated profile values server-side.
+generate_bir_form creates a prefilled BIR Form 1901 PDF artifact. Invoke it only when the citizen's latest message explicitly asks to generate, create, prepare, fill, or prefill that BIR form. Never invoke it proactively, for informational questions, or merely because BIR registration is part of the plan. Call user_info in an earlier tool step first when needed. The tool takes no citizen data as input and applies authenticated profile values server-side.
 
-The verified residential address may prefill the business address only after the dedicated structured profile-address choice is answered with use-profile-address. Otherwise use only the business address captured by the structured address question; never copy an address from model-generated tool input.
+The resolved business city is ${location.city}. Explicit locations override the profile. Reuse every fact the citizen has already stated and never ask for it again. Do not force registration steps when the latest request is unrelated or exploratory; answer that request directly and only return to the saved plan when the citizen asks. The resolved route is ${JSON.stringify(businessPlan)}.
 
-The resolved business city is ${location.city}. Explicit locations override the profile. The minimum intake is clear. The resolved route is ${JSON.stringify(businessPlan)}.
+For a sole proprietor, call user_info before creating or updating a DTI Business Name Registration draft with editDtiBusinessNameForm. Verified profile values stay server-side and the registered address may be used only after explicit consent. DTI handles sole-proprietor business-name registration; do not call it a BIR form. Preserve known fields and copy the exact profile owner name. Never invent an address or fee. If the business city differs from the profile city and no full business address was supplied, leave the address blank and list Business address under missingFields. Use the official DTI territorial-scope fee plus documentary stamp supplied by the application; never invent a fee. The citizen may correct any field in ordinary chat; apply the correction by calling editDtiBusinessNameForm with the full revised form. Current form: ${JSON.stringify(lastForm ? { ...lastForm, ownerName: lastForm.ownerName ? "[server-prefilled verified name]" : "", businessAddress: lastForm.businessAddress ? "[server-confirmed business address]" : "" } : null)}.
 
-For a sole proprietor, create or update a DTI Business Name Registration draft with editDtiBusinessNameForm. DTI handles sole-proprietor business-name registration; do not call it a BIR form. The server applies verified identity and confirmed address values after the tool call, so use placeholders for those fields and never request or repeat their values. Never invent an address or fee. Use the official DTI territorial-scope fee plus documentary stamp supplied by the application; never invent a fee. The citizen may correct non-sensitive fields in ordinary chat; an address correction is accepted only when the server parses it directly from the citizen's message. Current redacted form: ${JSON.stringify(lastForm ? redactDtiFormForModel(lastForm) : null)}.
-
-Use webSearch only when new current evidence is useful. Cite only returned official links. Never expose private reasoning. Do not claim submission or payment occurred.`,
+Use webSearch only when new current evidence is useful. Cite only returned official links. Never expose private reasoning. Do not claim submission or payment occurred. After every completed checkpoint, explicitly state the next concrete step.`,
     messages: await convertToModelMessages(messages, { tools, ignoreIncompleteToolCalls: true }),
     timeout: { totalMs: 35_000, toolMs: 10_000 },
   });
-  return result.toUIMessageStreamResponse({ originalMessages: messages, sendReasoning: false });
+  return result.toUIMessageStreamResponse({
+    originalMessages: messages,
+    sendReasoning: false,
+    onEnd: ({ messages: completeMessages }) => {
+      saveMessages(conversation.id, completeMessages);
+      setActiveStream(conversation.id, null);
+    },
+    consumeSseStream: resumableConsumer(conversation.id),
+  });
 }

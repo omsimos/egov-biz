@@ -61,7 +61,10 @@ export function egovPayBaseUrl() {
   return url.toString().replace(/\/$/, "");
 }
 
-export function paymentUrls(request: Request) {
+export function paymentUrls(
+  request: Request,
+  context?: { conversationId: string; transactionId: string },
+) {
   let requestUrl: URL;
   try {
     requestUrl = new URL(request.url);
@@ -82,7 +85,14 @@ export function paymentUrls(request: Request) {
     new URL("/api/payments/egovpay/callback", app);
   const returnUrl =
     optionalConfiguredUrl(process.env.EGOVPAY_RETURN_URL, "EGOVPAY_RETURN_URL") ??
-    new URL("/?payment=return", app);
+    new URL("/", app);
+  if (context) {
+    returnUrl.searchParams.set("chat", context.conversationId);
+    returnUrl.searchParams.set("payment", "return");
+    returnUrl.searchParams.set("transactionId", context.transactionId);
+  } else if (!returnUrl.searchParams.has("payment")) {
+    returnUrl.searchParams.set("payment", "return");
+  }
 
   return { callbackUrl: callback.toString(), redirectUrl: returnUrl.toString() };
 }
