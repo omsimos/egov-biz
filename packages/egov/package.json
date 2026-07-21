@@ -75,6 +75,14 @@
     "./eGovFaceLiveness/types": {
       "types": "./dist/eGovFaceLiveness/types.d.ts",
       "import": "./dist/eGovFaceLiveness/types.js"
+    },
+    "./compass": {
+      "types": "./dist/compass/index.d.ts",
+      "import": "./dist/compass/index.js"
+    },
+    "./compass/types": {
+      "types": "./dist/compass/types.d.ts",
+      "import": "./dist/compass/types.js"
     }
   },
   "scripts": {
