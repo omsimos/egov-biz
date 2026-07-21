@@ -294,3 +294,9 @@ export const egovSsoCatalog = defineEgovCatalog({
   sourceUrl: EGOV_SSO_SOURCE_URL,
   summary: "Single Sign-On integration for eGov partners.",
 });
+
+export const SsoApi = Object.freeze({
+  catalog: egovSsoCatalog,
+  create: createEgovSsoClient,
+  fromEnv: createEgovSsoClientFromEnv,
+});

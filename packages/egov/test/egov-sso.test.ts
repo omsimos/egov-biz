@@ -4,6 +4,7 @@ import {
   createEgovSsoClient,
   createEgovSsoClientFromEnv,
   egovSsoCatalog,
+  SsoApi,
 } from "../src/services/egov-sso.js";
 
 describe("eGov SSO", () => {
@@ -56,6 +57,7 @@ describe("eGov SSO", () => {
       "generate-access-token",
       "sso-authentication",
     ]);
+    expect(SsoApi.catalog).toBe(egovSsoCatalog);
   });
 
   test("binds token credentials to the eGov SSO environment names", async () => {

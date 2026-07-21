@@ -327,3 +327,9 @@ export const everifyCatalog = defineEgovCatalog({
   sourceUrl: EVERIFY_SOURCE_URL,
   summary: "Verify citizen identity against PhilSys with consent and face liveness.",
 });
+
+export const eVerifyApi = Object.freeze({
+  catalog: everifyCatalog,
+  create: createEverifyClient,
+  fromEnv: createEverifyClientFromEnv,
+});

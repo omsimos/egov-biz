@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import { createEMessageClientFromEnv, emessageCatalog } from "../src/services/emessage.js";
+import {
+  createEMessageClientFromEnv,
+  eMessageApi,
+  emessageCatalog,
+} from "../src/services/emessage.js";
 
 describe("eMessage", () => {
   test("uses EMESSAGE_ACCESS_TOKEN for the documented SMS request", async () => {
@@ -29,5 +33,6 @@ describe("eMessage", () => {
 
   test("publishes the Push SMS endpoint", () => {
     expect(emessageCatalog.endpoints.map(({ id }) => id)).toEqual(["push-sms"]);
+    expect(eMessageApi.catalog).toBe(emessageCatalog);
   });
 });

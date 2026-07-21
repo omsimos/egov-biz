@@ -107,3 +107,9 @@ export const emessageCatalog = defineEgovCatalog({
   sourceUrl: EMESSAGE_SOURCE_URL,
   summary: "Deliver SMS, email, and in-app notices through one messaging API.",
 });
+
+export const eMessageApi = Object.freeze({
+  catalog: emessageCatalog,
+  create: createEMessageClient,
+  fromEnv: createEMessageClientFromEnv,
+});

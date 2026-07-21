@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { createEverifyClientFromEnv, everifyCatalog } from "../src/services/everify.js";
+import { createEverifyClientFromEnv, eVerifyApi, everifyCatalog } from "../src/services/everify.js";
 
 describe("eVerify", () => {
   test("binds authentication and liveness settings to eVerify env names", async () => {
@@ -73,5 +73,6 @@ describe("eVerify", () => {
       "qr-check",
       "qr-verify",
     ]);
+    expect(eVerifyApi.catalog).toBe(everifyCatalog);
   });
 });

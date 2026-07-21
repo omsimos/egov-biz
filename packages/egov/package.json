@@ -32,11 +32,23 @@
       "types": "./dist/services/egov-sso.d.ts",
       "import": "./dist/services/egov-sso.js"
     },
+    "./sso": {
+      "types": "./dist/services/egov-sso.d.ts",
+      "import": "./dist/services/egov-sso.js"
+    },
     "./everify": {
       "types": "./dist/services/everify.d.ts",
       "import": "./dist/services/everify.js"
     },
+    "./eVerify": {
+      "types": "./dist/services/everify.d.ts",
+      "import": "./dist/services/everify.js"
+    },
     "./emessage": {
+      "types": "./dist/services/emessage.d.ts",
+      "import": "./dist/services/emessage.js"
+    },
+    "./eMessage": {
       "types": "./dist/services/emessage.d.ts",
       "import": "./dist/services/emessage.js"
     },
