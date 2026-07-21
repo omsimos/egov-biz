@@ -15,14 +15,18 @@ import {
   ShieldCheck,
   Sparkle,
   StopCircle,
+  Plus,
+  CaretDown,
+  Trash,
   X,
 } from "@phosphor-icons/react";
 import { DefaultChatTransport, getToolName, isToolUIPart } from "ai";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
-import { ProfileAvatar } from "@/components/profile-avatar";
 import type {
   BusinessChatMessage,
+  BusinessConversation,
+  ConversationSummary,
   DtiBusinessNameForm,
   RegistrationPlan,
 } from "@/lib/business-chat";
@@ -32,9 +36,9 @@ import type { IntakeQuestion } from "@/lib/questions";
 type AskUserPart = Extract<BusinessChatMessage["parts"][number], { type: "tool-askUser" }>;
 type ReadyAskUserPart = AskUserPart & {
   state: "input-available";
-  input: { question: IntakeQuestion };
+  input: { questions?: IntakeQuestion[]; question?: IntakeQuestion };
 };
-type PendingQuestion = { part: ReadyAskUserPart; question: IntakeQuestion };
+type PendingQuestion = { part: ReadyAskUserPart; questions: IntakeQuestion[] };
 
 function textOf(message: BusinessChatMessage) {
   return message.parts
@@ -51,43 +55,89 @@ function Markdown({ children, streaming = false }: { children: string; streaming
   );
 }
 
-function latestPlanToolCallId(messages: BusinessChatMessage[]) {
+function latestRegistrationPlan(messages: BusinessChatMessage[]) {
   for (const message of [...messages].reverse())
     for (const part of [...message.parts].reverse()) {
-      if (
-        part.type === "tool-updatePlan" &&
-        (part.state === "output-available" || part.state === "input-available")
-      )
-        return part.toolCallId;
+      if (part.type !== "tool-updatePlan") continue;
+      if (part.state === "output-available") return { plan: part.output.plan, active: false };
+      if (part.state === "input-available")
+        return { plan: { title: part.input.title, steps: part.input.steps }, active: true };
     }
   return null;
 }
 
-function PlanCard({ plan, active }: { plan: RegistrationPlan; active: boolean }) {
+function PlanDock({ plan, active }: { plan: RegistrationPlan; active: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const completed = plan.steps.filter((step) => step.status === "completed").length;
+  const allCompleted = plan.steps.length > 0 && completed === plan.steps.length;
+  const current =
+    plan.steps.find((step) => step.status === "in_progress") ??
+    plan.steps.find((step) => step.status === "pending") ??
+    plan.steps.at(-1);
+  const currentLabel = allCompleted
+    ? "Registration plan complete"
+    : (current?.label ?? "Preparing your registration plan");
+
   return (
-    <article className={`agent-plan-card ${active ? "active" : ""}`}>
-      <header>
-        <ListChecks weight="duotone" />
-        <div>
-          <small>REGISTRATION PLAN</small>
-          <strong>{plan.title}</strong>
+    <section
+      className={`registration-plan-dock ${expanded ? "expanded" : "collapsed"} ${active ? "active" : ""}`}
+      aria-label="Registration plan"
+    >
+      <button
+        className="registration-plan-toggle"
+        type="button"
+        aria-expanded={expanded}
+        aria-controls="registration-plan-items"
+        onClick={() => setExpanded((open) => !open)}
+      >
+        <span className={`registration-plan-status ${current?.status ?? "pending"}`}>
+          {allCompleted || current?.status === "completed" ? (
+            <Check weight="bold" />
+          ) : current?.status === "in_progress" ? (
+            <ArrowRight weight="bold" />
+          ) : (
+            <ListChecks weight="duotone" />
+          )}
+        </span>
+        <span className="registration-plan-summary">
+          <small>{expanded ? "REGISTRATION PLAN" : "CURRENT TASK"}</small>
+          <strong>{expanded ? plan.title : currentLabel}</strong>
+        </span>
+        <span
+          className="registration-plan-count"
+          aria-label={`${completed} of ${plan.steps.length} tasks completed`}
+        >
+          {completed}/{plan.steps.length}
+        </span>
+        <CaretDown className="registration-plan-caret" weight="bold" />
+      </button>
+      <div
+        className="registration-plan-reveal"
+        id="registration-plan-items"
+        aria-hidden={!expanded}
+      >
+        <div className="registration-plan-items">
+          <ol>
+            {plan.steps.map((step) => (
+              <li
+                className={step.status}
+                key={step.id}
+                aria-current={step.status === "in_progress" ? "step" : undefined}
+              >
+                <i>
+                  {step.status === "completed" ? (
+                    <Check weight="bold" />
+                  ) : step.status === "in_progress" ? (
+                    <ArrowRight weight="bold" />
+                  ) : null}
+                </i>
+                <span>{step.label}</span>
+              </li>
+            ))}
+          </ol>
         </div>
-      </header>
-      <ol>
-        {plan.steps.map((step) => (
-          <li className={step.status} key={step.id}>
-            <i>
-              {step.status === "completed" ? (
-                <Check weight="bold" />
-              ) : step.status === "in_progress" ? (
-                <CircleNotch className="spin" />
-              ) : null}
-            </i>
-            <span>{step.label}</span>
-          </li>
-        ))}
-      </ol>
-    </article>
+      </div>
+    </section>
   );
 }
 
@@ -98,82 +148,165 @@ function QuestionComposer({
 }: {
   pending: PendingQuestion;
   disabled: boolean;
-  onAnswer: (value: string | string[], labels: string[]) => void;
+  onAnswer: (answers: { questionId: string; value: string | string[]; labels: string[] }[]) => void;
 }) {
-  const { question } = pending;
-  const [value, setValue] = useState<string | string[]>(question.type === "multi" ? [] : "");
-  const selected = Array.isArray(value) ? value : value ? [value] : [];
-  const canSend = Array.isArray(value) ? value.length > 0 : Boolean(value.trim());
+  const [values, setValues] = useState<Record<string, string | string[]>>(() =>
+    Object.fromEntries(
+      pending.questions.map((question) => [question.id, question.type === "multi" ? [] : ""]),
+    ),
+  );
+  const [custom, setCustom] = useState<Record<string, string>>({});
+  const [questionIndex, setQuestionIndex] = useState(0);
+  const question = pending.questions[questionIndex];
+  const complete = (question: IntakeQuestion) => {
+    const value = values[question.id];
+    if (question.type === "single" && value === "__other__")
+      return Boolean(custom[question.id]?.trim());
+    return Array.isArray(value) ? value.length > 0 : Boolean(value?.trim());
+  };
+  const canContinue = complete(question);
+  const lastQuestion = questionIndex === pending.questions.length - 1;
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (!canSend || disabled) return;
-    const values = Array.isArray(value) ? value : [value];
+    if (!canContinue || disabled) return;
+    if (!lastQuestion) {
+      setQuestionIndex((current) => current + 1);
+      return;
+    }
     onAnswer(
-      value,
-      values.map((item) => question.options?.find((option) => option.id === item)?.label ?? item),
+      pending.questions.map((question) => {
+        const selected = values[question.id];
+        const value = selected === "__other__" ? custom[question.id].trim() : selected;
+        const items = Array.isArray(value) ? value : [value];
+        return {
+          questionId: question.id,
+          value,
+          labels: items.map(
+            (item) => question.options?.find((option) => option.id === item)?.label ?? item,
+          ),
+        };
+      }),
     );
   };
 
   return (
     <form className="hitl-composer" onSubmit={submit}>
-      <div className="hitl-copy">
+      <div className="hitl-batch-intro">
+        <Sparkle weight="fill" />
         <span>
-          <Sparkle weight="fill" />
+          <strong>Complete this checkpoint</strong>
+          <small>
+            Question {questionIndex + 1} of {pending.questions.length}
+          </small>
         </span>
-        <div>
-          <strong>{question.title}</strong>
-          <small>{question.helpText}</small>
-        </div>
       </div>
-      {question.type === "single" || question.type === "multi" ? (
-        <fieldset className="hitl-options">
-          <legend>{question.type === "multi" ? "Choose all that apply" : "Choose one"}</legend>
-          {question.options?.map((option, index) => {
-            const checked = selected.includes(option.id);
-            return (
-              <label key={option.id} className={checked ? "selected" : ""}>
+      {(() => {
+        const value = values[question.id];
+        const selected = Array.isArray(value) ? value : value ? [value] : [];
+        const options =
+          question.type === "single"
+            ? [
+                ...(question.options ?? []),
+                {
+                  id: "__other__",
+                  label: "Other — type your answer",
+                  description: "Enter a different answer",
+                },
+              ]
+            : (question.options ?? []);
+        return (
+          <section className="hitl-question" key={question.id}>
+            <div className="hitl-copy">
+              <b>{questionIndex + 1}</b>
+              <div>
+                <strong>{question.title}</strong>
+                <small>{question.helpText}</small>
+              </div>
+            </div>
+            {question.type === "single" || question.type === "multi" ? (
+              <>
+                <fieldset className="hitl-options">
+                  <legend>
+                    {question.type === "multi" ? "Choose all that apply" : "Choose one"}
+                  </legend>
+                  {options.map((option, index) => {
+                    const checked = selected.includes(option.id);
+                    return (
+                      <label key={option.id} className={checked ? "selected" : ""}>
+                        <input
+                          type={question.type === "multi" ? "checkbox" : "radio"}
+                          name={question.id}
+                          value={option.id}
+                          checked={checked}
+                          onChange={() =>
+                            setValues((current) => ({
+                              ...current,
+                              [question.id]:
+                                question.type === "multi"
+                                  ? checked
+                                    ? selected.filter((id) => id !== option.id)
+                                    : [...selected, option.id]
+                                  : option.id,
+                            }))
+                          }
+                        />
+                        <i>{checked && <Check weight="bold" />}</i>
+                        <span>
+                          <b>{String.fromCharCode(65 + index)}</b>
+                          <strong>{option.label}</strong>
+                          {option.description && <small>{option.description}</small>}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </fieldset>
+                {question.type === "single" && value === "__other__" && (
+                  <label className="hitl-input custom">
+                    <span>Your answer</span>
+                    <input
+                      value={custom[question.id] ?? ""}
+                      onChange={(event) =>
+                        setCustom((current) => ({ ...current, [question.id]: event.target.value }))
+                      }
+                      placeholder="Type your answer"
+                      autoFocus
+                    />
+                  </label>
+                )}
+              </>
+            ) : (
+              <label className="hitl-input">
+                <span>Your answer</span>
                 <input
-                  type={question.type === "multi" ? "checkbox" : "radio"}
-                  name={question.id}
-                  value={option.id}
-                  checked={checked}
-                  onChange={() =>
-                    setValue(
-                      question.type === "multi"
-                        ? checked
-                          ? selected.filter((id) => id !== option.id)
-                          : [...selected, option.id]
-                        : option.id,
-                    )
+                  type={question.type === "number" ? "number" : "text"}
+                  min={question.minimum}
+                  max={question.maximum}
+                  placeholder={question.placeholder ?? "Type your answer"}
+                  value={typeof value === "string" ? value : ""}
+                  onChange={(event) =>
+                    setValues((current) => ({ ...current, [question.id]: event.target.value }))
                   }
+                  autoFocus
                 />
-                <i>{checked && <Check weight="bold" />}</i>
-                <span>
-                  <b>{String.fromCharCode(65 + index)}</b>
-                  <strong>{option.label}</strong>
-                  {option.description && <small>{option.description}</small>}
-                </span>
               </label>
-            );
-          })}
-        </fieldset>
-      ) : (
-        <label className="hitl-input">
-          <span>Your answer</span>
-          <input
-            type={question.type === "number" ? "number" : "text"}
-            min={question.minimum}
-            max={question.maximum}
-            placeholder={question.placeholder ?? "Type your answer"}
-            value={typeof value === "string" ? value : ""}
-            onChange={(event) => setValue(event.target.value)}
-            autoFocus
-          />
-        </label>
-      )}
-      <button className="chat-submit-answer" type="submit" disabled={!canSend || disabled}>
-        Continue <ArrowRight weight="bold" />
-      </button>
+            )}
+          </section>
+        );
+      })()}
+      <div className="hitl-navigation">
+        {questionIndex > 0 && (
+          <button
+            type="button"
+            onClick={() => setQuestionIndex((current) => current - 1)}
+            disabled={disabled}
+          >
+            <ArrowLeft /> Back
+          </button>
+        )}
+        <button className="chat-submit-answer" type="submit" disabled={!canContinue || disabled}>
+          {lastQuestion ? "Complete details" : "Next question"} <ArrowRight weight="bold" />
+        </button>
+      </div>
     </form>
   );
 }
@@ -208,10 +341,12 @@ function SearchTool({
 function DtiFormCard({
   form,
   note,
+  paid,
   onSubmitPay,
 }: {
   form: DtiBusinessNameForm;
   note?: string;
+  paid: boolean;
   onSubmitPay: () => void;
 }) {
   const rows = [
@@ -225,15 +360,15 @@ function DtiFormCard({
     ],
   ];
   return (
-    <article className="dti-form-card">
+    <article className={`dti-form-card ${paid ? "paid" : ""}`}>
       <header>
         <span className="dti-seal">DTI</span>
         <div>
           <small>BUSINESS NAME REGISTRATION</small>
           <strong>Application draft</strong>
         </div>
-        <i className={form.missingFields.length ? "draft" : "ready"}>
-          {form.missingFields.length ? "Needs input" : "Ready"}
+        <i className={paid ? "paid" : form.missingFields.length ? "draft" : "ready"}>
+          {paid ? "Paid" : form.missingFields.length ? "Needs input" : "Ready"}
         </i>
       </header>
       {note && (
@@ -252,7 +387,9 @@ function DtiFormCard({
       <div className="dti-help">
         <Sparkle weight="fill" />
         <span>
-          To change anything, type it below. For example: “Use the name Reyes Coffee Club.”
+          {paid
+            ? "Payment recorded. This application checkpoint is complete."
+            : "To change anything, type it below. For example: “Use the name Reyes Coffee Club.”"}
         </span>
       </div>
       <footer>
@@ -260,8 +397,16 @@ function DtiFormCard({
           <small>PAYMENT</small>
           <strong>{form.feeLabel}</strong>
         </div>
-        <button onClick={onSubmitPay} disabled={form.missingFields.length > 0}>
-          Submit and pay <ArrowRight weight="bold" />
+        <button onClick={onSubmitPay} disabled={paid || form.missingFields.length > 0}>
+          {paid ? (
+            <>
+              <CheckCircle weight="fill" /> Paid
+            </>
+          ) : (
+            <>
+              Submit and pay <ArrowRight weight="bold" />
+            </>
+          )}
         </button>
       </footer>
     </article>
@@ -270,47 +415,25 @@ function DtiFormCard({
 
 function ToolPart({
   part,
-  latestPlanId,
+  paid,
   onSubmitPay,
 }: {
   part: BusinessChatMessage["parts"][number];
-  latestPlanId: string | null;
+  paid: boolean;
   onSubmitPay: (form: DtiBusinessNameForm) => void;
 }) {
   if (!isToolUIPart(part)) return null;
   const name = getToolName(part);
   if (name === "askUser") return null;
-  if (part.type === "tool-user_info")
-    return (
-      <div className={`chat-tool-row ${part.state === "output-available" ? "complete" : "active"}`}>
-        {part.state === "output-available" ? (
-          <ShieldCheck weight="fill" />
-        ) : (
-          <CircleNotch className="spin" />
-        )}
-        <div>
-          <small>
-            {part.state === "output-available" ? "Verified profile ready" : "Loading eGov profile"}
-          </small>
-          <span>Private identity data stays inside this authenticated session</span>
-        </div>
-        <ShieldCheck />
-      </div>
-    );
   if (part.type === "tool-webSearch") return <SearchTool part={part} />;
-  if (part.type === "tool-updatePlan") {
-    if (part.toolCallId !== latestPlanId) return null;
-    if (part.state === "output-available")
-      return <PlanCard plan={part.output.plan} active={false} />;
-    if (part.state === "input-available")
-      return <PlanCard plan={{ title: part.input.title, steps: part.input.steps }} active />;
-  }
+  if (part.type === "tool-updatePlan") return null;
   if (part.type === "tool-editDtiBusinessNameForm") {
     if (part.state === "output-available")
       return (
         <DtiFormCard
           form={part.output.form}
           note={part.input.note}
+          paid={paid}
           onSubmitPay={() => onSubmitPay(part.output.form)}
         />
       );
@@ -336,7 +459,19 @@ function ToolPart({
   );
 }
 
-function PaymentDialog({ form, onClose }: { form: DtiBusinessNameForm; onClose: () => void }) {
+function PaymentDialog({
+  form,
+  profile,
+  conversationId,
+  onClose,
+  onPaid,
+}: {
+  form: DtiBusinessNameForm;
+  profile: CitizenProfile | null;
+  conversationId: string;
+  onClose: () => void;
+  onPaid: () => Promise<void>;
+}) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const [opening, setOpening] = useState(false);
   const [paymentError, setPaymentError] = useState("");
@@ -356,13 +491,21 @@ function PaymentDialog({ form, onClose }: { form: DtiBusinessNameForm; onClose: 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          conversationId,
           proposedName: form.proposedName,
           territorialScope: form.territorialScope,
+          ownerName: form.ownerName,
+          mobile: profile?.mobile,
         }),
       });
-      const result = (await response.json()) as { checkoutUrl?: string; error?: string };
+      const result = (await response.json()) as {
+        checkoutUrl?: string;
+        error?: string;
+        payment?: { status?: string };
+      };
       if (!response.ok || !result.checkoutUrl)
         throw new Error(result.error || "eGovPay could not open checkout.");
+      await onPaid();
       window.location.assign(result.checkoutUrl);
     } catch (error) {
       setPaymentError(error instanceof Error ? error.message : "eGovPay could not open checkout.");
@@ -389,7 +532,10 @@ function PaymentDialog({ form, onClose }: { form: DtiBusinessNameForm; onClose: 
           </span>
           <small>eGovPay</small>
           <h2 id="payment-title">Continue to secure payment</h2>
-          <p>You’ll choose an available payment method on eGovPay.</p>
+          <p>
+            You’ll continue to eGovPay in this tab. This demo will mark the application paid while
+            webhook support is being completed.
+          </p>
         </div>
         <div className="payment-summary">
           <span>
@@ -404,46 +550,71 @@ function PaymentDialog({ form, onClose }: { form: DtiBusinessNameForm; onClose: 
           </p>
         )}
         <button className="payment-confirm" onClick={openCheckout} disabled={opening}>
-          <ShieldCheck weight="fill" /> {opening ? "Opening eGovPay…" : "Continue to eGovPay"}
+          <ShieldCheck weight="fill" /> {opening ? "Preparing checkout…" : "Continue to eGovPay"}
         </button>
-        <p className="payment-disclaimer">Payment is completed on the secure eGovPay page.</p>
+        <p className="payment-disclaimer">
+          Use “Back to merchant” after checkout to return to this saved chat.
+        </p>
       </section>
     </div>
   );
 }
 
 export function BusinessChatScreen({
-  initialPrompt,
+  conversation,
+  conversations,
   profile,
+  paymentStatus,
   onBack,
+  onNewConversation,
+  onSelectConversation,
+  onDeleteConversation,
 }: {
-  initialPrompt: string;
+  conversation: BusinessConversation;
+  conversations: ConversationSummary[];
   profile: CitizenProfile | null;
+  paymentStatus?: string | null;
   onBack: () => void;
+  onNewConversation: () => void;
+  onSelectConversation: (id: string) => void;
+  onDeleteConversation: (conversation: ConversationSummary) => void;
 }) {
   const [input, setInput] = useState("");
   const [paymentForm, setPaymentForm] = useState<DtiBusinessNameForm | null>(null);
+  const [localPaymentStatus, setLocalPaymentStatus] = useState(
+    paymentStatus ?? conversation.paymentStatus ?? null,
+  );
+  const [continuationError, setContinuationError] = useState("");
   const [answeringToolCallId, setAnsweringToolCallId] = useState<string | null>(null);
   const answeredToolCalls = useRef(new Set<string>());
   const scrollRef = useRef<HTMLDivElement>(null);
   const seeded = useRef(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const initialPrompt = conversation.initialPrompt;
   const transport = useMemo(
-    () => new DefaultChatTransport({ api: "/api/agent/chat", body: { initialPrompt } }),
-    [initialPrompt],
+    () => new DefaultChatTransport({ api: "/api/agent/chat", body: { profile, initialPrompt } }),
+    [initialPrompt, profile],
   );
   const { messages, sendMessage, status, stop, error, addToolOutput } =
     useChat<BusinessChatMessage>({
-      id: `business-${initialPrompt.slice(0, 32)}`,
+      id: conversation.id,
+      messages: conversation.messages,
       transport,
+      resume: true,
     });
   const busy = status === "submitted" || status === "streaming";
-  const latestPlanId = latestPlanToolCallId(messages);
+  const paid = /paid|success|complete/i.test(localPaymentStatus ?? "");
+  const latestPlan = latestRegistrationPlan(messages);
   const pending: PendingQuestion | null = (() => {
     for (const message of [...messages].reverse()) {
       for (const part of [...message.parts].reverse()) {
         if (part.type === "tool-askUser" && part.state === "input-available") {
           const current = part as ReadyAskUserPart;
-          return { part: current, question: current.input.question };
+          return {
+            part: current,
+            questions:
+              current.input.questions ?? (current.input.question ? [current.input.question] : []),
+          };
         }
       }
     }
@@ -451,11 +622,11 @@ export function BusinessChatScreen({
   })();
 
   useEffect(() => {
-    if (!seeded.current) {
+    if (conversation.messages.length === 0 && !seeded.current) {
       seeded.current = true;
       void sendMessage({ text: initialPrompt });
     }
-  }, [initialPrompt, sendMessage]);
+  }, [conversation.messages.length, initialPrompt, sendMessage]);
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, pending, status]);
@@ -467,18 +638,38 @@ export function BusinessChatScreen({
     setInput("");
     void sendMessage({ text });
   };
-  const answer = async (value: string | string[], labels: string[]) => {
+  const answer = async (
+    answers: { questionId: string; value: string | string[]; labels: string[] }[],
+  ) => {
     if (!pending || answeredToolCalls.current.has(pending.part.toolCallId)) return;
     const toolCallId = pending.part.toolCallId;
     answeredToolCalls.current.add(toolCallId);
     setAnsweringToolCallId(toolCallId);
     try {
-      await addToolOutput({ tool: "askUser", toolCallId, output: { value, labels } });
+      await addToolOutput({ tool: "askUser", toolCallId, output: { answers } });
       await sendMessage();
     } catch {
       answeredToolCalls.current.delete(toolCallId);
     } finally {
       setAnsweringToolCallId(null);
+    }
+  };
+  const continueAfterPayment = async () => {
+    setLocalPaymentStatus("paid");
+    setContinuationError("");
+    try {
+      // Add a non-visual event message so useChat always starts a new request.
+      // Calling sendMessage() without a message can be ignored after a completed
+      // assistant turn by some chat-state transitions.
+      await sendMessage(
+        {
+          role: "user",
+          parts: [{ type: "data-paymentCompleted", data: { status: "paid" } }],
+        },
+        { body: { event: "payment-completed" } },
+      );
+    } catch {
+      setContinuationError("Payment is saved, but I couldn’t start the next step automatically.");
     }
   };
 
@@ -496,16 +687,65 @@ export function BusinessChatScreen({
           <Sparkle weight="fill" />
           <i />
         </div>
-        <div>
-          <h1>Business registration</h1>
+        <button className="chat-session-trigger" onClick={() => setHistoryOpen((open) => !open)}>
           <span>
-            <ShieldCheck weight="fill" /> eGovPH service
+            <h1>{conversation.title}</h1>
+            <small>
+              <ShieldCheck weight="fill" /> Saved registration plan
+            </small>
           </span>
-        </div>
-        {profile && <ProfileAvatar profile={profile} />}
+          <CaretDown />
+        </button>
+        <button
+          className="chat-new-session"
+          onClick={onNewConversation}
+          aria-label="Create a new registration plan"
+        >
+          <Plus />
+        </button>
+        {historyOpen && (
+          <div className="chat-session-menu">
+            {conversations.map((item) => (
+              <div
+                className={`chat-session-row ${item.id === conversation.id ? "active" : ""}`}
+                key={item.id}
+              >
+                <button
+                  className="chat-session-open"
+                  onClick={() => {
+                    setHistoryOpen(false);
+                    onSelectConversation(item.id);
+                  }}
+                >
+                  {item.title}
+                </button>
+                <button
+                  className="chat-session-delete"
+                  onClick={() => onDeleteConversation(item)}
+                  aria-label={`Delete ${item.title}`}
+                >
+                  <Trash />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </header>
       <main className="chat-thread" ref={scrollRef} id="app-content">
-        <div className="chat-day">Today</div>
+        {localPaymentStatus && (
+          <div className={`payment-return ${paid ? "success" : "pending"}`}>
+            <CheckCircle weight="fill" />
+            <span>
+              <strong>{paid ? "Payment confirmed" : "Payment status updated"}</strong>
+              <small>
+                {paid
+                  ? "Your plan is advancing to barangay clearance and local permit requirements."
+                  : `Status: ${localPaymentStatus}. You can continue in this saved chat.`}
+              </small>
+            </span>
+          </div>
+        )}
+        <div className="chat-day">Saved automatically</div>
         {messages.map((message) => {
           const user = message.role === "user";
           const text = textOf(message);
@@ -513,17 +753,12 @@ export function BusinessChatScreen({
             (part) =>
               isToolUIPart(part) &&
               getToolName(part) !== "askUser" &&
-              (part.type !== "tool-updatePlan" || part.toolCallId === latestPlanId),
+              part.type !== "tool-updatePlan",
           );
           if (!text && !hasVisibleTool) return null;
           const streaming = busy && message.id === messages.at(-1)?.id;
           return (
             <article className={`chat-message ${user ? "user" : "assistant"}`} key={message.id}>
-              {!user && (
-                <span className="message-avatar">
-                  <Sparkle weight="fill" />
-                </span>
-              )}
               <div className="message-content">
                 {text &&
                   (user ? (
@@ -540,7 +775,7 @@ export function BusinessChatScreen({
                     <ToolPart
                       key={`${message.id}-${index}`}
                       part={part}
-                      latestPlanId={latestPlanId}
+                      paid={paid}
                       onSubmitPay={setPaymentForm}
                     />
                   ) : null,
@@ -551,15 +786,22 @@ export function BusinessChatScreen({
         })}
         {busy && (
           <div className="chat-working" role="status" aria-live="polite">
-            <span className="message-avatar">
-              <Sparkle weight="fill" />
-            </span>
-            <div className="chat-working-shimmer">Working on the next step…</div>
+            <div className="chat-working-shimmer">Preparing your next registration step…</div>
           </div>
         )}
-        {error && <div className="chat-error">I couldn’t continue. Please try again.</div>}
+        {(error || continuationError) && (
+          <div className="chat-error">
+            {continuationError || "I couldn’t continue. Please try again."}
+            {paid && (
+              <button type="button" onClick={() => void continueAfterPayment()} disabled={busy}>
+                Continue to next step
+              </button>
+            )}
+          </div>
+        )}
       </main>
       <footer className="chat-composer-shell">
+        {latestPlan && <PlanDock plan={latestPlan.plan} active={latestPlan.active} />}
         {pending ? (
           <QuestionComposer
             key={pending.part.toolCallId}
@@ -584,10 +826,15 @@ export function BusinessChatScreen({
             />
             <div>
               <span>
-                <ShieldCheck weight="fill" /> You can correct any field here
+                <ShieldCheck weight="fill" /> Saved automatically
               </span>
               {busy ? (
-                <button type="button" onClick={() => void stop()} aria-label="Stop">
+                <button
+                  className="chat-stop"
+                  type="button"
+                  onClick={() => void stop()}
+                  aria-label="Stop"
+                >
                   <StopCircle weight="fill" />
                 </button>
               ) : (
@@ -599,7 +846,15 @@ export function BusinessChatScreen({
           </form>
         )}
       </footer>
-      {paymentForm && <PaymentDialog form={paymentForm} onClose={() => setPaymentForm(null)} />}
+      {paymentForm && (
+        <PaymentDialog
+          form={paymentForm}
+          profile={profile}
+          conversationId={conversation.id}
+          onClose={() => setPaymentForm(null)}
+          onPaid={continueAfterPayment}
+        />
+      )}
     </div>
   );
 }

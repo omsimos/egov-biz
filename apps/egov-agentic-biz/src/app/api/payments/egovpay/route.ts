@@ -1,7 +1,7 @@
 import { eGovPayApi } from "@repo/egov/eGovPay";
 import { z } from "zod";
-import { dtiRegistrationFee } from "@/lib/dti-fees";
 import { readSession } from "@/lib/auth/session";
+import { dtiRegistrationFee } from "@/lib/dti-fees";
 import {
   egovPayBaseUrl,
   hostedCheckoutUrl,
@@ -9,10 +9,13 @@ import {
   paymentUrls,
 } from "@/lib/payment-urls";
 import { classifyPaymentNetworkError, paymentNetworkMessage } from "@/lib/payment-network";
+import { getConversation } from "@/server/conversations";
+import { createPayment } from "@/server/payments";
 
 export const dynamic = "force-dynamic";
 
 const requestSchema = z.object({
+  conversationId: z.string().uuid(),
   proposedName: z.string().trim().min(1).max(200),
   territorialScope: z.enum(["Barangay", "City / municipality", "Regional", "National"]),
 });
@@ -27,20 +30,24 @@ export async function POST(request: Request) {
       { error: "Check the application details and try again." },
       { status: 400 },
     );
+  if (!getConversation(parsed.data.conversationId))
+    return Response.json({ error: "Chat session not found." }, { status: 404 });
 
   if (
     !process.env.EGOVPAY_BASE_URL?.trim() ||
     !process.env.EGOVPAY_API_KEY?.trim() ||
     !process.env.EGOVPAY_SETTLEMENT_TEMPLATE_UUID?.trim()
-  ) {
+  )
     return Response.json({ error: "eGovPay is not available right now." }, { status: 503 });
-  }
 
   const amount = dtiRegistrationFee(parsed.data.territorialScope);
   const transactionId = `DTI-BNR-${crypto.randomUUID()}`;
   try {
     const baseUrl = egovPayBaseUrl();
-    const { callbackUrl, redirectUrl } = paymentUrls(request);
+    const { callbackUrl, redirectUrl } = paymentUrls(request, {
+      conversationId: parsed.data.conversationId,
+      transactionId,
+    });
     const payment = await eGovPayApi.fromEnv({ baseUrl }).generatePayment(
       {
         amount,
@@ -61,11 +68,22 @@ export async function POST(request: Request) {
       { signal: AbortSignal.timeout(12_000) },
     );
     const checkoutUrl = hostedCheckoutUrl(payment.data.url, baseUrl);
+    const storedPayment = createPayment({
+      conversationId: parsed.data.conversationId,
+      transactionUuid: payment.data.uuid,
+      transactionId,
+      amount,
+      status: "pending",
+      proposedName: parsed.data.proposedName,
+      territorialScope: parsed.data.territorialScope,
+      ownerName: session.profile.fullName,
+    });
     return Response.json({
       checkoutUrl: checkoutUrl.toString(),
       transactionUuid: payment.data.uuid,
       transactionId,
       amount,
+      payment: storedPayment,
     });
   } catch (error) {
     if (error instanceof PaymentUrlConfigurationError) {

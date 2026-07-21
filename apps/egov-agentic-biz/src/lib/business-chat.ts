@@ -15,8 +15,9 @@ export type DtiBusinessNameForm = {
   missingFields: string[];
 };
 
-export type AskUserInput = { question: IntakeQuestion };
-export type AskUserOutput = { value: string | string[]; labels: string[] };
+export type AskUserAnswer = { questionId: string; value: string | string[]; labels: string[] };
+export type AskUserInput = { questions: IntakeQuestion[]; question?: IntakeQuestion };
+export type AskUserOutput = { answers: AskUserAnswer[]; value?: string | string[]; labels?: string[] };
 export type WebSearchInput = { query: string; numResults?: number };
 export type WebSearchOutput = { results: { title: string; url: string }[] };
 export type EditDtiInput = { form: DtiBusinessNameForm; note: string };
@@ -55,9 +56,24 @@ export type BusinessChatTools = {
 
 export type BusinessChatData = {
   plan: { plan: BusinessPlan };
+  paymentCompleted: { status: "paid" };
 };
 
 export type BusinessChatMessage = UIMessage<unknown, BusinessChatData, BusinessChatTools>;
+
+export type ConversationSummary = {
+  id: string;
+  title: string;
+  initialPrompt: string;
+  activeStreamId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BusinessConversation = ConversationSummary & {
+  messages: BusinessChatMessage[];
+  paymentStatus?: string | null;
+};
 
 export type BusinessChatContext = {
   profile: CitizenProfile | null;
