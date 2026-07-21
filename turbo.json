@@ -12,6 +12,11 @@
       "dependsOn": ["transit"],
       "outputs": []
     },
+    "dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true
+    },
     "format": {
       "cache": false
     },

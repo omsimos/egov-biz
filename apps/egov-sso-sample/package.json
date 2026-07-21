@@ -1,0 +1,21 @@
+{
+  "name": "@repo/egov-sso-sample",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check-types": "tsc --noEmit -p tsconfig.json",
+    "dev": "bun --env-file=../../.env --watch src/server.ts",
+    "format": "oxfmt src package.json tsconfig.json turbo.json",
+    "format:check": "oxfmt --check src package.json tsconfig.json turbo.json",
+    "lint": "oxlint src",
+    "start": "bun --env-file=../../.env src/server.ts"
+  },
+  "dependencies": {
+    "@repo/egov": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "typescript": "7.0.2"
+  }
+}
