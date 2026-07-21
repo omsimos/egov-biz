@@ -473,9 +473,9 @@ a:focus-visible {
 }
 .home-services {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 4px;
-  padding: 0 12px 22px;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 2px;
+  padding: 0 10px 22px;
 }
 .home-services button {
   border: 0;
@@ -491,8 +491,8 @@ a:focus-visible {
   cursor: pointer;
 }
 .service-bubble {
-  width: 58px;
-  height: 58px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   background: #e8edfc;
   color: #2450d8;
@@ -505,8 +505,8 @@ a:focus-visible {
   transform: scale(0.93);
 }
 .service-bubble svg {
-  width: 33px;
-  height: 33px;
+  width: 31px;
+  height: 31px;
 }
 .service-bubble i {
   font-style: normal;
@@ -2832,12 +2832,15 @@ a:focus-visible {
 
 @media (max-width: 350px) {
   .service-bubble {
-    width: 52px;
-    height: 52px;
+    width: 47px;
+    height: 47px;
   }
   .service-bubble svg {
-    width: 29px;
-    height: 29px;
+    width: 26px;
+    height: 26px;
+  }
+  .home-services button {
+    font-size: 11px;
   }
   .business-intro {
     padding-top: 16px;

@@ -58,6 +58,29 @@ function LguIcon() {
   );
 }
 
+function BusinessIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" viewBox="0 0 44 44">
+      <path d="M8.5 16.5 L11.5 8.5 H32.5 L35.5 16.5 Z" fill={AMBER} />
+      <path
+        d="M8.5 16.5h27M11.5 8.5h21l3 8"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="3"
+      />
+      <path
+        d="M11.5 16.5v18a1.5 1.5 0 0 0 1.5 1.5h18a1.5 1.5 0 0 0 1.5-1.5v-18"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="3"
+      />
+      <path d="M19 36v-7.5a3 3 0 0 1 6 0V36" stroke="currentColor" strokeWidth="3" />
+      <rect fill={AMBER} height="4.6" rx="1.2" width="4.6" x="26" y="21.5" />
+    </svg>
+  );
+}
+
 function TravelIcon() {
   return (
     <svg aria-hidden="true" fill="none" viewBox="0 0 44 44">
@@ -118,6 +141,7 @@ function ReportIcon() {
 const services = [
   { icon: <NgaIcon />, label: "NGAs" },
   { icon: <LguIcon />, label: "LGUs" },
+  { badge: "New", business: true, icon: <BusinessIcon />, label: "Business" },
   { icon: <TravelIcon />, label: "Travel" },
   { icon: <HealthIcon />, label: "Health" },
   { badge: "New", icon: <ReportIcon />, label: "Report" },
@@ -343,8 +367,8 @@ export function HomeScreen({
         </div>
 
         <nav aria-label="eGovPH services" className="home-services">
-          {services.map(({ badge, icon, label }) => (
-            <button key={label} type="button">
+          {services.map(({ badge, business, icon, label }) => (
+            <button key={label} onClick={business ? onBusiness : undefined} type="button">
               <span className="service-bubble">
                 {icon}
                 {badge && <i>{badge}</i>}
