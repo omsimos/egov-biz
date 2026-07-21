@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@import "./chat.css";
+
 :root {
   --blue: #0755e9;
   --blue-dark: #073caa;
@@ -194,6 +196,28 @@ button:focus-visible, textarea:focus-visible, input:focus-visible, a:focus-visib
 .intake-footer button:disabled { background: #b9c4d7; box-shadow: none; }
 .intake-footer svg, .primary-action svg { width: 17px; }
 .intake-footer span { margin-top: 7px; color: var(--muted); font-size: 11px; }
+.progress-bubble { position: absolute; left: 20px; right: 20px; bottom: calc(100% + 10px); padding: 10px 13px; border: 1px solid #cbd9f7; border-radius: 16px; background: rgba(255,255,255,.98); color: var(--ink); box-shadow: 0 10px 30px rgba(28,53,94,.14); animation: progress-arrive .2s ease-out; overflow: hidden; }
+.progress-bubble.awaiting { left: auto; width: 88px; }
+.progress-bubble::after { content: ""; position: absolute; right: 28px; bottom: -6px; width: 11px; height: 11px; border-right: 1px solid #cbd9f7; border-bottom: 1px solid #cbd9f7; background: #fff; transform: rotate(45deg); }
+.progress-summary { display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 9px; }
+.progress-bubble.awaiting .progress-summary { grid-template-columns: 30px auto; }
+.progress-summary > span { width: 30px; height: 30px; margin: 0; display: grid; place-items: center; border-radius: 10px; background: #e8efff; color: var(--blue); }
+.progress-summary > span svg { width: 15px; }
+.progress-summary p { margin: 0; font-size: 14px; font-weight: 700; line-height: 1.4; }
+.progress-summary > i { display: flex; gap: 3px; align-items: center; }
+.progress-summary > i b { width: 4px; height: 4px; border-radius: 50%; background: var(--blue); animation: progress-dot .8s infinite alternate; }
+.progress-summary > i b:nth-child(2) { animation-delay: .15s; }
+.progress-summary > i b:nth-child(3) { animation-delay: .3s; }
+.progress-tool { display: grid; grid-template-columns: 16px 1fr; align-items: start; gap: 7px; margin-top: 9px; padding-top: 9px; border-top: 1px solid #e8edf6; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.progress-tool > svg { width: 14px; height: 14px; margin-top: 1px; color: var(--blue); }
+.progress-tool.complete > svg { color: var(--success); }
+.progress-tool.error > svg { color: #a75a40; }
+.progress-tool q { quotes: "“" "”"; }
+.tool-shimmer { display: inline; color: transparent; background-image: linear-gradient(90deg, transparent calc(50% - 45px), #48638f, transparent calc(50% + 45px)), linear-gradient(#8a96aa,#8a96aa); background-size: 250% 100%, auto; background-repeat: no-repeat, padding-box; background-clip: text; animation: tool-text-shimmer 1.6s linear infinite; }
+@keyframes progress-arrive { from { opacity: 0; transform: translateY(5px); } }
+@keyframes progress-dot { to { opacity: .25; transform: translateY(-2px); } }
+@keyframes tool-text-shimmer { from { background-position: 100% center; } to { background-position: 0% center; } }
+@media (prefers-reduced-motion: reduce) { .progress-bubble, .progress-summary > i b, .tool-shimmer { animation: none; } .tool-shimmer { color: var(--muted); } }
 .loading-agent { height: calc(100% - 36px); padding: 0 38px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .loading-agent .assistant-orbit { animation: soft-pulse 1.8s infinite; }
 @keyframes soft-pulse { 50% { transform: rotate(4deg) scale(1.05); box-shadow: 0 16px 34px rgba(7,85,233,.32); } }

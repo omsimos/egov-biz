@@ -13,11 +13,14 @@
   },
   "dependencies": {
     "@ai-sdk/mcp": "^2.0.15",
+    "@ai-sdk/react": "^4.0.35",
     "@phosphor-icons/react": "^2.1.10",
+    "@repo/egov": "workspace:*",
     "ai": "^7.0.32",
     "next": "16.2.10",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "streamdown": "^2.5.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

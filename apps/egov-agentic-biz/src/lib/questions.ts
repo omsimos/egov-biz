@@ -39,6 +39,7 @@ export type PlanCitation = {
 };
 
 export type IntakeAnswer = {
+  toolCallId?: string;
   questionId: string;
   question: string;
   value: string | string[];
