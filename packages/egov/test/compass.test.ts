@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import { compassApi, compassCatalog, createCompassClientFromEnv } from "../src/compass/index.js";
+import {
+  compassCatalog,
+  createCompassClientFromEnv,
+  eGovCompassApi,
+} from "../src/eGovCompass/index.js";
 
 describe("Compass", () => {
   test("binds EGOVCOMPASS_API_KEY and serializes SAAODB filters", async () => {
@@ -64,6 +68,6 @@ describe("Compass", () => {
 
   test("publishes all seven documented endpoints", () => {
     expect(compassCatalog.endpoints).toHaveLength(7);
-    expect(compassApi.catalog).toBe(compassCatalog);
+    expect(eGovCompassApi.catalog).toBe(compassCatalog);
   });
 });

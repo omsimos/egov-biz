@@ -76,13 +76,13 @@
       "types": "./dist/eGovFaceLiveness/types.d.ts",
       "import": "./dist/eGovFaceLiveness/types.js"
     },
-    "./compass": {
-      "types": "./dist/compass/index.d.ts",
-      "import": "./dist/compass/index.js"
+    "./eGovCompass": {
+      "types": "./dist/eGovCompass/index.d.ts",
+      "import": "./dist/eGovCompass/index.js"
     },
-    "./compass/types": {
-      "types": "./dist/compass/types.d.ts",
-      "import": "./dist/compass/types.js"
+    "./eGovCompass/types": {
+      "types": "./dist/eGovCompass/types.d.ts",
+      "import": "./dist/eGovCompass/types.js"
     }
   },
   "scripts": {

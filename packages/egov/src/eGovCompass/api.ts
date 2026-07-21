@@ -304,7 +304,7 @@ export const compassCatalog = defineEgovCatalog({
   summary: "Query public DBM appropriations, allotment, release, and spending records.",
 });
 
-export const compassApi = Object.freeze({
+export const eGovCompassApi = Object.freeze({
   catalog: compassCatalog,
   create: createCompassClient,
   fromEnv: createCompassClientFromEnv,
