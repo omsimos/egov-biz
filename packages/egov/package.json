@@ -59,6 +59,14 @@
     "./eGovChain/types": {
       "types": "./dist/eGovChain/types.d.ts",
       "import": "./dist/eGovChain/types.js"
+    },
+    "./eReport": {
+      "types": "./dist/eReport/index.d.ts",
+      "import": "./dist/eReport/index.js"
+    },
+    "./eReport/types": {
+      "types": "./dist/eReport/types.d.ts",
+      "import": "./dist/eReport/types.js"
     }
   },
   "scripts": {
