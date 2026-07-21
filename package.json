@@ -10,6 +10,7 @@
     "format": "turbo run format",
     "format:check": "turbo run format:check",
     "lint": "turbo run lint",
+    "sample:ai": "turbo run sample --filter=@repo/egov-ai-sample --",
     "smoke:egov": "turbo run smoke --filter=@repo/egov-smoke",
     "test": "turbo run test"
   },

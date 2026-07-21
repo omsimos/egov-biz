@@ -28,6 +28,10 @@
       "dependsOn": ["transit"],
       "outputs": []
     },
+    "sample": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
     "smoke": {
       "dependsOn": ["^build"],
       "cache": false

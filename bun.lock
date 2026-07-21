@@ -10,6 +10,16 @@
         "turbo": "2.10.5",
       },
     },
+    "apps/egov-ai-sample": {
+      "name": "@repo/egov-ai-sample",
+      "version": "0.0.0",
+      "dependencies": {
+        "@repo/egov": "workspace:*",
+      },
+      "devDependencies": {
+        "typescript": "7.0.2",
+      },
+    },
     "apps/egov-smoke": {
       "name": "@repo/egov-smoke",
       "version": "0.0.0",
@@ -124,6 +134,8 @@
     "@oxlint/binding-win32-x64-msvc": ["@oxlint/binding-win32-x64-msvc@1.74.0", "", { "os": "win32", "cpu": "x64" }, "sha512-VTC9IYTIMrVUk/i6Ms1ohzzDKZFkWn0KU2OBbPBzgmVZ2V30165T/zK4LztTr0Xgp9fZ1qQZ1rsZAu/rEmySlA=="],
 
     "@repo/egov": ["@repo/egov@workspace:packages/egov"],
+
+    "@repo/egov-ai-sample": ["@repo/egov-ai-sample@workspace:apps/egov-ai-sample"],
 
     "@repo/egov-smoke": ["@repo/egov-smoke@workspace:apps/egov-smoke"],
 
