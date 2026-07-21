@@ -5,7 +5,7 @@ import {
   createEgovSsoClientFromEnv,
   egovSsoCatalog,
   SsoApi,
-} from "../src/services/egov-sso.js";
+} from "../src/sso/index.js";
 
 describe("eGov SSO", () => {
   test("exchanges the camel-case input for the documented token payload", async () => {

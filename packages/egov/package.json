@@ -8,53 +8,41 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    },
-    "./catalog": {
-      "types": "./dist/catalog.d.ts",
-      "import": "./dist/catalog.js"
-    },
-    "./client": {
-      "types": "./dist/client.d.ts",
-      "import": "./dist/client.js"
-    },
-    "./errors": {
-      "types": "./dist/errors.d.ts",
-      "import": "./dist/errors.js"
-    },
-    "./env": {
-      "types": "./dist/env.d.ts",
-      "import": "./dist/env.js"
-    },
-    "./egov-sso": {
-      "types": "./dist/services/egov-sso.d.ts",
-      "import": "./dist/services/egov-sso.js"
+    "./core": {
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js"
     },
     "./sso": {
-      "types": "./dist/services/egov-sso.d.ts",
-      "import": "./dist/services/egov-sso.js"
+      "types": "./dist/sso/index.d.ts",
+      "import": "./dist/sso/index.js"
     },
-    "./everify": {
-      "types": "./dist/services/everify.d.ts",
-      "import": "./dist/services/everify.js"
+    "./sso/types": {
+      "types": "./dist/sso/types.d.ts",
+      "import": "./dist/sso/types.js"
     },
     "./eVerify": {
-      "types": "./dist/services/everify.d.ts",
-      "import": "./dist/services/everify.js"
+      "types": "./dist/eVerify/index.d.ts",
+      "import": "./dist/eVerify/index.js"
     },
-    "./emessage": {
-      "types": "./dist/services/emessage.d.ts",
-      "import": "./dist/services/emessage.js"
+    "./eVerify/types": {
+      "types": "./dist/eVerify/types.d.ts",
+      "import": "./dist/eVerify/types.js"
     },
     "./eMessage": {
-      "types": "./dist/services/emessage.d.ts",
-      "import": "./dist/services/emessage.js"
+      "types": "./dist/eMessage/index.d.ts",
+      "import": "./dist/eMessage/index.js"
     },
-    "./types": {
-      "types": "./dist/types.d.ts",
-      "import": "./dist/types.js"
+    "./eMessage/types": {
+      "types": "./dist/eMessage/types.d.ts",
+      "import": "./dist/eMessage/types.js"
+    },
+    "./eGovAi": {
+      "types": "./dist/eGovAi/index.d.ts",
+      "import": "./dist/eGovAi/index.js"
+    },
+    "./eGovAi/types": {
+      "types": "./dist/eGovAi/types.d.ts",
+      "import": "./dist/eGovAi/types.js"
     }
   },
   "scripts": {

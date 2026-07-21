@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { requireEgovEnvironment } from "../src/env.js";
+import { requireEgovEnvironment } from "../src/core/env.js";
 
 describe("requireEgovEnvironment", () => {
   test("returns a trimmed service-prefixed value", () => {

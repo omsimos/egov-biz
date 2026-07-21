@@ -1,7 +1,7 @@
-import { defineEgovCatalog } from "../catalog.js";
-import { createEgovTransport } from "../client.js";
-import { requireEgovEnvironment, type EgovEnvironment } from "../env.js";
-import type { EgovCallOptions, EgovTransport, EgovTransportOptions } from "../types.js";
+import { defineEgovCatalog } from "../core/catalog.js";
+import { createEgovTransport } from "../core/client.js";
+import { requireEgovEnvironment, type EgovEnvironment } from "../core/env.js";
+import type { EgovCallOptions, EgovTransport, EgovTransportOptions } from "../core/types.js";
 
 export const EGOV_SSO_SOURCE_URL =
   "https://platforms.e.gov.ph/dashboard/api-catalogs/egov-sso" as const;

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import { createEgovTransport } from "../src/client.js";
-import { EgovApiError } from "../src/errors.js";
+import { createEgovTransport } from "../src/core/client.js";
+import { EgovApiError } from "../src/core/errors.js";
 
 describe("createEgovTransport", () => {
   test("builds a JSON request with merged headers and query values", async () => {

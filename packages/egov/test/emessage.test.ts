@@ -4,7 +4,7 @@ import {
   createEMessageClientFromEnv,
   eMessageApi,
   emessageCatalog,
-} from "../src/services/emessage.js";
+} from "../src/eMessage/index.js";
 
 describe("eMessage", () => {
   test("uses EMESSAGE_ACCESS_TOKEN for the documented SMS request", async () => {
