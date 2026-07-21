@@ -7,6 +7,10 @@ import {
   Check,
   CheckCircle,
   CircleNotch,
+  Buildings,
+  Certificate,
+  FileText,
+  FlagCheckered,
   GlobeHemisphereWest,
   ListChecks,
   MagnifyingGlass,
@@ -15,16 +19,24 @@ import {
   ShieldCheck,
   Sparkle,
   StopCircle,
+  Plus,
+  CaretDown,
+  Trash,
   X,
 } from "@phosphor-icons/react";
 import { DefaultChatTransport, getToolName, isToolUIPart } from "ai";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
-import { ProfileAvatar } from "@/components/profile-avatar";
-import type {
-  BusinessChatMessage,
-  DtiBusinessNameForm,
-  RegistrationPlan,
+import {
+  uniqueMessagesById,
+  type BarangayClearance,
+  type BusinessChatMessage,
+  type BusinessConversation,
+  type ConversationSummary,
+  type DtiBusinessNameForm,
+  type EbplsBusinessPermitReceipt,
+  type PaymentServiceType,
+  type RegistrationPlan,
 } from "@/lib/business-chat";
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import type { IntakeQuestion } from "@/lib/questions";
@@ -32,15 +44,238 @@ import type { IntakeQuestion } from "@/lib/questions";
 type AskUserPart = Extract<BusinessChatMessage["parts"][number], { type: "tool-askUser" }>;
 type ReadyAskUserPart = AskUserPart & {
   state: "input-available";
-  input: { question: IntakeQuestion };
+  input: { questions?: IntakeQuestion[]; question?: IntakeQuestion };
 };
-type PendingQuestion = { part: ReadyAskUserPart; question: IntakeQuestion };
+type PendingQuestion = { part: ReadyAskUserPart; questions: IntakeQuestion[] };
+type PaymentRequest = {
+  serviceType: PaymentServiceType;
+  serviceLabel: string;
+  proposedName: string;
+  ownerName: string;
+  feeLabel: string;
+  serviceReference?: string;
+  territorialScope?: DtiBusinessNameForm["territorialScope"];
+};
 
 function textOf(message: BusinessChatMessage) {
   return message.parts
     .filter((part) => part.type === "text")
     .map((part) => part.text)
     .join("");
+}
+
+function DetailRows({ rows }: { rows: [string, string][] }) {
+  return (
+    <div className="local-permit-fields">
+      {rows.map(([label, value]) => (
+        <div key={label}>
+          <span>{label}</span>
+          <strong>{value}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BarangayClearanceCard({
+  clearance,
+  paid,
+  onPay,
+}: {
+  clearance: BarangayClearance;
+  paid: boolean;
+  onPay: (request: PaymentRequest) => void;
+}) {
+  const approved = clearance.status === "Approved";
+  return (
+    <article className={`local-permit-card ${approved ? "approved" : "payment-due"}`}>
+      <header>
+        <span>
+          <Certificate weight="duotone" />
+        </span>
+        <div>
+          <small>ELECTRONIC BARANGAY CLEARANCE</small>
+          <strong>
+            {clearance.barangay}, {clearance.city}
+          </strong>
+        </div>
+        <i>
+          {approved ? (
+            <>
+              <CheckCircle weight="fill" /> Approved
+            </>
+          ) : (
+            "Payment required"
+          )}
+        </i>
+      </header>
+      <DetailRows
+        rows={[
+          ["Reference", clearance.referenceNumber],
+          ["Business", clearance.businessName],
+          ["Owner", clearance.ownerName],
+          ["Activity", clearance.businessActivity],
+          ["Business address", clearance.businessAddress],
+          [
+            approved ? "Valid until" : "Assessed fee",
+            approved && clearance.validUntil
+              ? new Date(clearance.validUntil).toLocaleDateString("en-PH", {
+                  year: "numeric",
+                  month: "short",
+                  day: "numeric",
+                })
+              : clearance.feeLabel,
+          ],
+        ]}
+      />
+      <section>
+        <small>DOCUMENTS SUBMITTED</small>
+        <ul>
+          {clearance.supportingDocuments.map((document) => (
+            <li key={document}>
+              <FileText /> {document}
+            </li>
+          ))}
+        </ul>
+      </section>
+      <section className="local-permit-use">
+        <small>USED FOR</small>
+        <ul>
+          {clearance.usedFor.map((use) => (
+            <li key={use}>
+              <Check /> {use}
+            </li>
+          ))}
+        </ul>
+      </section>
+      {!approved && (
+        <footer className="local-permit-payment">
+          <div>
+            <small>BARANGAY CLEARANCE FEE</small>
+            <strong>{clearance.feeLabel}</strong>
+          </div>
+          <button
+            type="button"
+            disabled={paid}
+            onClick={() =>
+              onPay({
+                serviceType: "barangay-clearance",
+                serviceLabel: "Barangay Business Clearance",
+                proposedName: clearance.businessName,
+                ownerName: clearance.ownerName,
+                feeLabel: clearance.feeLabel,
+                serviceReference: clearance.referenceNumber,
+              })
+            }
+          >
+            {paid ? "Paid" : "Pay with eGovPay"} <ArrowRight weight="bold" />
+          </button>
+        </footer>
+      )}
+    </article>
+  );
+}
+
+function EbplsPermitCard({
+  receipt,
+  paid,
+  onPay,
+}: {
+  receipt: EbplsBusinessPermitReceipt;
+  paid: boolean;
+  onPay: (request: PaymentRequest) => void;
+}) {
+  const issued = receipt.status === "Permit issued";
+  return (
+    <article className={`local-permit-card ebpls ${issued ? "approved" : "payment-due"}`}>
+      <header>
+        <span>
+          <Buildings weight="duotone" />
+        </span>
+        <div>
+          <small>EBPLS</small>
+          <strong>Mayor’s / business permit</strong>
+        </div>
+        <i>
+          {issued ? (
+            <>
+              <CheckCircle weight="fill" /> Issued
+            </>
+          ) : (
+            "Payment required"
+          )}
+        </i>
+      </header>
+      <p className="ebpls-expansion">
+        <strong>Electronic Business Permits and Licensing System</strong>
+        <span>
+          {issued
+            ? "The LGU permit has been issued electronically."
+            : "The LGU assessment is complete and ready for payment."}
+        </span>
+      </p>
+      <DetailRows
+        rows={[
+          ["EBPLS reference", receipt.referenceNumber],
+          ["Application", receipt.permitType],
+          ["Business", receipt.businessName],
+          ["Location", `${receipt.barangay}, ${receipt.city}`],
+          ["Barangay clearance", receipt.barangayClearanceReference],
+          [
+            issued ? "Valid until" : "Assessed fee",
+            issued && receipt.validUntil
+              ? new Date(receipt.validUntil).toLocaleDateString("en-PH", {
+                  year: "numeric",
+                  month: "short",
+                  day: "numeric",
+                })
+              : receipt.feeLabel,
+          ],
+        ]}
+      />
+      <section>
+        <small>ATTACHMENTS SENT</small>
+        <ul>
+          {receipt.attachments.map((attachment) => (
+            <li key={attachment}>
+              <FileText /> {attachment}
+            </li>
+          ))}
+        </ul>
+      </section>
+      {!issued && (
+        <footer className="local-permit-payment">
+          <div>
+            <small>ASSESSED LGU FEES</small>
+            <strong>{receipt.feeLabel}</strong>
+          </div>
+          <button
+            type="button"
+            disabled={paid}
+            onClick={() =>
+              onPay({
+                serviceType: "ebpls-business-permit",
+                serviceLabel: "EBPLS Mayor’s / Business Permit",
+                proposedName: receipt.businessName,
+                ownerName: receipt.ownerName,
+                feeLabel: receipt.feeLabel,
+                serviceReference: receipt.referenceNumber,
+              })
+            }
+          >
+            {paid ? "Paid" : "Pay with eGovPay"} <ArrowRight weight="bold" />
+          </button>
+        </footer>
+      )}
+      <footer>
+        <CircleNotch />
+        <span>
+          <small>NEXT</small>
+          <strong>{receipt.nextAction}</strong>
+        </span>
+      </footer>
+    </article>
+  );
 }
 
 function Markdown({ children, streaming = false }: { children: string; streaming?: boolean }) {
@@ -51,43 +286,94 @@ function Markdown({ children, streaming = false }: { children: string; streaming
   );
 }
 
-function latestPlanToolCallId(messages: BusinessChatMessage[]) {
+function latestRegistrationPlan(messages: BusinessChatMessage[]) {
   for (const message of [...messages].reverse())
     for (const part of [...message.parts].reverse()) {
-      if (
-        part.type === "tool-updatePlan" &&
-        (part.state === "output-available" || part.state === "input-available")
-      )
-        return part.toolCallId;
+      if (part.type !== "tool-updatePlan") continue;
+      if (part.state === "output-available") return { plan: part.output.plan, active: false };
+      if (part.state === "input-available")
+        return { plan: { title: part.input.title, steps: part.input.steps }, active: true };
     }
   return null;
 }
 
-function PlanCard({ plan, active }: { plan: RegistrationPlan; active: boolean }) {
+function PlanDock({ plan, active }: { plan: RegistrationPlan; active: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const completed = plan.steps.filter((step) => step.status === "completed").length;
+  const allCompleted = plan.steps.length > 0 && completed === plan.steps.length;
+  const current =
+    plan.steps.find((step) => step.status === "in_progress") ??
+    plan.steps.find((step) => step.status === "pending") ??
+    plan.steps.at(-1);
+  const currentLabel = allCompleted
+    ? "Registration plan complete"
+    : (current?.label ?? "Preparing your registration plan");
+
   return (
-    <article className={`agent-plan-card ${active ? "active" : ""}`}>
-      <header>
-        <ListChecks weight="duotone" />
-        <div>
-          <small>REGISTRATION PLAN</small>
-          <strong>{plan.title}</strong>
+    <section
+      className={`registration-plan-dock ${expanded ? "expanded" : "collapsed"} ${active ? "active" : ""}`}
+      aria-label="Registration plan"
+    >
+      <button
+        className="registration-plan-toggle"
+        type="button"
+        aria-expanded={expanded}
+        aria-controls="registration-plan-items"
+        onClick={() => setExpanded((open) => !open)}
+      >
+        <span className={`registration-plan-status ${current?.status ?? "pending"}`}>
+          {allCompleted || current?.status === "completed" ? (
+            <Check weight="bold" />
+          ) : current?.status === "in_progress" ? (
+            <ArrowRight weight="bold" />
+          ) : (
+            <ListChecks weight="duotone" />
+          )}
+        </span>
+        <span className="registration-plan-summary">
+          <small>{expanded ? "REGISTRATION PLAN" : "CURRENT TASK"}</small>
+          <strong>{expanded ? plan.title : currentLabel}</strong>
+        </span>
+        <span
+          className="registration-plan-count"
+          aria-label={`${completed} of ${plan.steps.length} tasks completed`}
+        >
+          {completed}/{plan.steps.length}
+        </span>
+        <CaretDown className="registration-plan-caret" weight="bold" />
+      </button>
+      <div
+        className="registration-plan-reveal"
+        id="registration-plan-items"
+        aria-hidden={!expanded}
+      >
+        <div className="registration-plan-items">
+          <ol>
+            {plan.steps.map((step, index) => {
+              const finishLine = index === plan.steps.length - 1;
+              return (
+                <li
+                  className={`${step.status}${finishLine ? " finish-line" : ""}`}
+                  key={step.id}
+                  aria-current={step.status === "in_progress" ? "step" : undefined}
+                >
+                  <i aria-hidden="true">
+                    {finishLine ? (
+                      <FlagCheckered weight={step.status === "completed" ? "fill" : "duotone"} />
+                    ) : step.status === "completed" ? (
+                      <Check weight="bold" />
+                    ) : step.status === "in_progress" ? (
+                      <ArrowRight weight="bold" />
+                    ) : null}
+                  </i>
+                  <span>{step.label}</span>
+                </li>
+              );
+            })}
+          </ol>
         </div>
-      </header>
-      <ol>
-        {plan.steps.map((step) => (
-          <li className={step.status} key={step.id}>
-            <i>
-              {step.status === "completed" ? (
-                <Check weight="bold" />
-              ) : step.status === "in_progress" ? (
-                <CircleNotch className="spin" />
-              ) : null}
-            </i>
-            <span>{step.label}</span>
-          </li>
-        ))}
-      </ol>
-    </article>
+      </div>
+    </section>
   );
 }
 
@@ -98,82 +384,187 @@ function QuestionComposer({
 }: {
   pending: PendingQuestion;
   disabled: boolean;
-  onAnswer: (value: string | string[], labels: string[]) => void;
+  onAnswer: (answers: { questionId: string; value: string | string[]; labels: string[] }[]) => void;
 }) {
-  const { question } = pending;
-  const [value, setValue] = useState<string | string[]>(question.type === "multi" ? [] : "");
-  const selected = Array.isArray(value) ? value : value ? [value] : [];
-  const canSend = Array.isArray(value) ? value.length > 0 : Boolean(value.trim());
+  const [values, setValues] = useState<Record<string, string | string[]>>(() =>
+    Object.fromEntries(
+      pending.questions.map((question) => [question.id, question.type === "multi" ? [] : ""]),
+    ),
+  );
+  const [custom, setCustom] = useState<Record<string, string>>({});
+  const [questionIndex, setQuestionIndex] = useState(0);
+  const question = pending.questions[questionIndex];
+  const complete = (question: IntakeQuestion) => {
+    const value = values[question.id];
+    const text =
+      question.type === "single" && value === "__other__"
+        ? (custom[question.id]?.trim() ?? "")
+        : Array.isArray(value)
+          ? value.join(" ")
+          : (value?.trim() ?? "");
+    if (!text) return false;
+    if (question.id === "proposed-business-name") return text.length >= 3;
+    if (question.id !== "business-address") return true;
+    const hasAddressMarker =
+      /\b(?:\d{1,5}|unit|room|floor|block|lot|house|street|st\.?|road|rd\.?|avenue|ave\.?|drive|highway|building|bldg\.?|plaza|village|subdivision|purok|sitio|poblacion|barangay|brgy\.?)\b/i.test(
+        text,
+      );
+    return (
+      text.length >= 10 && hasAddressMarker && (text.includes(",") || text.split(/\s+/).length >= 4)
+    );
+  };
+
+  const canContinue = complete(question);
+  const lastQuestion = questionIndex === pending.questions.length - 1;
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (!canSend || disabled) return;
-    const values = Array.isArray(value) ? value : [value];
+    if (!canContinue || disabled) return;
+    if (!lastQuestion) {
+      setQuestionIndex((current) => current + 1);
+      return;
+    }
     onAnswer(
-      value,
-      values.map((item) => question.options?.find((option) => option.id === item)?.label ?? item),
+      pending.questions.map((question) => {
+        const selected = values[question.id];
+        const value = selected === "__other__" ? custom[question.id].trim() : selected;
+        const items = Array.isArray(value) ? value : [value];
+        return {
+          questionId: question.id,
+          value,
+          labels: items.map(
+            (item) => question.options?.find((option) => option.id === item)?.label ?? item,
+          ),
+        };
+      }),
     );
   };
 
   return (
     <form className="hitl-composer" onSubmit={submit}>
-      <div className="hitl-copy">
+      <div className="hitl-batch-intro">
+        <Sparkle weight="fill" />
         <span>
-          <Sparkle weight="fill" />
+          <strong>Complete this checkpoint</strong>
+          <small>
+            Question {questionIndex + 1} of {pending.questions.length}
+          </small>
         </span>
-        <div>
-          <strong>{question.title}</strong>
-          <small>{question.helpText}</small>
-        </div>
       </div>
-      {question.type === "single" || question.type === "multi" ? (
-        <fieldset className="hitl-options">
-          <legend>{question.type === "multi" ? "Choose all that apply" : "Choose one"}</legend>
-          {question.options?.map((option, index) => {
-            const checked = selected.includes(option.id);
-            return (
-              <label key={option.id} className={checked ? "selected" : ""}>
+      {(() => {
+        const value = values[question.id];
+        const selected = Array.isArray(value) ? value : value ? [value] : [];
+        const enteredText = typeof value === "string" ? value.trim() : "";
+        const options =
+          question.type === "single"
+            ? [
+                ...(question.options ?? []),
+                {
+                  id: "__other__",
+                  label: "Other — type your answer",
+                  description: "Enter a different answer",
+                },
+              ]
+            : (question.options ?? []);
+        return (
+          <section className="hitl-question" key={question.id}>
+            <div className="hitl-copy">
+              <b>{questionIndex + 1}</b>
+              <div>
+                <strong>{question.title}</strong>
+                <small>{question.helpText}</small>
+              </div>
+            </div>
+            {question.type === "single" || question.type === "multi" ? (
+              <>
+                <fieldset className="hitl-options">
+                  <legend>
+                    {question.type === "multi" ? "Choose all that apply" : "Choose one"}
+                  </legend>
+                  {options.map((option, index) => {
+                    const checked = selected.includes(option.id);
+                    return (
+                      <label key={option.id} className={checked ? "selected" : ""}>
+                        <input
+                          type={question.type === "multi" ? "checkbox" : "radio"}
+                          name={question.id}
+                          value={option.id}
+                          checked={checked}
+                          onChange={() =>
+                            setValues((current) => ({
+                              ...current,
+                              [question.id]:
+                                question.type === "multi"
+                                  ? checked
+                                    ? selected.filter((id) => id !== option.id)
+                                    : [...selected, option.id]
+                                  : option.id,
+                            }))
+                          }
+                        />
+                        <i>{checked && <Check weight="bold" />}</i>
+                        <span>
+                          <b>{String.fromCharCode(65 + index)}</b>
+                          <strong>{option.label}</strong>
+                          {option.description && <small>{option.description}</small>}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </fieldset>
+                {question.type === "single" && value === "__other__" && (
+                  <label className="hitl-input custom">
+                    <span>Your answer</span>
+                    <input
+                      value={custom[question.id] ?? ""}
+                      onChange={(event) =>
+                        setCustom((current) => ({ ...current, [question.id]: event.target.value }))
+                      }
+                      placeholder="Type your answer"
+                      autoFocus
+                    />
+                  </label>
+                )}
+              </>
+            ) : (
+              <label className="hitl-input">
+                <span>Your answer</span>
                 <input
-                  type={question.type === "multi" ? "checkbox" : "radio"}
-                  name={question.id}
-                  value={option.id}
-                  checked={checked}
-                  onChange={() =>
-                    setValue(
-                      question.type === "multi"
-                        ? checked
-                          ? selected.filter((id) => id !== option.id)
-                          : [...selected, option.id]
-                        : option.id,
-                    )
+                  type={question.type === "number" ? "number" : "text"}
+                  min={question.minimum}
+                  max={question.maximum}
+                  placeholder={question.placeholder ?? "Type your answer"}
+                  value={typeof value === "string" ? value : ""}
+                  onChange={(event) =>
+                    setValues((current) => ({ ...current, [question.id]: event.target.value }))
                   }
+                  autoFocus
                 />
-                <i>{checked && <Check weight="bold" />}</i>
-                <span>
-                  <b>{String.fromCharCode(65 + index)}</b>
-                  <strong>{option.label}</strong>
-                  {option.description && <small>{option.description}</small>}
-                </span>
+                {enteredText && !complete(question) && (
+                  <small role="alert">
+                    {question.id === "business-address"
+                      ? "Enter the full street, building, or unit and barangay."
+                      : "Enter the complete proposed business name."}
+                  </small>
+                )}
               </label>
-            );
-          })}
-        </fieldset>
-      ) : (
-        <label className="hitl-input">
-          <span>Your answer</span>
-          <input
-            type={question.type === "number" ? "number" : "text"}
-            min={question.minimum}
-            max={question.maximum}
-            placeholder={question.placeholder ?? "Type your answer"}
-            value={typeof value === "string" ? value : ""}
-            onChange={(event) => setValue(event.target.value)}
-            autoFocus
-          />
-        </label>
-      )}
-      <button className="chat-submit-answer" type="submit" disabled={!canSend || disabled}>
-        Continue <ArrowRight weight="bold" />
-      </button>
+            )}
+          </section>
+        );
+      })()}
+      <div className="hitl-navigation">
+        {questionIndex > 0 && (
+          <button
+            type="button"
+            onClick={() => setQuestionIndex((current) => current - 1)}
+            disabled={disabled}
+          >
+            <ArrowLeft /> Back
+          </button>
+        )}
+        <button className="chat-submit-answer" type="submit" disabled={!canContinue || disabled}>
+          {lastQuestion ? "Complete details" : "Next question"} <ArrowRight weight="bold" />
+        </button>
+      </div>
     </form>
   );
 }
@@ -208,10 +599,12 @@ function SearchTool({
 function DtiFormCard({
   form,
   note,
+  paid,
   onSubmitPay,
 }: {
   form: DtiBusinessNameForm;
   note?: string;
+  paid: boolean;
   onSubmitPay: () => void;
 }) {
   const rows = [
@@ -224,17 +617,16 @@ function DtiFormCard({
       `${form.businessAddress}${form.city && !form.businessAddress.includes(form.city) ? `, ${form.city}` : ""}`,
     ],
   ];
+  if (form.missingFields.length || rows.some(([, value]) => !value)) return null;
   return (
-    <article className="dti-form-card">
+    <article className={`dti-form-card ${paid ? "paid" : ""}`}>
       <header>
         <span className="dti-seal">DTI</span>
         <div>
           <small>BUSINESS NAME REGISTRATION</small>
           <strong>Application draft</strong>
         </div>
-        <i className={form.missingFields.length ? "draft" : "ready"}>
-          {form.missingFields.length ? "Needs input" : "Ready"}
-        </i>
+        <i className={paid ? "paid" : "ready"}>{paid ? "Paid" : "Ready"}</i>
       </header>
       {note && (
         <p className="dti-note">
@@ -243,7 +635,7 @@ function DtiFormCard({
       )}
       <div className="dti-fields">
         {rows.map(([label, value]) => (
-          <div key={label} className={!value || value === "Needs your answer" ? "missing" : ""}>
+          <div key={label}>
             <span>{label}</span>
             <strong>{value}</strong>
           </div>
@@ -252,7 +644,9 @@ function DtiFormCard({
       <div className="dti-help">
         <Sparkle weight="fill" />
         <span>
-          To change anything, type it below. For example: “Use the name Reyes Coffee Club.”
+          {paid
+            ? "Payment recorded. This application checkpoint is complete."
+            : "To change anything, type it below. For example: “Use the name Reyes Coffee Club.”"}
         </span>
       </div>
       <footer>
@@ -260,8 +654,16 @@ function DtiFormCard({
           <small>PAYMENT</small>
           <strong>{form.feeLabel}</strong>
         </div>
-        <button onClick={onSubmitPay} disabled={form.missingFields.length > 0}>
-          Submit and pay <ArrowRight weight="bold" />
+        <button onClick={onSubmitPay} disabled={paid}>
+          {paid ? (
+            <>
+              <CheckCircle weight="fill" /> Paid
+            </>
+          ) : (
+            <>
+              Submit and pay <ArrowRight weight="bold" />
+            </>
+          )}
         </button>
       </footer>
     </article>
@@ -270,48 +672,35 @@ function DtiFormCard({
 
 function ToolPart({
   part,
-  latestPlanId,
+  paidServices,
   onSubmitPay,
 }: {
   part: BusinessChatMessage["parts"][number];
-  latestPlanId: string | null;
-  onSubmitPay: (form: DtiBusinessNameForm) => void;
+  paidServices: Set<PaymentServiceType>;
+  onSubmitPay: (request: PaymentRequest) => void;
 }) {
   if (!isToolUIPart(part)) return null;
   const name = getToolName(part);
   if (name === "askUser") return null;
-  if (part.type === "tool-user_info")
-    return (
-      <div className={`chat-tool-row ${part.state === "output-available" ? "complete" : "active"}`}>
-        {part.state === "output-available" ? (
-          <ShieldCheck weight="fill" />
-        ) : (
-          <CircleNotch className="spin" />
-        )}
-        <div>
-          <small>
-            {part.state === "output-available" ? "Verified profile ready" : "Loading eGov profile"}
-          </small>
-          <span>Private identity data stays inside this authenticated session</span>
-        </div>
-        <ShieldCheck />
-      </div>
-    );
   if (part.type === "tool-webSearch") return <SearchTool part={part} />;
-  if (part.type === "tool-updatePlan") {
-    if (part.toolCallId !== latestPlanId) return null;
-    if (part.state === "output-available")
-      return <PlanCard plan={part.output.plan} active={false} />;
-    if (part.state === "input-available")
-      return <PlanCard plan={{ title: part.input.title, steps: part.input.steps }} active />;
-  }
+  if (part.type === "tool-updatePlan") return null;
   if (part.type === "tool-editDtiBusinessNameForm") {
     if (part.state === "output-available")
       return (
         <DtiFormCard
           form={part.output.form}
           note={part.input.note}
-          onSubmitPay={() => onSubmitPay(part.output.form)}
+          paid={paidServices.has("dti-business-name")}
+          onSubmitPay={() =>
+            onSubmitPay({
+              serviceType: "dti-business-name",
+              serviceLabel: "DTI Business Name Registration",
+              proposedName: part.output.form.proposedName,
+              ownerName: part.output.form.ownerName,
+              feeLabel: part.output.form.feeLabel,
+              territorialScope: part.output.form.territorialScope,
+            })
+          }
         />
       );
     return (
@@ -322,6 +711,53 @@ function ToolPart({
           <span className="chat-shimmer">Preparing your DTI form</span>
         </div>
         <PencilSimple />
+      </div>
+    );
+  }
+  if (part.type === "tool-submitBarangayClearance") {
+    if (part.state === "output-available")
+      return (
+        <BarangayClearanceCard
+          clearance={part.output.clearance}
+          paid={paidServices.has("barangay-clearance")}
+          onPay={onSubmitPay}
+        />
+      );
+    const barangay = "input" in part && part.input?.application?.barangay;
+    return (
+      <div className="local-permit-processing" role="status">
+        <span>
+          <CircleNotch className="spin" />
+        </span>
+        <div>
+          <small>Electronic barangay clearance</small>
+          <strong>Submitting{barangay ? ` to ${barangay}` : ""}…</strong>
+          <em>Checking registration and business-address documents</em>
+        </div>
+      </div>
+    );
+  }
+  if (part.type === "tool-submitEbplsBusinessPermit") {
+    if (part.state === "output-available")
+      return (
+        <EbplsPermitCard
+          receipt={part.output.receipt}
+          paid={paidServices.has("ebpls-business-permit")}
+          onPay={onSubmitPay}
+        />
+      );
+    return (
+      <div className="local-permit-processing ebpls" role="status">
+        <span>
+          <CircleNotch className="spin" />
+        </span>
+        <div>
+          <small>EBPLS · Electronic Business Permits and Licensing System</small>
+          <strong>LGU assessment in progress…</strong>
+          <em>
+            Validating the application, approved barangay clearance, and submitted attachments
+          </em>
+        </div>
       </div>
     );
   }
@@ -336,7 +772,15 @@ function ToolPart({
   );
 }
 
-function PaymentDialog({ form, onClose }: { form: DtiBusinessNameForm; onClose: () => void }) {
+function PaymentDialog({
+  payment,
+  conversationId,
+  onClose,
+}: {
+  payment: PaymentRequest;
+  conversationId: string;
+  onClose: () => void;
+}) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const [opening, setOpening] = useState(false);
   const [paymentError, setPaymentError] = useState("");
@@ -356,11 +800,18 @@ function PaymentDialog({ form, onClose }: { form: DtiBusinessNameForm; onClose: 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          proposedName: form.proposedName,
-          territorialScope: form.territorialScope,
+          conversationId,
+          serviceType: payment.serviceType,
+          proposedName: payment.proposedName,
+          ...(payment.territorialScope ? { territorialScope: payment.territorialScope } : {}),
+          ...(payment.serviceReference ? { serviceReference: payment.serviceReference } : {}),
         }),
       });
-      const result = (await response.json()) as { checkoutUrl?: string; error?: string };
+      const result = (await response.json()) as {
+        checkoutUrl?: string;
+        error?: string;
+        payment?: { status?: string };
+      };
       if (!response.ok || !result.checkoutUrl)
         throw new Error(result.error || "eGovPay could not open checkout.");
       window.location.assign(result.checkoutUrl);
@@ -369,6 +820,7 @@ function PaymentDialog({ form, onClose }: { form: DtiBusinessNameForm; onClose: 
       setOpening(false);
     }
   };
+
   return (
     <div className="chat-dialog-layer">
       <button className="chat-dialog-scrim" onClick={onClose} aria-label="Close payment" />
@@ -389,14 +841,17 @@ function PaymentDialog({ form, onClose }: { form: DtiBusinessNameForm; onClose: 
           </span>
           <small>eGovPay</small>
           <h2 id="payment-title">Continue to secure payment</h2>
-          <p>You’ll choose an available payment method on eGovPay.</p>
+          <p>
+            You’ll continue to eGovPay in this tab. This demo will mark the fee paid while webhook
+            support is being completed.
+          </p>
         </div>
         <div className="payment-summary">
           <span>
-            <small>DTI application</small>
-            <strong>{form.proposedName}</strong>
+            <small>{payment.serviceLabel}</small>
+            <strong>{payment.proposedName}</strong>
           </span>
-          <strong>{form.feeLabel}</strong>
+          <strong>{payment.feeLabel}</strong>
         </div>
         {paymentError && (
           <p className="payment-inline-error" role="alert">
@@ -404,46 +859,90 @@ function PaymentDialog({ form, onClose }: { form: DtiBusinessNameForm; onClose: 
           </p>
         )}
         <button className="payment-confirm" onClick={openCheckout} disabled={opening}>
-          <ShieldCheck weight="fill" /> {opening ? "Opening eGovPay…" : "Continue to eGovPay"}
+          <ShieldCheck weight="fill" /> {opening ? "Preparing checkout…" : "Continue to eGovPay"}
         </button>
-        <p className="payment-disclaimer">Payment is completed on the secure eGovPay page.</p>
+        <p className="payment-disclaimer">
+          Use “Back to merchant” after checkout to return to this saved chat.
+        </p>
       </section>
     </div>
   );
 }
 
 export function BusinessChatScreen({
-  initialPrompt,
-  profile,
+  conversation,
+  conversations,
+  paymentStatus,
+  paymentService,
   onBack,
+  onNewConversation,
+  onSelectConversation,
+  onDeleteConversation,
 }: {
-  initialPrompt: string;
+  conversation: BusinessConversation;
+  conversations: ConversationSummary[];
   profile: CitizenProfile | null;
+  paymentStatus?: string | null;
+  paymentService?: PaymentServiceType | null;
   onBack: () => void;
+  onNewConversation: () => void;
+  onSelectConversation: (id: string) => void;
+  onDeleteConversation: (conversation: ConversationSummary) => void;
 }) {
   const [input, setInput] = useState("");
-  const [paymentForm, setPaymentForm] = useState<DtiBusinessNameForm | null>(null);
+  const [paymentRequest, setPaymentRequest] = useState<PaymentRequest | null>(null);
+  const [localPaymentStatus, setLocalPaymentStatus] = useState(
+    paymentStatus ?? conversation.paymentStatus ?? null,
+  );
+  const [localPaymentStatuses, setLocalPaymentStatuses] = useState(
+    conversation.paymentStatuses ?? {},
+  );
+  const [continuationError, setContinuationError] = useState("");
   const [answeringToolCallId, setAnsweringToolCallId] = useState<string | null>(null);
   const answeredToolCalls = useRef(new Set<string>());
+  const continuedPayment = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const seeded = useRef(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const initialPrompt = conversation.initialPrompt;
   const transport = useMemo(
     () => new DefaultChatTransport({ api: "/api/agent/chat", body: { initialPrompt } }),
     [initialPrompt],
   );
-  const { messages, sendMessage, status, stop, error, addToolOutput } =
+  const initialMessages = useMemo(
+    () => uniqueMessagesById(conversation.messages),
+    [conversation.messages],
+  );
+  const { messages, setMessages, sendMessage, resumeStream, status, stop, error, addToolOutput } =
     useChat<BusinessChatMessage>({
-      id: `business-${initialPrompt.slice(0, 32)}`,
+      id: conversation.id,
+      messages: initialMessages,
       transport,
+      resume: false,
     });
+  const visibleMessages = useMemo(() => uniqueMessagesById(messages), [messages]);
   const busy = status === "submitted" || status === "streaming";
-  const latestPlanId = latestPlanToolCallId(messages);
+  const paid = /paid|success|complete/i.test(localPaymentStatus ?? "");
+  const paidServices = useMemo(
+    () =>
+      new Set(
+        (Object.entries(localPaymentStatuses) as [PaymentServiceType, string][])
+          .filter(([, value]) => /paid|success|complete/i.test(value))
+          .map(([service]) => service),
+      ),
+    [localPaymentStatuses],
+  );
+  const latestPlan = latestRegistrationPlan(visibleMessages);
   const pending: PendingQuestion | null = (() => {
-    for (const message of [...messages].reverse()) {
+    for (const message of [...visibleMessages].reverse()) {
       for (const part of [...message.parts].reverse()) {
         if (part.type === "tool-askUser" && part.state === "input-available") {
           const current = part as ReadyAskUserPart;
-          return { part: current, question: current.input.question };
+          return {
+            part: current,
+            questions:
+              current.input.questions ?? (current.input.question ? [current.input.question] : []),
+          };
         }
       }
     }
@@ -451,14 +950,29 @@ export function BusinessChatScreen({
   })();
 
   useEffect(() => {
-    if (!seeded.current) {
-      seeded.current = true;
+    // Reconnect and initial seeding are mutually exclusive. A persisted active
+    // stream already contains the response to the user's latest message.
+    if (seeded.current) return;
+    seeded.current = true;
+    if (conversation.activeStreamId) {
+      void resumeStream().finally(() => setMessages((current) => uniqueMessagesById(current)));
+    } else if (initialMessages.length === 0) {
       void sendMessage({ text: initialPrompt });
     }
-  }, [initialPrompt, sendMessage]);
+  }, [
+    conversation.activeStreamId,
+    initialMessages.length,
+    initialPrompt,
+    resumeStream,
+    sendMessage,
+    setMessages,
+  ]);
+  useEffect(() => {
+    if (messages.length !== visibleMessages.length) setMessages(visibleMessages);
+  }, [messages.length, setMessages, visibleMessages]);
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, pending, status]);
+  }, [visibleMessages, pending, status]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -467,13 +981,15 @@ export function BusinessChatScreen({
     setInput("");
     void sendMessage({ text });
   };
-  const answer = async (value: string | string[], labels: string[]) => {
+  const answer = async (
+    answers: { questionId: string; value: string | string[]; labels: string[] }[],
+  ) => {
     if (!pending || answeredToolCalls.current.has(pending.part.toolCallId)) return;
     const toolCallId = pending.part.toolCallId;
     answeredToolCalls.current.add(toolCallId);
     setAnsweringToolCallId(toolCallId);
     try {
-      await addToolOutput({ tool: "askUser", toolCallId, output: { value, labels } });
+      await addToolOutput({ tool: "askUser", toolCallId, output: { answers } });
       await sendMessage();
     } catch {
       answeredToolCalls.current.delete(toolCallId);
@@ -481,6 +997,33 @@ export function BusinessChatScreen({
       setAnsweringToolCallId(null);
     }
   };
+  const continueAfterPayment = async (serviceType: PaymentServiceType = "dti-business-name") => {
+    if (serviceType === "dti-business-name") setLocalPaymentStatus("paid");
+    setLocalPaymentStatuses((current) => ({ ...current, [serviceType]: "paid" }));
+    setContinuationError("");
+    try {
+      // Add a non-visual event message so useChat always starts a new request.
+      // Calling sendMessage() without a message can be ignored after a completed
+      // assistant turn by some chat-state transitions.
+      await sendMessage(
+        {
+          role: "user",
+          parts: [{ type: "data-paymentCompleted", data: { status: "paid", serviceType } }],
+        },
+        { body: { event: "payment-completed", paymentService: serviceType } },
+      );
+    } catch {
+      setContinuationError("Payment is saved, but I couldn’t start the next step automatically.");
+    }
+  };
+
+  useEffect(() => {
+    if (!paymentService || !/paid|success|complete/i.test(paymentStatus ?? "")) return;
+    const continuationKey = `${conversation.id}:${paymentService}`;
+    if (continuedPayment.current === continuationKey) return;
+    continuedPayment.current = continuationKey;
+    void continueAfterPayment(paymentService);
+  }, [conversation.id, paymentService, paymentStatus]);
 
   return (
     <div className="screen agent-chat-screen">
@@ -496,34 +1039,78 @@ export function BusinessChatScreen({
           <Sparkle weight="fill" />
           <i />
         </div>
-        <div>
-          <h1>Business registration</h1>
+        <button className="chat-session-trigger" onClick={() => setHistoryOpen((open) => !open)}>
           <span>
-            <ShieldCheck weight="fill" /> eGovPH service
+            <h1>{conversation.title}</h1>
+            <small>
+              <ShieldCheck weight="fill" /> Saved registration plan
+            </small>
           </span>
-        </div>
-        {profile && <ProfileAvatar profile={profile} />}
+          <CaretDown />
+        </button>
+        <button
+          className="chat-new-session"
+          onClick={onNewConversation}
+          aria-label="Create a new registration plan"
+        >
+          <Plus />
+        </button>
+        {historyOpen && (
+          <div className="chat-session-menu">
+            {conversations.map((item) => (
+              <div
+                className={`chat-session-row ${item.id === conversation.id ? "active" : ""}`}
+                key={item.id}
+              >
+                <button
+                  className="chat-session-open"
+                  onClick={() => {
+                    setHistoryOpen(false);
+                    onSelectConversation(item.id);
+                  }}
+                >
+                  {item.title}
+                </button>
+                <button
+                  className="chat-session-delete"
+                  onClick={() => onDeleteConversation(item)}
+                  aria-label={`Delete ${item.title}`}
+                >
+                  <Trash />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </header>
       <main className="chat-thread" ref={scrollRef} id="app-content">
-        <div className="chat-day">Today</div>
-        {messages.map((message) => {
+        {localPaymentStatus && (
+          <div className={`payment-return ${paid ? "success" : "pending"}`}>
+            <CheckCircle weight="fill" />
+            <span>
+              <strong>{paid ? "Payment confirmed" : "Payment status updated"}</strong>
+              <small>
+                {paid
+                  ? "Your saved workflow is advancing to the next service."
+                  : `Status: ${localPaymentStatus}. You can continue in this saved chat.`}
+              </small>
+            </span>
+          </div>
+        )}
+        <div className="chat-day">Saved automatically</div>
+        {visibleMessages.map((message) => {
           const user = message.role === "user";
           const text = textOf(message);
           const hasVisibleTool = message.parts.some(
             (part) =>
               isToolUIPart(part) &&
               getToolName(part) !== "askUser" &&
-              (part.type !== "tool-updatePlan" || part.toolCallId === latestPlanId),
+              part.type !== "tool-updatePlan",
           );
           if (!text && !hasVisibleTool) return null;
-          const streaming = busy && message.id === messages.at(-1)?.id;
+          const streaming = busy && message.id === visibleMessages.at(-1)?.id;
           return (
             <article className={`chat-message ${user ? "user" : "assistant"}`} key={message.id}>
-              {!user && (
-                <span className="message-avatar">
-                  <Sparkle weight="fill" />
-                </span>
-              )}
               <div className="message-content">
                 {text &&
                   (user ? (
@@ -540,8 +1127,8 @@ export function BusinessChatScreen({
                     <ToolPart
                       key={`${message.id}-${index}`}
                       part={part}
-                      latestPlanId={latestPlanId}
-                      onSubmitPay={setPaymentForm}
+                      paidServices={paidServices}
+                      onSubmitPay={setPaymentRequest}
                     />
                   ) : null,
                 )}
@@ -551,15 +1138,26 @@ export function BusinessChatScreen({
         })}
         {busy && (
           <div className="chat-working" role="status" aria-live="polite">
-            <span className="message-avatar">
-              <Sparkle weight="fill" />
-            </span>
-            <div className="chat-working-shimmer">Working on the next step…</div>
+            <div className="chat-working-shimmer">Preparing your next registration step…</div>
           </div>
         )}
-        {error && <div className="chat-error">I couldn’t continue. Please try again.</div>}
+        {(error || continuationError) && (
+          <div className="chat-error">
+            {continuationError || "I couldn’t continue. Please try again."}
+            {paid && (
+              <button
+                type="button"
+                onClick={() => void continueAfterPayment(paymentService ?? "dti-business-name")}
+                disabled={busy}
+              >
+                Continue to next step
+              </button>
+            )}
+          </div>
+        )}
       </main>
       <footer className="chat-composer-shell">
+        {latestPlan && <PlanDock plan={latestPlan.plan} active={latestPlan.active} />}
         {pending ? (
           <QuestionComposer
             key={pending.part.toolCallId}
@@ -584,10 +1182,15 @@ export function BusinessChatScreen({
             />
             <div>
               <span>
-                <ShieldCheck weight="fill" /> You can correct any field here
+                <ShieldCheck weight="fill" /> Saved automatically
               </span>
               {busy ? (
-                <button type="button" onClick={() => void stop()} aria-label="Stop">
+                <button
+                  className="chat-stop"
+                  type="button"
+                  onClick={() => void stop()}
+                  aria-label="Stop"
+                >
                   <StopCircle weight="fill" />
                 </button>
               ) : (
@@ -599,7 +1202,13 @@ export function BusinessChatScreen({
           </form>
         )}
       </footer>
-      {paymentForm && <PaymentDialog form={paymentForm} onClose={() => setPaymentForm(null)} />}
+      {paymentRequest && (
+        <PaymentDialog
+          payment={paymentRequest}
+          conversationId={conversation.id}
+          onClose={() => setPaymentRequest(null)}
+        />
+      )}
     </div>
   );
 }

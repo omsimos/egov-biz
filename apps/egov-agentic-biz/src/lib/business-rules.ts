@@ -86,9 +86,14 @@ export function inferCategory(prompt: string): {
     };
   }
   if (
-    /freelance|consult|designer|developer|writer|accountant|photograph|professional/.test(value)
+    /freelance|consult|designer|developer|writer|accountant|photograph|professional|dentist|dental|doctor|physician|architect|lawyer|clinic/.test(
+      value,
+    )
   ) {
-    return { category: "professional-services", flags: [] };
+    return {
+      category: "professional-services",
+      flags: /clinic|dental|dentist|doctor|physician/.test(value) ? ["physical-premises"] : [],
+    };
   }
   if (/shop|store|sell|retail|product/.test(value)) {
     return { category: "retail", flags: [] };

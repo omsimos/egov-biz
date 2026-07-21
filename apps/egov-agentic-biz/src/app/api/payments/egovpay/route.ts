@@ -1,7 +1,7 @@
 import { eGovPayApi } from "@repo/egov/eGovPay";
 import { z } from "zod";
-import { dtiRegistrationFee } from "@/lib/dti-fees";
 import { readSession } from "@/lib/auth/session";
+import { dtiRegistrationFee } from "@/lib/dti-fees";
 import {
   egovPayBaseUrl,
   hostedCheckoutUrl,
@@ -9,13 +9,55 @@ import {
   paymentUrls,
 } from "@/lib/payment-urls";
 import { classifyPaymentNetworkError, paymentNetworkMessage } from "@/lib/payment-network";
+import { getConversation } from "@/server/conversations";
+import {
+  createPayment,
+  getLatestPaymentForService,
+  isPaidStatus,
+  type PaymentServiceType,
+} from "@/server/payments";
 
 export const dynamic = "force-dynamic";
 
-const requestSchema = z.object({
-  proposedName: z.string().trim().min(1).max(200),
-  territorialScope: z.enum(["Barangay", "City / municipality", "Regional", "National"]),
-});
+const requestSchema = z.discriminatedUnion("serviceType", [
+  z.object({
+    serviceType: z.literal("dti-business-name"),
+    conversationId: z.string().uuid(),
+    proposedName: z.string().trim().min(1).max(200),
+    territorialScope: z.enum(["Barangay", "City / municipality", "Regional", "National"]),
+    serviceReference: z.string().max(200).optional(),
+  }),
+  z.object({
+    serviceType: z.literal("barangay-clearance"),
+    conversationId: z.string().uuid(),
+    proposedName: z.string().trim().min(1).max(200),
+    serviceReference: z.string().trim().min(1).max(200),
+  }),
+  z.object({
+    serviceType: z.literal("ebpls-business-permit"),
+    conversationId: z.string().uuid(),
+    proposedName: z.string().trim().min(1).max(200),
+    serviceReference: z.string().trim().min(1).max(200),
+  }),
+]);
+
+const services: Record<PaymentServiceType, { amount: number; prefix: string; label: string }> = {
+  "dti-business-name": {
+    amount: 0,
+    prefix: "DTI-BNR",
+    label: "DTI Business Name Registration",
+  },
+  "barangay-clearance": {
+    amount: 500,
+    prefix: "BRGY-CLR",
+    label: "Barangay Business Clearance",
+  },
+  "ebpls-business-permit": {
+    amount: 2_500,
+    prefix: "EBPLS-BP",
+    label: "EBPLS Mayor’s / Business Permit",
+  },
+};
 
 export async function POST(request: Request) {
   const session = readSession(request);
@@ -27,32 +69,48 @@ export async function POST(request: Request) {
       { error: "Check the application details and try again." },
       { status: 400 },
     );
+  if (!getConversation(parsed.data.conversationId))
+    return Response.json({ error: "Chat session not found." }, { status: 404 });
 
   if (
     !process.env.EGOVPAY_BASE_URL?.trim() ||
     !process.env.EGOVPAY_API_KEY?.trim() ||
     !process.env.EGOVPAY_SETTLEMENT_TEMPLATE_UUID?.trim()
-  ) {
+  )
     return Response.json({ error: "eGovPay is not available right now." }, { status: 503 });
-  }
 
-  const amount = dtiRegistrationFee(parsed.data.territorialScope);
-  const transactionId = `DTI-BNR-${crypto.randomUUID()}`;
+  const existing = getLatestPaymentForService(parsed.data.conversationId, parsed.data.serviceType);
+  if (existing && isPaidStatus(existing.status))
+    return Response.json(
+      { error: "This fee has already been paid.", payment: existing },
+      { status: 409 },
+    );
+
+  const service = services[parsed.data.serviceType];
+  const amount =
+    parsed.data.serviceType === "dti-business-name"
+      ? dtiRegistrationFee(parsed.data.territorialScope)
+      : service.amount;
+  const transactionId = `${service.prefix}-${crypto.randomUUID()}`;
+
   try {
     const baseUrl = egovPayBaseUrl();
-    const { callbackUrl, redirectUrl } = paymentUrls(request);
+    const { callbackUrl, redirectUrl } = paymentUrls(request, {
+      conversationId: parsed.data.conversationId,
+      transactionId,
+    });
     const payment = await eGovPayApi.fromEnv({ baseUrl }).generatePayment(
       {
         amount,
         callbackUrl,
         currency: "PHP",
         description: {
-          service: "DTI Business Name Registration",
-          scope: parsed.data.territorialScope,
+          service: service.label,
+          ...(parsed.data.serviceType === "dti-business-name"
+            ? { scope: parsed.data.territorialScope }
+            : { reference: parsed.data.serviceReference }),
         },
-        items: [
-          { amount, name: `DTI business name registration — ${parsed.data.territorialScope}` },
-        ],
+        items: [{ amount, name: service.label }],
         name: session.profile.fullName,
         redirectUrl,
         transactionId,
@@ -61,11 +119,27 @@ export async function POST(request: Request) {
       { signal: AbortSignal.timeout(12_000) },
     );
     const checkoutUrl = hostedCheckoutUrl(payment.data.url, baseUrl);
+    const storedPayment = createPayment({
+      conversationId: parsed.data.conversationId,
+      transactionUuid: payment.data.uuid,
+      transactionId,
+      amount,
+      status: "pending",
+      proposedName: parsed.data.proposedName,
+      territorialScope:
+        parsed.data.serviceType === "dti-business-name"
+          ? parsed.data.territorialScope
+          : "Not applicable",
+      ownerName: session.profile.fullName,
+      serviceType: parsed.data.serviceType,
+      serviceReference: parsed.data.serviceReference ?? null,
+    });
     return Response.json({
       checkoutUrl: checkoutUrl.toString(),
       transactionUuid: payment.data.uuid,
       transactionId,
       amount,
+      payment: storedPayment,
     });
   } catch (error) {
     if (error instanceof PaymentUrlConfigurationError) {
