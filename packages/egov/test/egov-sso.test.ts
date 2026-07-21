@@ -3,9 +3,9 @@ import { describe, expect, test } from "bun:test";
 import {
   createEgovSsoClient,
   createEgovSsoClientFromEnv,
+  eGovSsoApi,
   egovSsoCatalog,
-  SsoApi,
-} from "../src/sso/index.js";
+} from "../src/eGovSso/index.js";
 
 describe("eGov SSO", () => {
   test("exchanges the camel-case input for the documented token payload", async () => {
@@ -57,7 +57,7 @@ describe("eGov SSO", () => {
       "generate-access-token",
       "sso-authentication",
     ]);
-    expect(SsoApi.catalog).toBe(egovSsoCatalog);
+    expect(eGovSsoApi.catalog).toBe(egovSsoCatalog);
   });
 
   test("binds token credentials to the eGov SSO environment names", async () => {

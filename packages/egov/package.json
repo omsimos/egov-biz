@@ -12,13 +12,13 @@
       "types": "./dist/core/index.d.ts",
       "import": "./dist/core/index.js"
     },
-    "./sso": {
-      "types": "./dist/sso/index.d.ts",
-      "import": "./dist/sso/index.js"
+    "./eGovSso": {
+      "types": "./dist/eGovSso/index.d.ts",
+      "import": "./dist/eGovSso/index.js"
     },
-    "./sso/types": {
-      "types": "./dist/sso/types.d.ts",
-      "import": "./dist/sso/types.js"
+    "./eGovSso/types": {
+      "types": "./dist/eGovSso/types.d.ts",
+      "import": "./dist/eGovSso/types.js"
     },
     "./eVerify": {
       "types": "./dist/eVerify/index.d.ts",
