@@ -15,6 +15,8 @@ export type DtiBusinessNameForm = {
   missingFields: string[];
 };
 
+export type PaymentServiceType = "dti-business-name" | "barangay-clearance" | "ebpls-business-permit";
+
 export type AskUserAnswer = { questionId: string; value: string | string[]; labels: string[] };
 export type AskUserInput = { questions: IntakeQuestion[]; question?: IntakeQuestion };
 export type AskUserOutput = { answers: AskUserAnswer[]; value?: string | string[]; labels?: string[] };
@@ -22,6 +24,51 @@ export type WebSearchInput = { query: string; numResults?: number };
 export type WebSearchOutput = { results: { title: string; url: string }[] };
 export type EditDtiInput = { form: DtiBusinessNameForm; note: string };
 export type EditDtiOutput = { form: DtiBusinessNameForm };
+export type BarangayClearanceApplication = {
+  businessName: string;
+  ownerName: string;
+  businessActivity: string;
+  businessAddress: string;
+  barangay: string;
+  city: string;
+  registrationDocument: string;
+  supportingDocuments: string[];
+};
+export type BarangayClearance = BarangayClearanceApplication & {
+  status: "Payment required" | "Approved";
+  referenceNumber: string;
+  submittedAt: string;
+  approvedAt: string | null;
+  validUntil: string | null;
+  feeLabel: string;
+  usedFor: string[];
+};
+export type SubmitBarangayClearanceInput = { application: BarangayClearanceApplication };
+export type SubmitBarangayClearanceOutput = { clearance: BarangayClearance };
+export type EbplsBusinessPermitApplication = {
+  system: "EBPLS";
+  permitType: "New business permit";
+  businessName: string;
+  ownerName: string;
+  businessActivity: string;
+  businessAddress: string;
+  barangay: string;
+  city: string;
+  barangayClearanceReference: string;
+  registrationDocument: string;
+  attachments: string[];
+};
+export type EbplsBusinessPermitReceipt = EbplsBusinessPermitApplication & {
+  status: "Payment required" | "Permit issued";
+  referenceNumber: string;
+  submittedAt: string;
+  issuedAt: string | null;
+  validUntil: string | null;
+  feeLabel: string;
+  nextAction: string;
+};
+export type SubmitEbplsBusinessPermitInput = { application: EbplsBusinessPermitApplication };
+export type SubmitEbplsBusinessPermitOutput = { receipt: EbplsBusinessPermitReceipt };
 export type AgentPlanStep = {
   id: string;
   label: string;
@@ -51,15 +98,37 @@ export type BusinessChatTools = {
   askUser: { input: AskUserInput; output: AskUserOutput };
   webSearch: { input: WebSearchInput; output: WebSearchOutput };
   editDtiBusinessNameForm: { input: EditDtiInput; output: EditDtiOutput };
+  submitBarangayClearance: { input: SubmitBarangayClearanceInput; output: SubmitBarangayClearanceOutput };
+  submitEbplsBusinessPermit: { input: SubmitEbplsBusinessPermitInput; output: SubmitEbplsBusinessPermitOutput };
   updatePlan: { input: UpdatePlanInput; output: UpdatePlanOutput };
 };
 
 export type BusinessChatData = {
   plan: { plan: BusinessPlan };
-  paymentCompleted: { status: "paid" };
+  paymentCompleted: { status: "paid"; serviceType: PaymentServiceType };
 };
 
 export type BusinessChatMessage = UIMessage<unknown, BusinessChatData, BusinessChatTools>;
+
+/**
+ * Keep the newest snapshot of a message while retaining its original position.
+ * Streaming reconnects can briefly deliver the same message ID more than once;
+ * the later snapshot contains the most complete set of streamed parts.
+ */
+export function uniqueMessagesById<T extends { id: string }>(messages: readonly T[]): T[] {
+  const unique: T[] = [];
+  const positions = new Map<string, number>();
+  for (const message of messages) {
+    const position = positions.get(message.id);
+    if (position === undefined) {
+      positions.set(message.id, unique.length);
+      unique.push(message);
+    } else {
+      unique[position] = message;
+    }
+  }
+  return unique;
+}
 
 export type ConversationSummary = {
   id: string;
@@ -73,6 +142,7 @@ export type ConversationSummary = {
 export type BusinessConversation = ConversationSummary & {
   messages: BusinessChatMessage[];
   paymentStatus?: string | null;
+  paymentStatuses?: Partial<Record<PaymentServiceType, string>>;
 };
 
 export type BusinessChatContext = {

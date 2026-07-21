@@ -15,7 +15,11 @@ export type StoredPayment = {
   createdAt: string;
   updatedAt: string;
   paidAt: string | null;
+  serviceType: PaymentServiceType;
+  serviceReference: string | null;
 };
+
+export type PaymentServiceType = "dti-business-name" | "barangay-clearance" | "ebpls-business-permit";
 
 type PaymentRow = {
   id: string;
@@ -30,6 +34,8 @@ type PaymentRow = {
   created_at: string;
   updated_at: string;
   paid_at: string | null;
+  service_type: PaymentServiceType;
+  service_reference: string | null;
 };
 
 function mapPayment(row: PaymentRow): StoredPayment {
@@ -46,7 +52,14 @@ function mapPayment(row: PaymentRow): StoredPayment {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     paidAt: row.paid_at,
+    serviceType: row.service_type,
+    serviceReference: row.service_reference,
   };
+}
+
+export function getLatestPaymentForService(conversationId: string, serviceType: PaymentServiceType) {
+  const row = getDatabase().prepare("SELECT * FROM payments WHERE conversation_id = ? AND service_type = ? ORDER BY created_at DESC, rowid DESC LIMIT 1").get(conversationId, serviceType) as PaymentRow | undefined;
+  return row ? mapPayment(row) : null;
 }
 
 export function isPaidStatus(status: string) {
@@ -59,10 +72,11 @@ export function createPayment(input: Omit<StoredPayment, "id" | "createdAt" | "u
     INSERT INTO payments (
       id, conversation_id, transaction_uuid, transaction_id, amount, status,
       proposed_name, territorial_scope, owner_name, created_at, updated_at, paid_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+      , service_type, service_reference
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
   `).run(
     randomUUID(), input.conversationId, input.transactionUuid, input.transactionId, input.amount, input.status,
-    input.proposedName, input.territorialScope, input.ownerName, now, now,
+    input.proposedName, input.territorialScope, input.ownerName, now, now, input.serviceType, input.serviceReference,
   );
   return getPaymentByTransactionId(input.transactionId)!;
 }
@@ -88,6 +102,6 @@ export function updatePaymentStatus(transactionUuid: string, status: string, pai
   const paid = isPaidStatus(status);
   getDatabase().prepare("UPDATE payments SET status = ?, paid_at = ?, updated_at = ? WHERE transaction_uuid = ?")
     .run(status, paid ? (paidAt || new Date().toISOString()) : payment.paidAt, new Date().toISOString(), transactionUuid);
-  if (paid) markPaymentCheckpointComplete(payment.conversationId);
+  if (paid && payment.serviceType === "dti-business-name") markPaymentCheckpointComplete(payment.conversationId);
   return getPaymentByUuid(transactionUuid);
 }

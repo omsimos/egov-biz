@@ -7,6 +7,10 @@ import {
   Check,
   CheckCircle,
   CircleNotch,
+  Buildings,
+  Certificate,
+  FileText,
+  FlagCheckered,
   GlobeHemisphereWest,
   ListChecks,
   MagnifyingGlass,
@@ -23,12 +27,16 @@ import {
 import { DefaultChatTransport, getToolName, isToolUIPart } from "ai";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
-import type {
-  BusinessChatMessage,
-  BusinessConversation,
-  ConversationSummary,
-  DtiBusinessNameForm,
-  RegistrationPlan,
+import {
+  uniqueMessagesById,
+  type BarangayClearance,
+  type BusinessChatMessage,
+  type BusinessConversation,
+  type ConversationSummary,
+  type DtiBusinessNameForm,
+  type EbplsBusinessPermitReceipt,
+  type PaymentServiceType,
+  type RegistrationPlan,
 } from "@/lib/business-chat";
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import type { IntakeQuestion } from "@/lib/questions";
@@ -39,12 +47,235 @@ type ReadyAskUserPart = AskUserPart & {
   input: { questions?: IntakeQuestion[]; question?: IntakeQuestion };
 };
 type PendingQuestion = { part: ReadyAskUserPart; questions: IntakeQuestion[] };
+type PaymentRequest = {
+  serviceType: PaymentServiceType;
+  serviceLabel: string;
+  proposedName: string;
+  ownerName: string;
+  feeLabel: string;
+  serviceReference?: string;
+  territorialScope?: DtiBusinessNameForm["territorialScope"];
+};
 
 function textOf(message: BusinessChatMessage) {
   return message.parts
     .filter((part) => part.type === "text")
     .map((part) => part.text)
     .join("");
+}
+
+function DetailRows({ rows }: { rows: [string, string][] }) {
+  return (
+    <div className="local-permit-fields">
+      {rows.map(([label, value]) => (
+        <div key={label}>
+          <span>{label}</span>
+          <strong>{value}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BarangayClearanceCard({
+  clearance,
+  paid,
+  onPay,
+}: {
+  clearance: BarangayClearance;
+  paid: boolean;
+  onPay: (request: PaymentRequest) => void;
+}) {
+  const approved = clearance.status === "Approved";
+  return (
+    <article className={`local-permit-card ${approved ? "approved" : "payment-due"}`}>
+      <header>
+        <span>
+          <Certificate weight="duotone" />
+        </span>
+        <div>
+          <small>ELECTRONIC BARANGAY CLEARANCE</small>
+          <strong>
+            {clearance.barangay}, {clearance.city}
+          </strong>
+        </div>
+        <i>
+          {approved ? (
+            <>
+              <CheckCircle weight="fill" /> Approved
+            </>
+          ) : (
+            "Payment required"
+          )}
+        </i>
+      </header>
+      <DetailRows
+        rows={[
+          ["Reference", clearance.referenceNumber],
+          ["Business", clearance.businessName],
+          ["Owner", clearance.ownerName],
+          ["Activity", clearance.businessActivity],
+          ["Business address", clearance.businessAddress],
+          [
+            approved ? "Valid until" : "Assessed fee",
+            approved && clearance.validUntil
+              ? new Date(clearance.validUntil).toLocaleDateString("en-PH", {
+                  year: "numeric",
+                  month: "short",
+                  day: "numeric",
+                })
+              : clearance.feeLabel,
+          ],
+        ]}
+      />
+      <section>
+        <small>DOCUMENTS SUBMITTED</small>
+        <ul>
+          {clearance.supportingDocuments.map((document) => (
+            <li key={document}>
+              <FileText /> {document}
+            </li>
+          ))}
+        </ul>
+      </section>
+      <section className="local-permit-use">
+        <small>USED FOR</small>
+        <ul>
+          {clearance.usedFor.map((use) => (
+            <li key={use}>
+              <Check /> {use}
+            </li>
+          ))}
+        </ul>
+      </section>
+      {!approved && (
+        <footer className="local-permit-payment">
+          <div>
+            <small>BARANGAY CLEARANCE FEE</small>
+            <strong>{clearance.feeLabel}</strong>
+          </div>
+          <button
+            type="button"
+            disabled={paid}
+            onClick={() =>
+              onPay({
+                serviceType: "barangay-clearance",
+                serviceLabel: "Barangay Business Clearance",
+                proposedName: clearance.businessName,
+                ownerName: clearance.ownerName,
+                feeLabel: clearance.feeLabel,
+                serviceReference: clearance.referenceNumber,
+              })
+            }
+          >
+            {paid ? "Paid" : "Pay with eGovPay"} <ArrowRight weight="bold" />
+          </button>
+        </footer>
+      )}
+    </article>
+  );
+}
+
+function EbplsPermitCard({
+  receipt,
+  paid,
+  onPay,
+}: {
+  receipt: EbplsBusinessPermitReceipt;
+  paid: boolean;
+  onPay: (request: PaymentRequest) => void;
+}) {
+  const issued = receipt.status === "Permit issued";
+  return (
+    <article className={`local-permit-card ebpls ${issued ? "approved" : "payment-due"}`}>
+      <header>
+        <span>
+          <Buildings weight="duotone" />
+        </span>
+        <div>
+          <small>EBPLS</small>
+          <strong>Mayor’s / business permit</strong>
+        </div>
+        <i>
+          {issued ? (
+            <>
+              <CheckCircle weight="fill" /> Issued
+            </>
+          ) : (
+            "Payment required"
+          )}
+        </i>
+      </header>
+      <p className="ebpls-expansion">
+        <strong>Electronic Business Permits and Licensing System</strong>
+        <span>
+          {issued
+            ? "The LGU permit has been issued electronically."
+            : "The LGU assessment is complete and ready for payment."}
+        </span>
+      </p>
+      <DetailRows
+        rows={[
+          ["EBPLS reference", receipt.referenceNumber],
+          ["Application", receipt.permitType],
+          ["Business", receipt.businessName],
+          ["Location", `${receipt.barangay}, ${receipt.city}`],
+          ["Barangay clearance", receipt.barangayClearanceReference],
+          [
+            issued ? "Valid until" : "Assessed fee",
+            issued && receipt.validUntil
+              ? new Date(receipt.validUntil).toLocaleDateString("en-PH", {
+                  year: "numeric",
+                  month: "short",
+                  day: "numeric",
+                })
+              : receipt.feeLabel,
+          ],
+        ]}
+      />
+      <section>
+        <small>ATTACHMENTS SENT</small>
+        <ul>
+          {receipt.attachments.map((attachment) => (
+            <li key={attachment}>
+              <FileText /> {attachment}
+            </li>
+          ))}
+        </ul>
+      </section>
+      {!issued && (
+        <footer className="local-permit-payment">
+          <div>
+            <small>ASSESSED LGU FEES</small>
+            <strong>{receipt.feeLabel}</strong>
+          </div>
+          <button
+            type="button"
+            disabled={paid}
+            onClick={() =>
+              onPay({
+                serviceType: "ebpls-business-permit",
+                serviceLabel: "EBPLS Mayor’s / Business Permit",
+                proposedName: receipt.businessName,
+                ownerName: receipt.ownerName,
+                feeLabel: receipt.feeLabel,
+                serviceReference: receipt.referenceNumber,
+              })
+            }
+          >
+            {paid ? "Paid" : "Pay with eGovPay"} <ArrowRight weight="bold" />
+          </button>
+        </footer>
+      )}
+      <footer>
+        <CircleNotch />
+        <span>
+          <small>NEXT</small>
+          <strong>{receipt.nextAction}</strong>
+        </span>
+      </footer>
+    </article>
+  );
 }
 
 function Markdown({ children, streaming = false }: { children: string; streaming?: boolean }) {
@@ -118,22 +349,27 @@ function PlanDock({ plan, active }: { plan: RegistrationPlan; active: boolean })
       >
         <div className="registration-plan-items">
           <ol>
-            {plan.steps.map((step) => (
-              <li
-                className={step.status}
-                key={step.id}
-                aria-current={step.status === "in_progress" ? "step" : undefined}
-              >
-                <i>
-                  {step.status === "completed" ? (
-                    <Check weight="bold" />
-                  ) : step.status === "in_progress" ? (
-                    <ArrowRight weight="bold" />
-                  ) : null}
-                </i>
-                <span>{step.label}</span>
-              </li>
-            ))}
+            {plan.steps.map((step, index) => {
+              const finishLine = index === plan.steps.length - 1;
+              return (
+                <li
+                  className={`${step.status}${finishLine ? " finish-line" : ""}`}
+                  key={step.id}
+                  aria-current={step.status === "in_progress" ? "step" : undefined}
+                >
+                  <i aria-hidden="true">
+                    {finishLine ? (
+                      <FlagCheckered weight={step.status === "completed" ? "fill" : "duotone"} />
+                    ) : step.status === "completed" ? (
+                      <Check weight="bold" />
+                    ) : step.status === "in_progress" ? (
+                      <ArrowRight weight="bold" />
+                    ) : null}
+                  </i>
+                  <span>{step.label}</span>
+                </li>
+              );
+            })}
           </ol>
         </div>
       </div>
@@ -160,10 +396,24 @@ function QuestionComposer({
   const question = pending.questions[questionIndex];
   const complete = (question: IntakeQuestion) => {
     const value = values[question.id];
-    if (question.type === "single" && value === "__other__")
-      return Boolean(custom[question.id]?.trim());
-    return Array.isArray(value) ? value.length > 0 : Boolean(value?.trim());
+    const text =
+      question.type === "single" && value === "__other__"
+        ? (custom[question.id]?.trim() ?? "")
+        : Array.isArray(value)
+          ? value.join(" ")
+          : (value?.trim() ?? "");
+    if (!text) return false;
+    if (question.id === "proposed-business-name") return text.length >= 3;
+    if (question.id !== "business-address") return true;
+    const hasAddressMarker =
+      /\b(?:\d{1,5}|unit|room|floor|block|lot|house|street|st\.?|road|rd\.?|avenue|ave\.?|drive|highway|building|bldg\.?|plaza|village|subdivision|purok|sitio|poblacion|barangay|brgy\.?)\b/i.test(
+        text,
+      );
+    return (
+      text.length >= 10 && hasAddressMarker && (text.includes(",") || text.split(/\s+/).length >= 4)
+    );
   };
+
   const canContinue = complete(question);
   const lastQuestion = questionIndex === pending.questions.length - 1;
   const submit = (event: FormEvent) => {
@@ -203,6 +453,7 @@ function QuestionComposer({
       {(() => {
         const value = values[question.id];
         const selected = Array.isArray(value) ? value : value ? [value] : [];
+        const enteredText = typeof value === "string" ? value.trim() : "";
         const options =
           question.type === "single"
             ? [
@@ -288,6 +539,13 @@ function QuestionComposer({
                   }
                   autoFocus
                 />
+                {enteredText && !complete(question) && (
+                  <small role="alert">
+                    {question.id === "business-address"
+                      ? "Enter the full street, building, or unit and barangay."
+                      : "Enter the complete proposed business name."}
+                  </small>
+                )}
               </label>
             )}
           </section>
@@ -359,6 +617,7 @@ function DtiFormCard({
       `${form.businessAddress}${form.city && !form.businessAddress.includes(form.city) ? `, ${form.city}` : ""}`,
     ],
   ];
+  if (form.missingFields.length || rows.some(([, value]) => !value)) return null;
   return (
     <article className={`dti-form-card ${paid ? "paid" : ""}`}>
       <header>
@@ -367,9 +626,7 @@ function DtiFormCard({
           <small>BUSINESS NAME REGISTRATION</small>
           <strong>Application draft</strong>
         </div>
-        <i className={paid ? "paid" : form.missingFields.length ? "draft" : "ready"}>
-          {paid ? "Paid" : form.missingFields.length ? "Needs input" : "Ready"}
-        </i>
+        <i className={paid ? "paid" : "ready"}>{paid ? "Paid" : "Ready"}</i>
       </header>
       {note && (
         <p className="dti-note">
@@ -378,7 +635,7 @@ function DtiFormCard({
       )}
       <div className="dti-fields">
         {rows.map(([label, value]) => (
-          <div key={label} className={!value || value === "Needs your answer" ? "missing" : ""}>
+          <div key={label}>
             <span>{label}</span>
             <strong>{value}</strong>
           </div>
@@ -397,7 +654,7 @@ function DtiFormCard({
           <small>PAYMENT</small>
           <strong>{form.feeLabel}</strong>
         </div>
-        <button onClick={onSubmitPay} disabled={paid || form.missingFields.length > 0}>
+        <button onClick={onSubmitPay} disabled={paid}>
           {paid ? (
             <>
               <CheckCircle weight="fill" /> Paid
@@ -415,12 +672,12 @@ function DtiFormCard({
 
 function ToolPart({
   part,
-  paid,
+  paidServices,
   onSubmitPay,
 }: {
   part: BusinessChatMessage["parts"][number];
-  paid: boolean;
-  onSubmitPay: (form: DtiBusinessNameForm) => void;
+  paidServices: Set<PaymentServiceType>;
+  onSubmitPay: (request: PaymentRequest) => void;
 }) {
   if (!isToolUIPart(part)) return null;
   const name = getToolName(part);
@@ -433,8 +690,17 @@ function ToolPart({
         <DtiFormCard
           form={part.output.form}
           note={part.input.note}
-          paid={paid}
-          onSubmitPay={() => onSubmitPay(part.output.form)}
+          paid={paidServices.has("dti-business-name")}
+          onSubmitPay={() =>
+            onSubmitPay({
+              serviceType: "dti-business-name",
+              serviceLabel: "DTI Business Name Registration",
+              proposedName: part.output.form.proposedName,
+              ownerName: part.output.form.ownerName,
+              feeLabel: part.output.form.feeLabel,
+              territorialScope: part.output.form.territorialScope,
+            })
+          }
         />
       );
     return (
@@ -445,6 +711,53 @@ function ToolPart({
           <span className="chat-shimmer">Preparing your DTI form</span>
         </div>
         <PencilSimple />
+      </div>
+    );
+  }
+  if (part.type === "tool-submitBarangayClearance") {
+    if (part.state === "output-available")
+      return (
+        <BarangayClearanceCard
+          clearance={part.output.clearance}
+          paid={paidServices.has("barangay-clearance")}
+          onPay={onSubmitPay}
+        />
+      );
+    const barangay = "input" in part && part.input?.application?.barangay;
+    return (
+      <div className="local-permit-processing" role="status">
+        <span>
+          <CircleNotch className="spin" />
+        </span>
+        <div>
+          <small>Electronic barangay clearance</small>
+          <strong>Submitting{barangay ? ` to ${barangay}` : ""}…</strong>
+          <em>Checking registration and business-address documents</em>
+        </div>
+      </div>
+    );
+  }
+  if (part.type === "tool-submitEbplsBusinessPermit") {
+    if (part.state === "output-available")
+      return (
+        <EbplsPermitCard
+          receipt={part.output.receipt}
+          paid={paidServices.has("ebpls-business-permit")}
+          onPay={onSubmitPay}
+        />
+      );
+    return (
+      <div className="local-permit-processing ebpls" role="status">
+        <span>
+          <CircleNotch className="spin" />
+        </span>
+        <div>
+          <small>EBPLS · Electronic Business Permits and Licensing System</small>
+          <strong>LGU assessment in progress…</strong>
+          <em>
+            Validating the application, approved barangay clearance, and submitted attachments
+          </em>
+        </div>
       </div>
     );
   }
@@ -460,17 +773,13 @@ function ToolPart({
 }
 
 function PaymentDialog({
-  form,
-  profile,
+  payment,
   conversationId,
   onClose,
-  onPaid,
 }: {
-  form: DtiBusinessNameForm;
-  profile: CitizenProfile | null;
+  payment: PaymentRequest;
   conversationId: string;
   onClose: () => void;
-  onPaid: () => Promise<void>;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const [opening, setOpening] = useState(false);
@@ -492,10 +801,10 @@ function PaymentDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           conversationId,
-          proposedName: form.proposedName,
-          territorialScope: form.territorialScope,
-          ownerName: form.ownerName,
-          mobile: profile?.mobile,
+          serviceType: payment.serviceType,
+          proposedName: payment.proposedName,
+          ...(payment.territorialScope ? { territorialScope: payment.territorialScope } : {}),
+          ...(payment.serviceReference ? { serviceReference: payment.serviceReference } : {}),
         }),
       });
       const result = (await response.json()) as {
@@ -505,13 +814,13 @@ function PaymentDialog({
       };
       if (!response.ok || !result.checkoutUrl)
         throw new Error(result.error || "eGovPay could not open checkout.");
-      await onPaid();
       window.location.assign(result.checkoutUrl);
     } catch (error) {
       setPaymentError(error instanceof Error ? error.message : "eGovPay could not open checkout.");
       setOpening(false);
     }
   };
+
   return (
     <div className="chat-dialog-layer">
       <button className="chat-dialog-scrim" onClick={onClose} aria-label="Close payment" />
@@ -533,16 +842,16 @@ function PaymentDialog({
           <small>eGovPay</small>
           <h2 id="payment-title">Continue to secure payment</h2>
           <p>
-            You’ll continue to eGovPay in this tab. This demo will mark the application paid while
-            webhook support is being completed.
+            You’ll continue to eGovPay in this tab. This demo will mark the fee paid while webhook
+            support is being completed.
           </p>
         </div>
         <div className="payment-summary">
           <span>
-            <small>DTI application</small>
-            <strong>{form.proposedName}</strong>
+            <small>{payment.serviceLabel}</small>
+            <strong>{payment.proposedName}</strong>
           </span>
-          <strong>{form.feeLabel}</strong>
+          <strong>{payment.feeLabel}</strong>
         </div>
         {paymentError && (
           <p className="payment-inline-error" role="alert">
@@ -563,8 +872,8 @@ function PaymentDialog({
 export function BusinessChatScreen({
   conversation,
   conversations,
-  profile,
   paymentStatus,
+  paymentService,
   onBack,
   onNewConversation,
   onSelectConversation,
@@ -574,39 +883,58 @@ export function BusinessChatScreen({
   conversations: ConversationSummary[];
   profile: CitizenProfile | null;
   paymentStatus?: string | null;
+  paymentService?: PaymentServiceType | null;
   onBack: () => void;
   onNewConversation: () => void;
   onSelectConversation: (id: string) => void;
   onDeleteConversation: (conversation: ConversationSummary) => void;
 }) {
   const [input, setInput] = useState("");
-  const [paymentForm, setPaymentForm] = useState<DtiBusinessNameForm | null>(null);
+  const [paymentRequest, setPaymentRequest] = useState<PaymentRequest | null>(null);
   const [localPaymentStatus, setLocalPaymentStatus] = useState(
     paymentStatus ?? conversation.paymentStatus ?? null,
+  );
+  const [localPaymentStatuses, setLocalPaymentStatuses] = useState(
+    conversation.paymentStatuses ?? {},
   );
   const [continuationError, setContinuationError] = useState("");
   const [answeringToolCallId, setAnsweringToolCallId] = useState<string | null>(null);
   const answeredToolCalls = useRef(new Set<string>());
+  const continuedPayment = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const seeded = useRef(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const initialPrompt = conversation.initialPrompt;
   const transport = useMemo(
-    () => new DefaultChatTransport({ api: "/api/agent/chat", body: { profile, initialPrompt } }),
-    [initialPrompt, profile],
+    () => new DefaultChatTransport({ api: "/api/agent/chat", body: { initialPrompt } }),
+    [initialPrompt],
   );
-  const { messages, sendMessage, status, stop, error, addToolOutput } =
+  const initialMessages = useMemo(
+    () => uniqueMessagesById(conversation.messages),
+    [conversation.messages],
+  );
+  const { messages, setMessages, sendMessage, resumeStream, status, stop, error, addToolOutput } =
     useChat<BusinessChatMessage>({
       id: conversation.id,
-      messages: conversation.messages,
+      messages: initialMessages,
       transport,
-      resume: true,
+      resume: false,
     });
+  const visibleMessages = useMemo(() => uniqueMessagesById(messages), [messages]);
   const busy = status === "submitted" || status === "streaming";
   const paid = /paid|success|complete/i.test(localPaymentStatus ?? "");
-  const latestPlan = latestRegistrationPlan(messages);
+  const paidServices = useMemo(
+    () =>
+      new Set(
+        (Object.entries(localPaymentStatuses) as [PaymentServiceType, string][])
+          .filter(([, value]) => /paid|success|complete/i.test(value))
+          .map(([service]) => service),
+      ),
+    [localPaymentStatuses],
+  );
+  const latestPlan = latestRegistrationPlan(visibleMessages);
   const pending: PendingQuestion | null = (() => {
-    for (const message of [...messages].reverse()) {
+    for (const message of [...visibleMessages].reverse()) {
       for (const part of [...message.parts].reverse()) {
         if (part.type === "tool-askUser" && part.state === "input-available") {
           const current = part as ReadyAskUserPart;
@@ -622,14 +950,29 @@ export function BusinessChatScreen({
   })();
 
   useEffect(() => {
-    if (conversation.messages.length === 0 && !seeded.current) {
-      seeded.current = true;
+    // Reconnect and initial seeding are mutually exclusive. A persisted active
+    // stream already contains the response to the user's latest message.
+    if (seeded.current) return;
+    seeded.current = true;
+    if (conversation.activeStreamId) {
+      void resumeStream().finally(() => setMessages((current) => uniqueMessagesById(current)));
+    } else if (initialMessages.length === 0) {
       void sendMessage({ text: initialPrompt });
     }
-  }, [conversation.messages.length, initialPrompt, sendMessage]);
+  }, [
+    conversation.activeStreamId,
+    initialMessages.length,
+    initialPrompt,
+    resumeStream,
+    sendMessage,
+    setMessages,
+  ]);
+  useEffect(() => {
+    if (messages.length !== visibleMessages.length) setMessages(visibleMessages);
+  }, [messages.length, setMessages, visibleMessages]);
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, pending, status]);
+  }, [visibleMessages, pending, status]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -654,8 +997,9 @@ export function BusinessChatScreen({
       setAnsweringToolCallId(null);
     }
   };
-  const continueAfterPayment = async () => {
-    setLocalPaymentStatus("paid");
+  const continueAfterPayment = async (serviceType: PaymentServiceType = "dti-business-name") => {
+    if (serviceType === "dti-business-name") setLocalPaymentStatus("paid");
+    setLocalPaymentStatuses((current) => ({ ...current, [serviceType]: "paid" }));
     setContinuationError("");
     try {
       // Add a non-visual event message so useChat always starts a new request.
@@ -664,14 +1008,22 @@ export function BusinessChatScreen({
       await sendMessage(
         {
           role: "user",
-          parts: [{ type: "data-paymentCompleted", data: { status: "paid" } }],
+          parts: [{ type: "data-paymentCompleted", data: { status: "paid", serviceType } }],
         },
-        { body: { event: "payment-completed" } },
+        { body: { event: "payment-completed", paymentService: serviceType } },
       );
     } catch {
       setContinuationError("Payment is saved, but I couldn’t start the next step automatically.");
     }
   };
+
+  useEffect(() => {
+    if (!paymentService || !/paid|success|complete/i.test(paymentStatus ?? "")) return;
+    const continuationKey = `${conversation.id}:${paymentService}`;
+    if (continuedPayment.current === continuationKey) return;
+    continuedPayment.current = continuationKey;
+    void continueAfterPayment(paymentService);
+  }, [conversation.id, paymentService, paymentStatus]);
 
   return (
     <div className="screen agent-chat-screen">
@@ -739,14 +1091,14 @@ export function BusinessChatScreen({
               <strong>{paid ? "Payment confirmed" : "Payment status updated"}</strong>
               <small>
                 {paid
-                  ? "Your plan is advancing to barangay clearance and local permit requirements."
+                  ? "Your saved workflow is advancing to the next service."
                   : `Status: ${localPaymentStatus}. You can continue in this saved chat.`}
               </small>
             </span>
           </div>
         )}
         <div className="chat-day">Saved automatically</div>
-        {messages.map((message) => {
+        {visibleMessages.map((message) => {
           const user = message.role === "user";
           const text = textOf(message);
           const hasVisibleTool = message.parts.some(
@@ -756,7 +1108,7 @@ export function BusinessChatScreen({
               part.type !== "tool-updatePlan",
           );
           if (!text && !hasVisibleTool) return null;
-          const streaming = busy && message.id === messages.at(-1)?.id;
+          const streaming = busy && message.id === visibleMessages.at(-1)?.id;
           return (
             <article className={`chat-message ${user ? "user" : "assistant"}`} key={message.id}>
               <div className="message-content">
@@ -775,8 +1127,8 @@ export function BusinessChatScreen({
                     <ToolPart
                       key={`${message.id}-${index}`}
                       part={part}
-                      paid={paid}
-                      onSubmitPay={setPaymentForm}
+                      paidServices={paidServices}
+                      onSubmitPay={setPaymentRequest}
                     />
                   ) : null,
                 )}
@@ -793,7 +1145,11 @@ export function BusinessChatScreen({
           <div className="chat-error">
             {continuationError || "I couldn’t continue. Please try again."}
             {paid && (
-              <button type="button" onClick={() => void continueAfterPayment()} disabled={busy}>
+              <button
+                type="button"
+                onClick={() => void continueAfterPayment(paymentService ?? "dti-business-name")}
+                disabled={busy}
+              >
                 Continue to next step
               </button>
             )}
@@ -846,13 +1202,11 @@ export function BusinessChatScreen({
           </form>
         )}
       </footer>
-      {paymentForm && (
+      {paymentRequest && (
         <PaymentDialog
-          form={paymentForm}
-          profile={profile}
+          payment={paymentRequest}
           conversationId={conversation.id}
-          onClose={() => setPaymentForm(null)}
-          onPaid={continueAfterPayment}
+          onClose={() => setPaymentRequest(null)}
         />
       )}
     </div>

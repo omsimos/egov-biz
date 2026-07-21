@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { UIMessage } from "ai";
-import type { BusinessConversation, ConversationSummary } from "@/lib/business-chat";
+import { uniqueMessagesById, type BusinessConversation, type ConversationSummary, type PaymentServiceType } from "@/lib/business-chat";
 import { getDatabase } from "@/server/db";
 
 type ConversationRow = {
@@ -43,13 +43,15 @@ export function getConversation(id: string): BusinessConversation | null {
   const database = getDatabase();
   const row = database.prepare("SELECT * FROM conversations WHERE id = ?").get(id) as ConversationRow | undefined;
   if (!row) return null;
-  const payment = database.prepare("SELECT status FROM payments WHERE conversation_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1").get(id) as { status: string } | undefined;
+  const payments = database.prepare("SELECT service_type, status FROM payments WHERE conversation_id = ? ORDER BY created_at ASC, rowid ASC").all(id) as { service_type: PaymentServiceType; status: string }[];
+  const paymentStatuses = Object.fromEntries(payments.map((payment) => [payment.service_type, payment.status]));
   const messages = database
     .prepare("SELECT id, role, parts_json FROM messages WHERE conversation_id = ? ORDER BY created_at ASC, rowid ASC")
     .all(id) as MessageRow[];
   return {
     ...mapSummary(row),
-    paymentStatus: payment?.status ?? null,
+    paymentStatus: paymentStatuses["dti-business-name"] ?? null,
+    paymentStatuses,
     messages: messages.map((message) => ({
       id: message.id,
       role: message.role,
@@ -74,6 +76,7 @@ export function setActiveStream(id: string, streamId: string | null) {
 }
 
 export function saveMessages(conversationId: string, messages: UIMessage[]) {
+  const uniqueMessages = uniqueMessagesById(messages);
   const database = getDatabase();
   database.transaction(() => {
     const existing = new Set(
@@ -85,7 +88,7 @@ export function saveMessages(conversationId: string, messages: UIMessage[]) {
       VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET role = excluded.role, parts_json = excluded.parts_json
     `);
-    messages.forEach((message, index) => {
+    uniqueMessages.forEach((message, index) => {
       upsert.run(message.id, conversationId, message.role, JSON.stringify(message.parts), new Date(Date.now() + index).toISOString());
       existing.delete(message.id);
     });

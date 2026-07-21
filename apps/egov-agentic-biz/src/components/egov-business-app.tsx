@@ -28,7 +28,11 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { BusinessChatScreen } from "@/components/business-chat-screen";
 import { LoginScreen } from "@/components/login-screen";
 import { ProfileAvatar } from "@/components/profile-avatar";
-import type { BusinessConversation, ConversationSummary } from "@/lib/business-chat";
+import type {
+  BusinessConversation,
+  ConversationSummary,
+  PaymentServiceType,
+} from "@/lib/business-chat";
 import type { CitizenProfile, RegisteredBusiness } from "@/lib/citizen-profile";
 import { useApi } from "@/lib/use-api";
 import { useAuthSession } from "@/lib/use-auth-session";
@@ -395,6 +399,7 @@ export function EgaphBusinessApp({
   );
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
+  const [paymentService, setPaymentService] = useState<PaymentServiceType | null>(null);
   const { error: authError, logout, profile, status } = useAuthSession();
   const { data: businesses, loading: businessesLoading } = useApi<RegisteredBusiness[]>(
     "/api/businesses",
@@ -408,7 +413,7 @@ export function EgaphBusinessApp({
       );
   }, []);
   const openConversation = useCallback(
-    async (id: string, status?: string | null) => {
+    async (id: string, status?: string | null, serviceType?: PaymentServiceType | null) => {
       const response = await fetch(`/api/conversations/${encodeURIComponent(id)}`);
       if (!response.ok) return;
       const current = ((await response.json()) as { conversation: BusinessConversation })
@@ -416,6 +421,7 @@ export function EgaphBusinessApp({
       setConversation(current);
       setPrompt(current.initialPrompt);
       setPaymentStatus(status ?? null);
+      setPaymentService(serviceType ?? null);
       setScreen("chat");
       const url = new URL(window.location.href);
       url.search = "";
@@ -437,17 +443,23 @@ export function EgaphBusinessApp({
       const paymentReturn = url.searchParams.get("payment") === "return";
       if (initialConversation?.id === id && !paymentReturn) return;
       let status: string | null = null;
+      let serviceType: PaymentServiceType | null = null;
       const transactionId = url.searchParams.get("transactionId");
       if (paymentReturn && transactionId) {
         const paymentResponse = await fetch(
           `/api/payments/egovpay/status?transactionId=${encodeURIComponent(transactionId)}`,
         );
-        if (paymentResponse.ok)
-          status =
-            ((await paymentResponse.json()) as { payment?: { status?: string } }).payment?.status ??
-            "pending";
+        if (paymentResponse.ok) {
+          const payment = (
+            (await paymentResponse.json()) as {
+              payment?: { status?: string; serviceType?: PaymentServiceType };
+            }
+          ).payment;
+          status = payment?.status ?? "pending";
+          serviceType = payment?.serviceType ?? null;
+        }
       }
-      await openConversation(id, status);
+      await openConversation(id, status, serviceType);
       setScreen((current) => (current === "restoring" ? "business" : current));
     })();
   }, [initialConversation?.id, openConversation, refreshConversations]);
@@ -466,6 +478,8 @@ export function EgaphBusinessApp({
     setConversation(created);
     setPrompt(value);
     setPaymentStatus(null);
+    setPaymentService(null);
+    setPaymentService(null);
     setScreen("chat");
     window.history.pushState({}, "", `?chat=${encodeURIComponent(created.id)}`);
     await refreshConversations();
@@ -569,6 +583,7 @@ export function EgaphBusinessApp({
                 conversations={conversations}
                 profile={profile}
                 paymentStatus={paymentStatus}
+                paymentService={paymentService}
                 onBack={leaveChat}
                 onNewConversation={leaveChat}
                 onSelectConversation={(id) => void openConversation(id)}

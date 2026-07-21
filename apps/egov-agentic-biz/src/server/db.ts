@@ -49,6 +49,15 @@ function initialize(database: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_payments_conversation_created
       ON payments(conversation_id, created_at DESC);
   `);
+  const paymentColumns = database.prepare("PRAGMA table_info(payments)").all() as { name: string }[];
+  if (!paymentColumns.some(({ name }) => name === "service_type")) {
+    database.exec("ALTER TABLE payments ADD COLUMN service_type TEXT NOT NULL DEFAULT 'dti-business-name'");
+  }
+  if (!paymentColumns.some(({ name }) => name === "service_reference")) {
+    database.exec("ALTER TABLE payments ADD COLUMN service_reference TEXT");
+  }
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_payments_conversation_service
+    ON payments(conversation_id, service_type, created_at DESC)`);
 }
 
 export function getDatabase() {

@@ -10,15 +10,54 @@ import {
 } from "@/lib/payment-urls";
 import { classifyPaymentNetworkError, paymentNetworkMessage } from "@/lib/payment-network";
 import { getConversation } from "@/server/conversations";
-import { createPayment } from "@/server/payments";
+import {
+  createPayment,
+  getLatestPaymentForService,
+  isPaidStatus,
+  type PaymentServiceType,
+} from "@/server/payments";
 
 export const dynamic = "force-dynamic";
 
-const requestSchema = z.object({
-  conversationId: z.string().uuid(),
-  proposedName: z.string().trim().min(1).max(200),
-  territorialScope: z.enum(["Barangay", "City / municipality", "Regional", "National"]),
-});
+const requestSchema = z.discriminatedUnion("serviceType", [
+  z.object({
+    serviceType: z.literal("dti-business-name"),
+    conversationId: z.string().uuid(),
+    proposedName: z.string().trim().min(1).max(200),
+    territorialScope: z.enum(["Barangay", "City / municipality", "Regional", "National"]),
+    serviceReference: z.string().max(200).optional(),
+  }),
+  z.object({
+    serviceType: z.literal("barangay-clearance"),
+    conversationId: z.string().uuid(),
+    proposedName: z.string().trim().min(1).max(200),
+    serviceReference: z.string().trim().min(1).max(200),
+  }),
+  z.object({
+    serviceType: z.literal("ebpls-business-permit"),
+    conversationId: z.string().uuid(),
+    proposedName: z.string().trim().min(1).max(200),
+    serviceReference: z.string().trim().min(1).max(200),
+  }),
+]);
+
+const services: Record<PaymentServiceType, { amount: number; prefix: string; label: string }> = {
+  "dti-business-name": {
+    amount: 0,
+    prefix: "DTI-BNR",
+    label: "DTI Business Name Registration",
+  },
+  "barangay-clearance": {
+    amount: 500,
+    prefix: "BRGY-CLR",
+    label: "Barangay Business Clearance",
+  },
+  "ebpls-business-permit": {
+    amount: 2_500,
+    prefix: "EBPLS-BP",
+    label: "EBPLS Mayor’s / Business Permit",
+  },
+};
 
 export async function POST(request: Request) {
   const session = readSession(request);
@@ -40,8 +79,20 @@ export async function POST(request: Request) {
   )
     return Response.json({ error: "eGovPay is not available right now." }, { status: 503 });
 
-  const amount = dtiRegistrationFee(parsed.data.territorialScope);
-  const transactionId = `DTI-BNR-${crypto.randomUUID()}`;
+  const existing = getLatestPaymentForService(parsed.data.conversationId, parsed.data.serviceType);
+  if (existing && isPaidStatus(existing.status))
+    return Response.json(
+      { error: "This fee has already been paid.", payment: existing },
+      { status: 409 },
+    );
+
+  const service = services[parsed.data.serviceType];
+  const amount =
+    parsed.data.serviceType === "dti-business-name"
+      ? dtiRegistrationFee(parsed.data.territorialScope)
+      : service.amount;
+  const transactionId = `${service.prefix}-${crypto.randomUUID()}`;
+
   try {
     const baseUrl = egovPayBaseUrl();
     const { callbackUrl, redirectUrl } = paymentUrls(request, {
@@ -54,12 +105,12 @@ export async function POST(request: Request) {
         callbackUrl,
         currency: "PHP",
         description: {
-          service: "DTI Business Name Registration",
-          scope: parsed.data.territorialScope,
+          service: service.label,
+          ...(parsed.data.serviceType === "dti-business-name"
+            ? { scope: parsed.data.territorialScope }
+            : { reference: parsed.data.serviceReference }),
         },
-        items: [
-          { amount, name: `DTI business name registration — ${parsed.data.territorialScope}` },
-        ],
+        items: [{ amount, name: service.label }],
         name: session.profile.fullName,
         redirectUrl,
         transactionId,
@@ -75,8 +126,13 @@ export async function POST(request: Request) {
       amount,
       status: "pending",
       proposedName: parsed.data.proposedName,
-      territorialScope: parsed.data.territorialScope,
+      territorialScope:
+        parsed.data.serviceType === "dti-business-name"
+          ? parsed.data.territorialScope
+          : "Not applicable",
       ownerName: session.profile.fullName,
+      serviceType: parsed.data.serviceType,
+      serviceReference: parsed.data.serviceReference ?? null,
     });
     return Response.json({
       checkoutUrl: checkoutUrl.toString(),
