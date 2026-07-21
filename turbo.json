@@ -23,6 +23,10 @@
       "dependsOn": ["transit"],
       "outputs": []
     },
+    "smoke": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
     "test": {
       "dependsOn": ["transit"],
       "outputs": []

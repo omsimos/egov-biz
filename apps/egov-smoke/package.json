@@ -1,0 +1,19 @@
+{
+  "name": "@repo/egov-smoke",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check-types": "tsc --noEmit -p tsconfig.json",
+    "format": "oxfmt src package.json tsconfig.json turbo.json",
+    "format:check": "oxfmt --check src package.json tsconfig.json turbo.json",
+    "lint": "oxlint src",
+    "smoke": "bun --env-file=../../.env src/index.ts --verbose"
+  },
+  "dependencies": {
+    "@repo/egov": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2"
+  }
+}

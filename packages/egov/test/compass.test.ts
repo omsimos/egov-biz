@@ -14,7 +14,7 @@ describe("Compass", () => {
       env: { EGOVCOMPASS_API_KEY: "api-key" },
       fetch: async (input, init) => {
         capturedRequest = new Request(input, init);
-        return Response.json({ data: [], limit: 100, page: 1, total: 0 });
+        return Response.json({ items: [], limit: 100, page: 1, total: 0 });
       },
     });
 
@@ -49,7 +49,7 @@ describe("Compass", () => {
       env: { EGOVCOMPASS_API_KEY: "api-key" },
       fetch: async (input, init) => {
         requests.push(new Request(input, init));
-        return Response.json({ data: [], limit: 100, page: 1, total: 0 });
+        return Response.json({ items: [], limit: 100, page: 1, total: 0 });
       },
     });
 

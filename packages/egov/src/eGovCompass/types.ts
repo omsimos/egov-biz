@@ -33,7 +33,7 @@ export interface CompassSaaodbRecord extends Record<string, unknown> {
 }
 
 export interface CompassPaginatedResponse<T> {
-  data: T[];
+  items: T[];
   limit: number;
   page: number;
   total: number;
