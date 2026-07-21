@@ -5,6 +5,11 @@ export type QuestionOption = {
   icon?: "store" | "laptop" | "coffee" | "home" | "pin" | "calendar";
 };
 
+export type PlanReason = {
+  text: string;
+  citationIds: string[];
+};
+
 export type BusinessPlan = {
   businessLabel: string;
   registrationType: "Sole proprietor" | "Self-employed" | "Company" | "Needs review";
@@ -14,7 +19,7 @@ export type BusinessPlan = {
   category: "professional-services" | "retail" | "food-service" | "food-manufacturing" | "vehicle-rental" | "general-services";
   flags: ("food" | "food-manufacturing" | "physical-premises" | "vehicles" | "employees")[];
   rdo: RdoSelection | null;
-  rationale: string[];
+  rationale: PlanReason[];
   citations: PlanCitation[];
 };
 

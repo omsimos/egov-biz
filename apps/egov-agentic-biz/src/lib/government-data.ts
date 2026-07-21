@@ -117,6 +117,15 @@ export function resolveBusinessLocation(prompt: string, profileCity: string, ans
     }
   }
 
+  const explicitUnknownCity = prompt.match(/\b(?:in|at|from|near)\s+([A-Z][A-Za-z.'-]*(?:\s+[A-Z][A-Za-z.'-]*){0,2}\s+City)\b/i)?.[1];
+  if (explicitUnknownCity) {
+    return {
+      city: explicitUnknownCity.replace(/\b\w/g, (letter) => letter.toUpperCase()),
+      source: "prompt",
+      rdos: [],
+    };
+  }
+
   return { city: profileCity || "Philippines", source: "profile", rdos: [] };
 }
 
@@ -131,12 +140,17 @@ export function locationQuestion(city: string, rdos: RdoSelection[]) {
   };
 }
 
-export function selectRdo(location: ResolvedLocation, answers: { questionId: string; value: string | string[] }[]) {
+export function selectRdo(location: ResolvedLocation, answers: { questionId: string; value: string | string[] }[], addressContext = "") {
   if (location.rdos.length === 1) return location.rdos[0];
   const selection = answers.find((answer) => answer.questionId === "business-area")?.value;
   const value = Array.isArray(selection) ? selection[0] : selection;
   const selected = location.rdos.find((rdo) => rdo.code === value);
-  return selected ? { ...selected, status: "exact" as const } : null;
+  if (selected) return { ...selected, status: "exact" as const };
+  if (location.city === "Makati City" && /poblacion/i.test(addressContext)) {
+    const poblacionRdo = location.rdos.find((rdo) => rdo.code === "049");
+    return poblacionRdo ? { ...poblacionRdo, status: "exact" as const } : null;
+  }
+  return null;
 }
 
 export function citationsForPlan(registrationType: BusinessPlan["registrationType"], flags: RegulatoryFlag[]) {
@@ -147,14 +161,15 @@ export function citationsForPlan(registrationType: BusinessPlan["registrationTyp
   return [...ids].map((id) => officialSources[id]);
 }
 
-export function buildRationale(type: BusinessPlan["registrationType"], category: BusinessCategory, city: string, rdo: RdoSelection | null, flags: RegulatoryFlag[]) {
-  const reasons: string[] = [];
-  if (type === "Self-employed") reasons.push("You described independent professional work, so the shortest path is individual self-employed registration.");
-  else if (type === "Company") reasons.push("You described shared ownership, so SEC registration comes before local and tax registration.");
-  else reasons.push("You are selling goods or services as one owner, so the plan starts with a sole proprietorship.");
-  reasons.push(`Local permits are based on the business location in ${city}.`);
-  if (rdo) reasons.push(`${rdo.name} covers the selected business area; BIR uses the business address, or a professional’s residence when there is no separate workplace.`);
-  if (flags.includes("food-manufacturing")) reasons.push("Packaged or processed food may also need FDA review.");
-  if (flags.includes("physical-premises")) reasons.push("A physical workplace can add fire-safety and local permit checks.");
+export function buildRationale(type: BusinessPlan["registrationType"], category: BusinessCategory, city: string, rdo: RdoSelection | null, flags: RegulatoryFlag[], existingRdo?: string) {
+  const reasons: BusinessPlan["rationale"] = [];
+  if (type === "Self-employed") reasons.push({ text: "You described independent professional work, so the shortest path is individual self-employed registration.", citationIds: ["bir-newbizreg"] });
+  else if (type === "Company") reasons.push({ text: "You described shared ownership, so SEC registration comes before local and tax registration.", citationIds: ["dti-registration"] });
+  else reasons.push({ text: "You are selling goods or services as one owner, so the plan starts with a sole proprietorship.", citationIds: ["dti-registration"] });
+  reasons.push({ text: `Local permits are based on the business location in ${city}.`, citationIds: ["dti-registration"] });
+  if (rdo) reasons.push({ text: `${rdo.name} covers the selected business area; BIR uses the business address, or a professional’s residence when there is no separate workplace.`, citationIds: ["bir-newbizreg", "bir-rdo-directory"] });
+  if (rdo && existingRdo && !existingRdo.includes(String(Number(rdo.code)))) reasons.push({ text: `Your existing record shows ${existingRdo}. Because this business uses a different jurisdiction, BIR should confirm whether an update is needed.`, citationIds: ["bir-newbizreg"] });
+  if (flags.includes("food-manufacturing")) reasons.push({ text: "Packaged or processed food may also need FDA review.", citationIds: ["fda-food-lto"] });
+  if (flags.includes("physical-premises")) reasons.push({ text: "A physical workplace can add fire-safety and local permit checks.", citationIds: ["bfp-fsic"] });
   return reasons.slice(0, 4);
 }

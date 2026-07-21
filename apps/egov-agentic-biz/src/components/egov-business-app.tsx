@@ -19,6 +19,7 @@ import {
   FirstAid,
   House,
   IdentificationCard,
+  LinkSimple,
   Laptop,
   MapPin,
   MegaphoneSimple,
@@ -292,7 +293,7 @@ function answerRecord(question: IntakeQuestion, value: Answer): IntakeAnswer {
   };
 }
 
-function IntakeScreen({ initialQuestion, prompt, city, onBack, onComplete }: { initialQuestion: IntakeQuestion; prompt: string; city: string; onBack: () => void; onComplete: (plan: BusinessPlan) => void }) {
+function IntakeScreen({ initialQuestion, prompt, profile, onBack, onComplete }: { initialQuestion: IntakeQuestion; prompt: string; profile: CitizenProfile | null; onBack: () => void; onComplete: (plan: BusinessPlan) => void }) {
   const [questions, setQuestions] = useState<IntakeQuestion[]>([initialQuestion]);
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, Answer>>({});
@@ -309,7 +310,7 @@ function IntakeScreen({ initialQuestion, prompt, city, onBack, onComplete }: { i
       const response = await fetch("/api/agent/questions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, city, answers: history }),
+        body: JSON.stringify({ prompt, profileCity: profile?.city, profileBarangay: profile?.barangay, profileRdo: profile?.rdo, answers: history }),
       });
       if (!response.ok) throw new Error("Could not continue");
       const decision = (await response.json()) as QuestionDecision;
@@ -407,10 +408,13 @@ function PlanScreen({ profile, plan, onHome }: { profile: CitizenProfile | null;
           status: "ready" as const,
           title: "Register as self-employed",
           description: "Register your professional activity under your individual TIN.",
+          location: plan.rdo?.name ?? "BIR office for your address",
         }))
       : mockActions.map((action, index) => ({
           ...action,
           description: action.id === "dti" ? `Register ${plan.businessLabel} as a sole proprietorship.` : action.description,
+          agency: action.agency.includes("Makati") ? `${plan.city} LGU` : action.agency,
+          location: action.id === "bir" ? plan.rdo?.name ?? "BIR office for your address" : action.location.replaceAll("Makati", plan.city).replaceAll("Poblacion Barangay Hall", `${plan.city} barangay office`),
           status: index === 1 && completed.includes("dti") ? "ready" as const : action.status,
         }));
     const extraActions: RegistrationAction[] = agencyChecks
@@ -436,7 +440,7 @@ function PlanScreen({ profile, plan, onHome }: { profile: CitizenProfile | null;
 
   return (
     <div className="screen plan-screen">
-      <StatusBar /><Header title="Your business plan" onBack={onHome} profile={profile} />
+      <StatusBar /><Header title="Quick start plan" onBack={onHome} profile={profile} />
       <div className="plan-scroll" id="app-content">
         <section className="agent-summary">
           <span className="agent-avatar"><Sparkle weight="fill" /></span>
@@ -444,6 +448,11 @@ function PlanScreen({ profile, plan, onHome }: { profile: CitizenProfile | null;
         </section>
         <div className="plan-title"><h1>Ready, {profile?.firstName ?? "Mara"}.</h1><p>Complete these steps in order.</p></div>
         <div className="plan-chips"><span><Storefront /> {plan.registrationType}</span><span><MapPin /> {plan.city}</span><span><Users /> {plan.people} {plan.people === 1 ? "person" : "people"}</span></div>
+        <section className="plan-reason"><h2>Why this path</h2>{plan.rationale.map((reason) => {
+          const source = plan.citations.find((citation) => reason.citationIds.includes(citation.id));
+          return <div key={reason.text}><p><CheckCircle weight="fill" />{reason.text}</p>{source && <a href={source.url} target="_blank" rel="noreferrer"><LinkSimple /> {source.agency}</a>}</div>;
+        })}</section>
+        {plan.rdo && <section className="rdo-card"><small>BIR OFFICE</small><strong>{plan.rdo.name}</strong><p>Your existing record: {profile?.rdo ?? "Not available"}</p></section>}
 
         <section className="action-list">
           {actions.map((action, index) => {
@@ -462,6 +471,7 @@ function PlanScreen({ profile, plan, onHome }: { profile: CitizenProfile | null;
           })}
         </section>
         <section className="requirements-overview"><span><DownloadSimple /></span><div><small>YOUR REQUIREMENTS</small><strong>5 documents found in eGovPH</strong><p>2 more will be created as you complete the plan.</p></div><CaretDown /></section>
+        <section className="plan-sources"><h2>Official sources</h2>{plan.citations.map((citation) => <a href={citation.url} target="_blank" rel="noreferrer" key={`${citation.id}-${citation.url}`}><span><strong>{citation.title}</strong><small>{citation.agency}</small></span><LinkSimple /></a>)}</section>
         <p className="prototype-note">Demo only. Check final fees with the agency.</p>
       </div>
       {selected && <ActionSheet action={selected} profile={profile} completed={completed.includes(selected.id)} onClose={() => setSelected(null)} onComplete={() => complete(selected)} />}
@@ -483,7 +493,7 @@ export function EgaphBusinessApp() {
   async function startIntake(value: string) {
     setPrompt(value); setLoadingQuestions(true); setScreen("intake");
     try {
-      const response = await fetch("/api/agent/questions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: value, city: profile?.city ?? "Makati City" }) });
+      const response = await fetch("/api/agent/questions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: value, profileCity: profile?.city, profileBarangay: profile?.barangay, profileRdo: profile?.rdo }) });
       if (!response.ok) throw new Error("Could not start");
       const decision = (await response.json()) as QuestionDecision;
       if (decision.status === "ready") {
@@ -516,7 +526,7 @@ export function EgaphBusinessApp() {
       <div className="phone-shell">
         {screen === "home" && <HomeScreen profile={profile} onBusiness={() => setScreen("business")} />}
         {screen === "business" && <BusinessLanding profile={profile} businesses={businesses} businessesLoading={businessesLoading} initialPrompt={prompt} onBack={() => setScreen("home")} onSubmit={startIntake} />}
-        {screen === "intake" && (loadingQuestions || !firstQuestion ? <LoadingIntake /> : <IntakeScreen initialQuestion={firstQuestion} prompt={prompt} city={profile?.city ?? "Makati City"} onBack={() => setScreen("business")} onComplete={(nextPlan) => { setPlan(nextPlan); setScreen("plan"); }} />)}
+        {screen === "intake" && (loadingQuestions || !firstQuestion ? <LoadingIntake /> : <IntakeScreen initialQuestion={firstQuestion} prompt={prompt} profile={profile} onBack={() => setScreen("business")} onComplete={(nextPlan) => { setPlan(nextPlan); setScreen("plan"); }} />)}
         {screen === "plan" && plan && <PlanScreen profile={profile} plan={plan} onHome={() => setScreen("business")} />}
       </div>
     </div>

@@ -1,7 +1,16 @@
-import { createGateway, generateObject } from "ai";
+import { createMCPClient } from "@ai-sdk/mcp";
+import { createGateway, generateObject, generateText, stepCountIs } from "ai";
 import { z } from "zod";
-import { fallbackQuestionFor, inferCategory } from "@/lib/business-rules";
-import type { IntakeAnswer } from "@/lib/questions";
+import { fallbackQuestionFor, inferCategory, type RegulatoryFlag } from "@/lib/business-rules";
+import {
+  buildRationale,
+  citationsForPlan,
+  locationQuestion,
+  resolveBusinessLocation,
+  selectRdo,
+} from "@/lib/government-data";
+import type { BusinessPlan, IntakeAnswer } from "@/lib/questions";
+import type { PlanCitation } from "@/lib/questions";
 
 export const dynamic = "force-dynamic";
 
@@ -25,133 +34,176 @@ const questionSchema = z.object({
   maximum: z.number().optional(),
 });
 
-const planSchema = z.object({
+const generatedPlanSchema = z.object({
   businessLabel: z.string(),
   registrationType: z.enum(["Sole proprietor", "Self-employed", "Company", "Needs review"]),
-  city: z.string(),
   setup: z.array(z.string()).max(4),
   people: z.number().int().min(1),
   category: z.enum(["professional-services", "retail", "food-service", "food-manufacturing", "vehicle-rental", "general-services"]),
   flags: z.array(z.enum(["food", "food-manufacturing", "physical-premises", "vehicles", "employees"])),
 });
 
-// A flat shape is more reliable across Gateway models than a JSON Schema union.
 const responseSchema = z.object({
   status: z.enum(["question", "ready"]),
   question: questionSchema.nullable(),
-  plan: planSchema.nullable(),
+  plan: generatedPlanSchema.nullable(),
 });
 
+type GeneratedPlan = z.infer<typeof generatedPlanSchema>;
 type RequestBody = {
   prompt?: string;
+  profileCity?: string;
   city?: string;
+  profileBarangay?: string;
+  profileRdo?: string;
   answers?: IntakeAnswer[];
 };
 
-function fallbackDecision(prompt: string, city: string, answers: IntakeAnswer[]) {
+async function researchWithExa(plan: GeneratedPlan, city: string) {
+  let client: Awaited<ReturnType<typeof createMCPClient>> | null = null;
+  try {
+    client = await createMCPClient({
+      transport: {
+        type: "http",
+        url: "https://mcp.exa.ai/mcp?tools=web_search_exa",
+        redirect: "follow",
+        ...(process.env.EXA_API_KEY ? { headers: { "x-api-key": process.env.EXA_API_KEY } } : {}),
+      },
+    });
+    const tools = await client.tools({
+      schemas: {
+        web_search_exa: {
+          inputSchema: z.object({
+            query: z.string(),
+            numResults: z.number().optional(),
+          }),
+        },
+      },
+    });
+    const result = await generateText({
+      model: createGateway({ apiKey: process.env.AI_GATEWAY_API_KEY }).chat(process.env.CHAT_MODEL ?? "google/gemini-2.5-flash-lite"),
+      tools,
+      toolChoice: { type: "tool", toolName: "web_search_exa" },
+      stopWhen: stepCountIs(2),
+      timeout: { totalMs: 12_000, toolMs: 8_000 },
+      system: "Use Exa to find current official Philippine government sources. Search only for evidence; never provide citizen-facing prose.",
+      prompt: `Find official Philippine government pages supporting the registration route for a ${plan.registrationType} ${plan.category} business in ${city}. Include BIR RDO jurisdiction and relevant DTI or SEC, LGU, FDA, BFP, LTO, or employer requirements. Prefer .gov.ph sources.`,
+    });
+    const strings: string[] = [];
+    const visit = (value: unknown) => {
+      if (typeof value === "string") strings.push(value);
+      else if (Array.isArray(value)) value.forEach(visit);
+      else if (value && typeof value === "object") Object.values(value).forEach(visit);
+    };
+    visit(result.steps.flatMap((step) => step.toolResults));
+    const citations: PlanCitation[] = [];
+    for (const text of strings) {
+      for (const match of text.matchAll(/Title:\s*(.+?)\nURL:\s*(https?:\/\/[^\s]+)/g)) {
+        const title = match[1].trim();
+        const url = match[2].trim();
+        if (!/\.gov\.ph\b|bir\.gov\.ph\b|bfp\.gov\.ph\b/i.test(url)) continue;
+        const host = new URL(url).hostname.replace(/^www\./, "");
+        citations.push({ id: `exa-${citations.length + 1}`, title, agency: host, url, note: "Official source found for this plan." });
+      }
+    }
+    return citations.filter((citation, index) => citations.findIndex((item) => item.url === citation.url) === index).slice(0, 5);
+  } catch (error) {
+    console.warn("Exa MCP research unavailable", error);
+    return [] as PlanCitation[];
+  } finally {
+    await client?.close();
+  }
+}
+
+function enrichPlan(generated: GeneratedPlan, body: RequestBody, answers: IntakeAnswer[]): BusinessPlan {
+  const profileCity = body.profileCity ?? body.city ?? "Philippines";
+  const location = resolveBusinessLocation(body.prompt ?? "", profileCity, answers);
+  const rdo = selectRdo(location, answers, `${body.prompt ?? ""} ${body.profileBarangay ?? ""}`);
+  const flags = [...new Set([...inferCategory(body.prompt ?? "").flags, ...generated.flags])] as RegulatoryFlag[];
+  return {
+    ...generated,
+    city: location.city,
+    flags,
+    rdo,
+    rationale: buildRationale(generated.registrationType, generated.category, location.city, rdo, flags, body.profileRdo),
+    citations: citationsForPlan(generated.registrationType, flags),
+  };
+}
+
+function fallbackDecision(body: RequestBody, answers: IntakeAnswer[]) {
+  const prompt = body.prompt ?? "";
+  const profileCity = body.profileCity ?? body.city ?? "Philippines";
+  const location = resolveBusinessLocation(prompt, profileCity, answers);
+  const rdo = selectRdo(location, answers, `${prompt} ${body.profileBarangay ?? ""}`);
+  if (!rdo && location.rdos.length > 1) {
+    return { status: "question" as const, question: locationQuestion(location.city, location.rdos), source: "catalog" };
+  }
   const inferred = inferCategory(prompt);
-  if (answers.length < 2) {
-    return { status: "question" as const, question: fallbackQuestionFor(prompt, answers.length), source: "prototype-fallback" };
+  if (answers.filter((answer) => answer.questionId !== "business-area").length < 2) {
+    return { status: "question" as const, question: fallbackQuestionFor(prompt, answers.filter((answer) => answer.questionId !== "business-area").length), source: "prototype-fallback" };
   }
   const labels = answers.flatMap((answer) => answer.labels);
   const hasEmployees = labels.some((label) => /yes|employee|worker/i.test(label) && !/no /i.test(label));
   const hasPremises = labels.some((label) => /shop|office|commercial/i.test(label));
-  return {
-    status: "ready" as const,
-    plan: {
-      businessLabel: inferred.category === "professional-services" ? "Professional services" : inferred.category === "vehicle-rental" ? "Vehicle rental business" : inferred.category.startsWith("food") ? "Food business" : "New business",
-      registrationType: inferred.category === "professional-services" ? "Self-employed" as const : "Sole proprietor" as const,
-      city,
-      setup: labels.slice(0, 4),
-      people: hasEmployees ? 2 : 1,
-      category: inferred.category,
-      flags: [...inferred.flags, ...(hasPremises ? ["physical-premises" as const] : []), ...(hasEmployees ? ["employees" as const] : [])],
-    },
-    source: "prototype-fallback",
+  const flags = [...new Set([...inferred.flags, ...(hasPremises ? ["physical-premises" as const] : []), ...(hasEmployees ? ["employees" as const] : [])])];
+  const generated: GeneratedPlan = {
+    businessLabel: inferred.category === "professional-services" ? "Professional services" : inferred.category === "vehicle-rental" ? "Vehicle rental business" : inferred.category.startsWith("food") ? "Food business" : "New business",
+    registrationType: inferred.category === "professional-services" ? "Self-employed" : "Sole proprietor",
+    setup: labels.slice(0, 4),
+    people: hasEmployees ? 2 : 1,
+    category: inferred.category,
+    flags,
   };
+  return { status: "ready" as const, plan: enrichPlan(generated, body, answers), source: "prototype-fallback" };
 }
 
 export async function POST(request: Request) {
   const body = (await request.json()) as RequestBody;
   const prompt = body.prompt?.trim();
   const answers = Array.isArray(body.answers) ? body.answers.slice(0, 6) : [];
+  if (!prompt) return Response.json({ error: "prompt is required" }, { status: 400 });
+  body.prompt = prompt;
 
-  if (!prompt) {
-    return Response.json({ error: "prompt is required" }, { status: 400 });
+  const profileCity = body.profileCity ?? body.city ?? "Philippines";
+  const location = resolveBusinessLocation(prompt, profileCity, answers);
+  const selectedRdo = selectRdo(location, answers, `${prompt} ${body.profileBarangay ?? ""}`);
+  if (!selectedRdo && location.rdos.length > 1) {
+    return Response.json({ status: "question", question: locationQuestion(location.city, location.rdos), source: "catalog" });
   }
+  if (!process.env.AI_GATEWAY_API_KEY || answers.length >= 6) return Response.json(fallbackDecision(body, answers));
 
   const inferred = inferCategory(prompt);
-
-  if (answers.length >= 6) {
-    return Response.json({
-      status: "ready",
-      plan: { businessLabel: "New business", registrationType: "Needs review", city: body.city ?? "Philippines", setup: [], people: 1, category: "general-services", flags: [] },
-      source: "limit",
-    });
-  }
-
-  if (!process.env.AI_GATEWAY_API_KEY) {
-    return Response.json(fallbackDecision(prompt, body.city ?? "Philippines", answers));
-  }
-
   try {
-    const gateway = createGateway({ apiKey: process.env.AI_GATEWAY_API_KEY });
-    const model = gateway.chat(process.env.CHAT_MODEL ?? "google/gemini-2.5-flash-lite");
     const result = await generateObject({
-      model,
+      model: createGateway({ apiKey: process.env.AI_GATEWAY_API_KEY }).chat(process.env.CHAT_MODEL ?? "google/gemini-2.5-flash-lite"),
       schema: responseSchema,
-      system: `You guide Filipino citizens through business registration.
+      system: `You guide Filipino citizens through Philippine business registration. Ask exactly one useful question or return ready.
 
-Decide whether you have enough information to prepare the correct government path. If not, ask exactly one next-best question. After the citizen answers, you will receive the full history and reassess.
+Infer the route from the activity. Independent professional work under the person's own name is usually Self-employed. A one-owner product, food, subscription, rental, or trade-name business is usually a Sole proprietor. Partnerships and corporations use Company. Never ask users to classify themselves when the activity is clear.
 
-You usually need to know:
-- what they will sell or do;
-- whether they will operate alone, freelance under their name, or have partners;
-- where and how they will operate, only when it affects permits;
-- whether they will hire workers;
-- regulated activities, expected income, or timing only when relevant.
+The resolved business city is ${location.city}; it came from the ${location.source}. An explicit city in the business description overrides the profile city. The applicable tax office is based on BIR jurisdiction, not physical distance. Do not ask about the RDO; the service has resolved it separately.
 
-Classification rules:
-- Infer the likely route from the activity. Do not ask the citizen whether they are a sole proprietor or self-employed when the description makes it clear.
-- A person offering independent professional services under their own name is usually Self-employed.
-- A person selling goods, food, subscriptions, rentals, or operating under a trade name alone is usually a Sole proprietor.
-- If one person says “I want to start” a product or rental business and does not mention partners, use Sole proprietor. Do not ask them to choose a structure.
-- Partners or a separate legal entity may require Company or Needs review.
-- Coffee subscriptions and product businesses are not freelance professional work.
-- Flag food for prepared or handled food; food-manufacturing for packaged, bottled, processed, or manufactured food; vehicles for car or vehicle rental; physical-premises for shops, offices, kitchens, or customer locations; employees when workers will be hired.
-- For vehicle rental, distinguish self-drive from rental with driver because transport requirements may differ.
-- For food, clarify where and by whom it is prepared if not clear.
-
-Rules:
-- Never ask for information already clear from the initial statement, profile city, or earlier answers.
-- Ask only questions that can change requirements, tax registration, permits, or the recommended route.
-- Prefer single-choice or multi-select. Use number only when a number matters. Use text only when choices would be misleading.
-- Keep the title under 12 words and help text to one short sentence.
-- Use plain language. Do not mention AI, schemas, tools, APIs, or internal reasoning.
-- Never ask for a TIN or another sensitive identifier.
-- Use distinct lowercase kebab-case question IDs so no topic repeats.
-- Return ready as soon as the essentials are clear. Do not ask more than needed.
-- When ready, summarize only facts supported by the description and answers. Use a plain descriptive businessLabel if no name was given.
-- Always return status, question, and plan. For a question, set plan to null. When ready, set question to null.
-
-The citizen profile city is ${body.city ?? "not confirmed"}.`,
-      prompt: `Business description: ${prompt}\nLikely activity category from the service catalog: ${inferred.category}\nRelevant catalog flags already detected: ${inferred.flags.join(", ") || "none"}\n\nQuestions already answered:\n${answers.length ? JSON.stringify(answers, null, 2) : "None yet"}`,
+Ask only facts that can change registration, permits, tax treatment, or regulated-agency checks. For vehicle rental, distinguish self-drive from rental with a driver. For food, clarify where and by whom it is prepared. Do not repeat answered facts. Keep titles under 12 words and help text to one short sentence. Never ask for a TIN. Return ready as soon as essentials are clear. Always return status, question, and plan; set the unused field to null.`,
+      prompt: `Business description: ${prompt}\nCatalog category: ${inferred.category}\nCatalog flags: ${inferred.flags.join(", ") || "none"}\nAnswers: ${answers.length ? JSON.stringify(answers) : "None"}`,
     });
 
     if (result.object.status === "question" && result.object.question) {
-      const asksForObviousStructure = /structure|sole proprietor|self-employed|freelance or business|type of registration|owned by one person|one person or multiple|how many owners|who will own|alone or with partners|operating.*partners/i.test(result.object.question.title);
+      const asksForObviousStructure = /structure|sole proprietor|self-employed|type of registration|owned by one person|one person or multiple|how many owners|who will own|alone or with partners|operating.*partners/i.test(result.object.question.title);
       const partnerIsUnclear = /partner|co-owner|corporation|company with/i.test(prompt);
-      if (asksForObviousStructure && !partnerIsUnclear && inferred.category !== "general-services") {
-        return Response.json({ status: "question", question: fallbackQuestionFor(prompt, answers.length), source: "catalog" });
-      }
+      if (asksForObviousStructure && !partnerIsUnclear && inferred.category !== "general-services") return Response.json(fallbackDecision(body, answers));
       return Response.json({ status: "question", question: result.object.question, source: "vercel-ai-gateway" });
     }
     if (result.object.status === "ready" && result.object.plan) {
-      return Response.json({ status: "ready", plan: result.object.plan, source: "vercel-ai-gateway" });
+      const plan = enrichPlan(result.object.plan, body, answers);
+      const researchedSources = await researchWithExa(result.object.plan, plan.city);
+      plan.citations = [...plan.citations, ...researchedSources]
+        .filter((citation, index, all) => all.findIndex((item) => item.url === citation.url) === index)
+        .slice(0, 8);
+      return Response.json({ status: "ready", plan, source: "vercel-ai-gateway", research: { provider: "exa-mcp", officialSourcesFound: researchedSources.length } });
     }
     throw new Error("Gateway returned an incomplete decision");
   } catch (error) {
-    console.error("AI Gateway question generation failed", error);
-    return Response.json(fallbackDecision(prompt, body.city ?? "Philippines", answers));
+    console.error("Question generation failed", error);
+    return Response.json(fallbackDecision(body, answers));
   }
 }

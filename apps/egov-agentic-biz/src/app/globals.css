@@ -223,6 +223,27 @@ button:focus-visible, textarea:focus-visible, input:focus-visible, a:focus-visib
 .plan-chips { display: flex; gap: 6px; overflow: auto; padding: 0 1px 19px; scrollbar-width: none; }
 .plan-chips span { flex: none; display: flex; align-items: center; gap: 5px; padding: 8px 11px; border: 1px solid var(--line); border-radius: 99px; background: #fff; font-size: 13px; color: #4b566a; }
 .plan-chips svg { width: 12px; color: var(--blue); }
+.plan-reason, .rdo-card, .plan-sources { margin: 0 0 18px 35px; border: 1px solid var(--line); border-radius: 16px; background: #fff; padding: 14px; }
+.plan-reason h2, .plan-sources h2 { margin: 0 0 10px; font-size: 16px; }
+.plan-reason p { display: grid; grid-template-columns: 17px 1fr; gap: 8px; margin: 8px 0; color: var(--muted); font-size: 14px; line-height: 1.45; }
+.plan-reason p svg { width: 17px; color: var(--blue); margin-top: 2px; }
+.plan-reason > div { padding: 7px 0; border-top: 1px solid #edf0f5; }
+.plan-reason > div:first-of-type { border-top: 0; padding-top: 0; }
+.plan-reason > div p { margin: 0; }
+.plan-reason > div a { display: inline-flex; align-items: center; gap: 4px; margin: 5px 0 0 25px; color: var(--blue); font-size: 12px; font-weight: 700; text-decoration: none; }
+.plan-reason > div a svg { width: 13px; }
+.rdo-card { background: #f7f9fe; }
+.rdo-card small { display: block; color: var(--blue); font-size: 10px; font-weight: 800; letter-spacing: 1px; }
+.rdo-card strong { display: block; margin: 5px 0; font-size: 15px; }
+.rdo-card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
+.plan-sources { display: flex; flex-direction: column; gap: 3px; }
+.plan-sources a { display: flex; justify-content: space-between; align-items: center; gap: 10px; border-top: 1px solid #edf0f5; padding: 10px 0; color: var(--ink); text-decoration: none; }
+.plan-sources a:first-of-type { border-top: 0; }
+.plan-sources a span { min-width: 0; }
+.plan-sources a strong, .plan-sources a small { display: block; overflow-wrap: anywhere; }
+.plan-sources a strong { font-size: 14px; line-height: 1.35; }
+.plan-sources a small { margin-top: 3px; color: var(--muted); font-size: 11px; }
+.plan-sources a > svg { flex: 0 0 auto; width: 17px; color: var(--blue); }
 .action-list { display: flex; flex-direction: column; }
 .action-list article { display: grid; grid-template-columns: 31px 1fr; align-items: stretch; position: relative; }
 .step-rail { display: flex; flex-direction: column; align-items: center; }
