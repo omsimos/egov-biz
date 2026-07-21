@@ -20,6 +20,9 @@
     "packages/transcript-scraper": {
       "name": "@repo/transcript-scraper",
       "version": "0.0.0",
+      "devDependencies": {
+        "typescript": "7.0.2",
+      },
     },
   },
   "packages": {

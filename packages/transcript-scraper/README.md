@@ -1,18 +1,22 @@
-# YouTube Transcript Client
+# Transcript Scraper
 
-A minimal dependency-free web client for extracting the transcript exposed by a
-public YouTube video. It previews timestamped segments and downloads SRT or JSON.
+A dependency-free TypeScript package for extracting the transcript exposed by a
+public YouTube video.
 
-## Run
+## Usage
 
-Requires Node.js 20 or newer.
+```ts
+import { extractTranscript } from "@repo/transcript-scraper";
 
-```sh
-bun run start
+const transcript = await extractTranscript("https://www.youtube.com/watch?v=VIDEO_ID");
+
+console.log(transcript.segments);
+console.log(transcript.srt);
 ```
 
-Open <http://127.0.0.1:4173>, paste a YouTube URL, and select **Extract
-transcript**.
+The result includes the video metadata, timestamped segments, and an SRT string.
+Pass an `AbortSignal`, timeout, or custom `fetch` implementation through the
+optional second argument.
 
 ## Test
 
