@@ -16,7 +16,13 @@ export type BusinessPlan = {
   city: string;
   setup: string[];
   people: number;
-  category: "professional-services" | "retail" | "food-service" | "food-manufacturing" | "vehicle-rental" | "general-services";
+  category:
+    | "professional-services"
+    | "retail"
+    | "food-service"
+    | "food-manufacturing"
+    | "vehicle-rental"
+    | "general-services";
   flags: ("food" | "food-manufacturing" | "physical-premises" | "vehicles" | "employees")[];
   rdo: RdoSelection | null;
   rationale: PlanReason[];
@@ -67,9 +73,24 @@ export const deterministicQuestions: IntakeQuestion[] = [
     helpText: "Choose the closest match.",
     type: "single",
     options: [
-      { id: "sole", label: "A small business", description: "I’ll own and run it myself", icon: "store" },
-      { id: "freelance", label: "Freelance work", description: "I provide services under my name", icon: "laptop" },
-      { id: "corporation", label: "A company with partners", description: "A corporation or partnership", icon: "coffee" },
+      {
+        id: "sole",
+        label: "A small business",
+        description: "I’ll own and run it myself",
+        icon: "store",
+      },
+      {
+        id: "freelance",
+        label: "Freelance work",
+        description: "I provide services under my name",
+        icon: "laptop",
+      },
+      {
+        id: "corporation",
+        label: "A company with partners",
+        description: "A corporation or partnership",
+        icon: "coffee",
+      },
     ],
   },
   {
@@ -79,10 +100,30 @@ export const deterministicQuestions: IntakeQuestion[] = [
     helpText: "Choose all that apply.",
     type: "multi",
     options: [
-      { id: "online", label: "Sell online", description: "Orders through a website or social media", icon: "laptop" },
-      { id: "home", label: "Work from home", description: "Pack subscriptions at my home address", icon: "home" },
-      { id: "storefront", label: "Open a physical shop", description: "Customers can visit a location", icon: "store" },
-      { id: "delivery", label: "Deliver within Metro Manila", description: "Use couriers or deliver directly", icon: "pin" },
+      {
+        id: "online",
+        label: "Sell online",
+        description: "Orders through a website or social media",
+        icon: "laptop",
+      },
+      {
+        id: "home",
+        label: "Work from home",
+        description: "Pack subscriptions at my home address",
+        icon: "home",
+      },
+      {
+        id: "storefront",
+        label: "Open a physical shop",
+        description: "Customers can visit a location",
+        icon: "store",
+      },
+      {
+        id: "delivery",
+        label: "Deliver within Metro Manila",
+        description: "Use couriers or deliver directly",
+        icon: "pin",
+      },
     ],
   },
   {

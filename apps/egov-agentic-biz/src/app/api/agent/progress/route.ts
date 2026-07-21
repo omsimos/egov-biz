@@ -7,12 +7,17 @@ export const dynamic = "force-dynamic";
 const requestSchema = z.object({
   prompt: z.string().trim().min(1).max(2_000),
   profileCity: z.string().trim().max(120).optional(),
-  answers: z.array(z.object({
-    questionId: z.string().max(120),
-    question: z.string().max(500),
-    value: z.union([z.string(), z.array(z.string())]),
-    labels: z.array(z.string()),
-  })).max(6).default([]),
+  answers: z
+    .array(
+      z.object({
+        questionId: z.string().max(120),
+        question: z.string().max(500),
+        value: z.union([z.string(), z.array(z.string())]),
+        labels: z.array(z.string()),
+      }),
+    )
+    .max(6)
+    .default([]),
 });
 
 type ProgressEvent =
@@ -63,7 +68,8 @@ Make the update specific to the supplied business and latest answer. Use plain l
           const searchDecision = await generateObject({
             model,
             schema: z.object({ query: z.string().min(8).max(140) }),
-            system: "Write one precise Exa web-search query for current official Philippine government evidence relevant to this business-registration step. Prefer .gov.ph sources. Return only the structured query.",
+            system:
+              "Write one precise Exa web-search query for current official Philippine government evidence relevant to this business-registration step. Prefer .gov.ph sources. Return only the structured query.",
             prompt: `Business: ${prompt}\nBusiness city: ${profileCity ?? "not confirmed"}\nLatest answer: ${latest ? `${latest.question}: ${latest.labels.join(", ")}` : "none"}\nKnown answers: ${answers.map((answer) => `${answer.question}: ${answer.labels.join(", ")}`).join("; ") || "none"}`,
             abortSignal: request.signal,
           });
@@ -74,7 +80,9 @@ Make the update specific to the supplied business and latest answer. Use plain l
               type: "http",
               url: "https://mcp.exa.ai/mcp?tools=web_search_exa",
               redirect: "follow",
-              ...(process.env.EXA_API_KEY ? { headers: { "x-api-key": process.env.EXA_API_KEY } } : {}),
+              ...(process.env.EXA_API_KEY
+                ? { headers: { "x-api-key": process.env.EXA_API_KEY } }
+                : {}),
             },
           });
           send({ type: "tool_start", id, name: "web_search", query });

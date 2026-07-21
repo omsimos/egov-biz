@@ -1,0 +1,9 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "env": ["EGOVSSO_PARTNER_CODE"],
+      "outputs": [".next/**", "!.next/cache/**"]
+    }
+  }
+}

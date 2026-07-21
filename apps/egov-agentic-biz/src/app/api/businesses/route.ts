@@ -1,7 +1,19 @@
 import { NextResponse } from "next/server";
-import { mockBusinesses } from "@/lib/mock-data";
+import { readSession } from "@/lib/auth/session";
+import type { RegisteredBusiness } from "@/lib/citizen-profile";
 
-export async function GET() {
-  await new Promise((resolve) => setTimeout(resolve, 650));
-  return NextResponse.json({ data: mockBusinesses, mocked: true });
+export const dynamic = "force-dynamic";
+
+export async function GET(request: Request) {
+  if (!readSession(request)) {
+    return NextResponse.json(
+      { error: "Authentication required." },
+      { headers: { "Cache-Control": "no-store" }, status: 401 },
+    );
+  }
+
+  // eGov SSO authenticates the citizen profile; it does not return registered businesses.
+  // Keep this empty until an authoritative business-registry contract is integrated.
+  const businesses: RegisteredBusiness[] = [];
+  return NextResponse.json({ data: businesses }, { headers: { "Cache-Control": "no-store" } });
 }

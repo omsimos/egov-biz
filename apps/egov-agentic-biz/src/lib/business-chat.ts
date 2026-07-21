@@ -1,5 +1,5 @@
 import type { UIMessage } from "ai";
-import type { CitizenProfile } from "@/lib/mock-data";
+import type { CitizenProfile } from "@/lib/citizen-profile";
 import type { BusinessPlan, IntakeQuestion } from "@/lib/questions";
 
 export type DtiBusinessNameForm = {
@@ -29,8 +29,24 @@ export type AgentPlanStep = {
 export type RegistrationPlan = { title: string; steps: AgentPlanStep[] };
 export type UpdatePlanInput = RegistrationPlan & { note?: string };
 export type UpdatePlanOutput = { plan: RegistrationPlan };
+export type UserInfoOutput = {
+  availableFields: Array<
+    | "address"
+    | "barangay"
+    | "birthDate"
+    | "email"
+    | "fullName"
+    | "gender"
+    | "mobile"
+    | "municipality"
+    | "nationality"
+    | "province"
+  >;
+  source: "eGov SSO";
+};
 
 export type BusinessChatTools = {
+  user_info: { input: Record<string, never>; output: UserInfoOutput };
   askUser: { input: AskUserInput; output: AskUserOutput };
   webSearch: { input: WebSearchInput; output: WebSearchOutput };
   editDtiBusinessNameForm: { input: EditDtiInput; output: EditDtiOutput };

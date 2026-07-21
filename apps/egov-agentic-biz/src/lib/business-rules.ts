@@ -36,7 +36,8 @@ export const agencyChecks: AgencyCheck[] = [
     id: "fda",
     agency: "FDA Philippines",
     title: "Check FDA requirements",
-    description: "Packaged or manufactured food may need a License to Operate and product registration.",
+    description:
+      "Packaged or manufactured food may need a License to Operate and product registration.",
     appliesWhen: "food-manufacturing",
     note: "The exact FDA requirement depends on how the product is made, packed, and sold.",
     citationIds: ["fda-food-lto"],
@@ -45,7 +46,8 @@ export const agencyChecks: AgencyCheck[] = [
     id: "fire",
     agency: "Bureau of Fire Protection",
     title: "Get a fire safety certificate",
-    description: "Business permit applications for physical premises commonly require fire safety inspection.",
+    description:
+      "Business permit applications for physical premises commonly require fire safety inspection.",
     appliesWhen: "physical-premises",
     citationIds: ["bfp-fsic"],
   },
@@ -68,7 +70,10 @@ export const agencyChecks: AgencyCheck[] = [
   },
 ];
 
-export function inferCategory(prompt: string): { category: BusinessCategory; flags: RegulatoryFlag[] } {
+export function inferCategory(prompt: string): {
+  category: BusinessCategory;
+  flags: RegulatoryFlag[];
+} {
   const value = prompt.toLowerCase();
   if (/car rental|vehicle rental|rent.*car|rent.*vehicle/.test(value)) {
     return { category: "vehicle-rental", flags: ["vehicles"] };
@@ -80,7 +85,9 @@ export function inferCategory(prompt: string): { category: BusinessCategory; fla
       flags: manufacturing ? ["food", "food-manufacturing"] : ["food"],
     };
   }
-  if (/freelance|consult|designer|developer|writer|accountant|photograph|professional/.test(value)) {
+  if (
+    /freelance|consult|designer|developer|writer|accountant|photograph|professional/.test(value)
+  ) {
     return { category: "professional-services", flags: [] };
   }
   if (/shop|store|sell|retail|product/.test(value)) {
@@ -100,8 +107,18 @@ export function fallbackQuestionFor(prompt: string, answerCount: number) {
         helpText: "Choose the main service.",
         type: "single" as const,
         options: [
-          { id: "self-drive", label: "Self-drive rental", description: "Customers drive the vehicle", icon: "store" as const },
-          { id: "with-driver", label: "Rental with a driver", description: "You provide the driver", icon: "pin" as const },
+          {
+            id: "self-drive",
+            label: "Self-drive rental",
+            description: "Customers drive the vehicle",
+            icon: "store" as const,
+          },
+          {
+            id: "with-driver",
+            label: "Rental with a driver",
+            description: "You provide the driver",
+            icon: "pin" as const,
+          },
         ],
       };
     }

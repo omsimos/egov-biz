@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
-import { mockProfile } from "@/lib/mock-data";
+import { readSession } from "@/lib/auth/session";
 
-export async function GET() {
-  await new Promise((resolve) => setTimeout(resolve, 450));
-  return NextResponse.json({ data: mockProfile, mocked: true });
+export const dynamic = "force-dynamic";
+
+export async function GET(request: Request) {
+  const session = readSession(request);
+  if (!session) {
+    return NextResponse.json(
+      { error: "Authentication required." },
+      { headers: { "Cache-Control": "no-store" }, status: 401 },
+    );
+  }
+
+  return NextResponse.json({ data: session.profile }, { headers: { "Cache-Control": "no-store" } });
 }
