@@ -22,6 +22,7 @@ type BusinessRow = {
   tin_masked: string;
   records_json: string;
   tax_obligations_json: string;
+  files_json: string;
   finalized_at: string;
 };
 
@@ -42,6 +43,7 @@ function mapBusiness(row: BusinessRow): RegisteredBusiness {
     tinMasked: row.tin_masked,
     records: JSON.parse(row.records_json) as RegisteredBusiness["records"],
     taxObligations: JSON.parse(row.tax_obligations_json) as RegisteredBusiness["taxObligations"],
+    files: JSON.parse(row.files_json || "[]") as RegisteredBusiness["files"],
     finalizedAt: row.finalized_at,
   };
 }
@@ -59,8 +61,8 @@ export function upsertRegisteredBusiness(profileId: string, input: BusinessFinal
       INSERT INTO registered_businesses (
         id, conversation_id, profile_id, name, type, category, registration_number, status,
         owner_name, business_activity, business_address, city, rdo, tin_masked, records_json,
-        tax_obligations_json, finalized_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        tax_obligations_json, files_json, finalized_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(conversation_id) DO UPDATE SET
         profile_id = excluded.profile_id,
         name = excluded.name,
@@ -76,6 +78,7 @@ export function upsertRegisteredBusiness(profileId: string, input: BusinessFinal
         tin_masked = excluded.tin_masked,
         records_json = excluded.records_json,
         tax_obligations_json = excluded.tax_obligations_json,
+        files_json = excluded.files_json,
         finalized_at = excluded.finalized_at,
         updated_at = excluded.updated_at
     `)
@@ -96,6 +99,7 @@ export function upsertRegisteredBusiness(profileId: string, input: BusinessFinal
       input.tinMasked,
       JSON.stringify(input.records),
       JSON.stringify(input.taxObligations),
+      JSON.stringify(input.files),
       finalizedAt,
       now,
       now,

@@ -15,6 +15,18 @@ export type BusinessRecord = {
   demo: true;
 };
 
+export type BusinessFile = {
+  id: string;
+  title: string;
+  filename: string;
+  documentType: string;
+  status: "Generated" | "Demo only";
+  createdAt: string;
+  url: string | null;
+  note: string;
+  demo: true;
+};
+
 export type TaxObligation = {
   id: string;
   title: string;
@@ -43,6 +55,7 @@ export type RegisteredBusiness = {
   finalizedAt: string;
   records: BusinessRecord[];
   taxObligations: TaxObligation[];
+  files: BusinessFile[];
 };
 
 export type RegisteredBusinessListItem = Pick<

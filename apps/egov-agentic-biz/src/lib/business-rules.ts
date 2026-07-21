@@ -86,7 +86,7 @@ export function inferCategory(prompt: string): {
     };
   }
   if (
-    /freelance|consult|designer|developer|writer|accountant|photograph|professional|dentist|dental|doctor|physician|architect|lawyer|clinic/.test(
+    /freelanc(?:e|er|ing)|virtual assistant|\bva\b|consult|designer|developer|writer|accountant|photograph|professional|dentist|dental|doctor|physician|architect|lawyer|clinic/.test(
       value,
     )
   ) {

@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { EbplsBusinessPermitReceipt } from "@/lib/business-chat";
-import { buildMockCompliance, buildTaxObligations } from "@/lib/mock-compliance";
+import {
+  buildFinalSelfEmployedBusiness,
+  buildMockCompliance,
+  buildSelfEmployedMockCompliance,
+  buildTaxObligations,
+} from "@/lib/mock-compliance";
+import type { CitizenProfile } from "@/lib/citizen-profile";
 import type { BusinessPlan } from "@/lib/questions";
 
 const receipt: EbplsBusinessPermitReceipt = {
@@ -52,6 +58,43 @@ describe("buildMockCompliance", () => {
     expect(result.records.find(({ id }) => id === "sss-employer")?.status).toBe("Active");
     expect(result.taxObligations.length).toBe(4);
   });
+
+describe("self-employed demo completion", () => {
+  test("finalizes BIR and tax setup without inventing DTI or local permits", () => {
+    const professionalPlan: BusinessPlan = {
+      ...plan([], 1),
+      businessLabel: "Virtual assistant services",
+      registrationType: "Self-employed",
+      category: "professional-services",
+    };
+    const profile = {
+      id: "citizen-1",
+      fullName: "Juan Dela Cruz",
+      tinMasked: "***-***-123",
+      rdo: "RDO 54B",
+    } as CitizenProfile;
+    const compliance = buildSelfEmployedMockCompliance(
+      professionalPlan,
+      profile.fullName,
+      new Date("2026-07-22T00:00:00.000Z"),
+    );
+    const business = buildFinalSelfEmployedBusiness({
+      conversationId: "conversation-1",
+      profile,
+      plan: professionalPlan,
+      businessAddress: "123 Mabini Street, General Trias",
+      compliance,
+      files: [],
+    });
+
+    expect(business.records.map(({ id }) => id)).toEqual(
+      expect.arrayContaining(["bir-registration", "books-of-accounts", "invoice-setup"]),
+    );
+    expect(business.records.some(({ agency }) => /DTI|EBPLS/i.test(agency))).toBe(false);
+    expect(business.records.some(({ id }) => id === "barangay-clearance")).toBe(false);
+    expect(business.taxObligations.length).toBeGreaterThan(0);
+  });
+});
 
   test("records non-applicable sector and employer requirements without claiming approval", () => {
     const result = buildMockCompliance(plan([], 1), receipt, new Date("2026-07-22T00:00:00.000Z"));

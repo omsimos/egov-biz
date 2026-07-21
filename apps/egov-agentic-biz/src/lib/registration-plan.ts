@@ -81,6 +81,7 @@ export function completeRegistrationPlan(
     steps: plan.steps.map((step) => ({
       ...step,
       status:
+        step.status === "skipped" ||
         (step.id === "employer" && !applicability.employer) ||
         (step.id === "sector-permits" && !applicability.sectorPermits)
           ? ("skipped" as const)

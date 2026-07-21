@@ -258,6 +258,63 @@ export function buildMockCompliance(
   return { records, taxObligations: buildTaxObligations(now) };
 }
 
+export function buildSelfEmployedMockCompliance(
+  plan: BusinessPlan,
+  taxpayerName: string,
+  now = new Date(),
+): MockComplianceBundle {
+  const receipt: EbplsBusinessPermitReceipt = {
+    system: "EBPLS",
+    permitType: "New business permit",
+    businessName: taxpayerName,
+    ownerName: taxpayerName,
+    businessActivity: plan.businessLabel,
+    businessAddress: "Self-employed address confirmed during intake",
+    barangay: "Not applicable",
+    city: plan.city,
+    barangayClearanceReference: "Not applicable",
+    registrationDocument: "BIR Form 1901",
+    attachments: [],
+    status: "Permit issued",
+    referenceNumber: demoReference("SELF", `${taxpayerName}:${plan.city}`),
+    submittedAt: now.toISOString(),
+    issuedAt: now.toISOString(),
+    validUntil: null,
+    feeLabel: "Not applicable",
+    nextAction: "Set up books, invoices, and recurring tax filings",
+  };
+  return buildMockCompliance(plan, receipt, now);
+}
+
+export function buildFinalSelfEmployedBusiness(input: {
+  conversationId: string;
+  profile: CitizenProfile;
+  plan: BusinessPlan;
+  businessAddress: string;
+  compliance: MockComplianceBundle;
+  files: BusinessFinalizationInput["files"];
+}): BusinessFinalizationInput {
+  const { conversationId, profile, plan, businessAddress, compliance, files } = input;
+  const birRegistration = compliance.records.find((record) => record.id === "bir-registration");
+  return {
+    conversationId,
+    name: profile.fullName,
+    type: "Self-employed",
+    category: plan.category,
+    registrationNumber: birRegistration?.referenceNumber ?? demoReference("BIR", profile.id),
+    status: "Active",
+    ownerName: profile.fullName,
+    businessActivity: plan.businessLabel,
+    businessAddress,
+    city: plan.city,
+    rdo: plan.rdo ? `${plan.rdo.code} - ${plan.rdo.name}` : profile.rdo,
+    tinMasked: profile.tinMasked,
+    records: compliance.records,
+    taxObligations: compliance.taxObligations,
+    files,
+  };
+}
+
 export function buildFinalBusiness(input: {
   conversationId: string;
   profile: CitizenProfile;
@@ -329,5 +386,6 @@ export function buildFinalBusiness(input: {
     tinMasked: profile.tinMasked,
     records: [...baseRecords, ...compliance.records],
     taxObligations: compliance.taxObligations,
+    files: [],
   };
 }

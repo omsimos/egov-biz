@@ -63,7 +63,7 @@ function BusinessDetailScreen({
   onBack: () => void;
   profile: CitizenProfile;
 }) {
-  const [tab, setTab] = useState<"overview" | "records" | "calendar">("overview");
+  const [tab, setTab] = useState<"overview" | "records" | "files" | "calendar">("overview");
   return (
     <div className="screen business-detail-screen">
       <StatusBar />
@@ -95,7 +95,7 @@ function BusinessDetailScreen({
               </i>
             </section>
             <nav className="business-detail-tabs" aria-label="Business record sections">
-              {(["overview", "records", "calendar"] as const).map((item) => (
+              {(["overview", "records", "files", "calendar"] as const).map((item) => (
                 <button
                   className={tab === item ? "active" : ""}
                   key={item}
@@ -106,7 +106,9 @@ function BusinessDetailScreen({
                     ? "Overview"
                     : item === "records"
                       ? "Records"
-                      : "Tax calendar"}
+                      : item === "files"
+                        ? "Files"
+                        : "Tax calendar"}
                 </button>
               ))}
             </nav>
@@ -116,7 +118,7 @@ function BusinessDetailScreen({
                   <h2>Registration</h2>
                   <dl>
                     <div>
-                      <dt>Business permit</dt>
+                      <dt>Registration number</dt>
                       <dd>{business.registrationNumber}</dd>
                     </div>
                     <div>
@@ -156,6 +158,49 @@ function BusinessDetailScreen({
                   documents.
                 </p>
               </div>
+            )}
+            {tab === "files" && (
+              <section className="business-files-list">
+                <header>
+                  <div>
+                    <small>DOCUMENT VAULT</small>
+                    <h2>Business files</h2>
+                  </div>
+                  <span>{business.files.length} files</span>
+                </header>
+                {business.files.length === 0 ? (
+                  <div className="business-file-empty">
+                    <FileText weight="duotone" />
+                    <strong>No files saved yet</strong>
+                    <p>Generated registration and tax setup files will appear here.</p>
+                  </div>
+                ) : (
+                  business.files.map((file) => (
+                    <article className="business-file-card" key={file.id}>
+                      <span className="business-file-icon">
+                        <FileText weight="duotone" />
+                      </span>
+                      <div>
+                        <small>{file.documentType}</small>
+                        <strong>{file.title}</strong>
+                        <code>{file.filename}</code>
+                        <p>{file.note}</p>
+                        <time>{formatBusinessDate(file.createdAt)}</time>
+                      </div>
+                      <aside>
+                        <i className={file.status === "Demo only" ? "demo" : ""}>{file.status}</i>
+                        {file.url ? (
+                          <a href={file.url} target="_blank" rel="noreferrer">
+                            Open
+                          </a>
+                        ) : (
+                          <span>Demo record</span>
+                        )}
+                      </aside>
+                    </article>
+                  ))
+                )}
+              </section>
             )}
             {tab === "records" && (
               <section className="business-records-list">
@@ -301,10 +346,10 @@ export function BusinessLanding({
           <span className="secure-label">
             <ShieldCheck weight="fill" /> eGovPH
           </span>
-          <h2>Start a registration plan</h2>
+          <h2>Plan your business registration</h2>
           <p>
-            Describe your business once. We’ll map the full route and gather important details
-            together.
+            Tell us about your business, and we’ll guide you through the requirements, steps, and
+            details needed to register.
           </p>
         </section>
         <form className="prompt-box" onSubmit={submit}>

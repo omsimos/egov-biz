@@ -74,6 +74,16 @@ function textOf(message: BusinessChatMessage) {
     .join("");
 }
 
+function CompletionConfetti() {
+  return (
+    <div className="completion-confetti" aria-hidden="true">
+      {Array.from({ length: 40 }, (_, index) => (
+        <i key={index} />
+      ))}
+    </div>
+  );
+}
+
 function ComplianceResultCard({
   title,
   subtitle,
@@ -917,7 +927,7 @@ function ToolPart({
           <Storefront weight="duotone" />
         </span>
         <div>
-          <small>LINKED BUSINESS SAVED</small>
+          <small>ALL SET UP · DEMO COMPLETE</small>
           <strong>{part.output.businessName}</strong>
           <p>Open records and tax calendar</p>
         </div>
@@ -1231,6 +1241,12 @@ export function BusinessChatScreen({
     [localPaymentStatuses],
   );
   const latestPlan = latestRegistrationPlan(visibleMessages);
+  const registrationFinalized = visibleMessages.some((message) =>
+    message.parts.some(
+      (part) =>
+        part.type === "tool-finalizeBusinessRegistration" && part.state === "output-available",
+    ),
+  );
   const pending: PendingQuestion | null = (() => {
     for (const message of [...visibleMessages].reverse()) {
       for (const part of [...message.parts].reverse()) {
@@ -1325,6 +1341,7 @@ export function BusinessChatScreen({
 
   return (
     <div className="screen agent-chat-screen">
+      {registrationFinalized && <CompletionConfetti />}
       <StatusBar />
       <header className="chat-header">
         <button onClick={onBack} aria-label="Go back">

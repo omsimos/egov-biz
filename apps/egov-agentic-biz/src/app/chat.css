@@ -4,6 +4,108 @@
   grid-template-rows: 36px 62px minmax(0, 1fr) auto;
   background: #f4f6fa;
 }
+.completion-confetti {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 50;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.completion-confetti i {
+  --confetti-x: 10%;
+  --confetti-color: #155dc0;
+  position: absolute;
+  top: -8px;
+  left: var(--confetti-x);
+  width: 5px;
+  height: 9px;
+  border-radius: 1px;
+  background: var(--confetti-color);
+  opacity: 0;
+  animation: completion-confetti-fall 2.3s ease-out forwards;
+  animation-delay: calc(var(--confetti-order, 0) * 45ms);
+}
+.completion-confetti i:nth-child(4n + 1) {
+  --confetti-color: #f2b705;
+  transform: rotate(18deg);
+}
+.completion-confetti i:nth-child(4n + 2) {
+  --confetti-color: #df3d65;
+  transform: rotate(52deg);
+}
+.completion-confetti i:nth-child(4n + 3) {
+  --confetti-color: #2ca66f;
+  transform: rotate(88deg);
+}
+.completion-confetti i:nth-child(10n + 1) {
+  --confetti-x: 4%;
+  --confetti-order: 0;
+}
+.completion-confetti i:nth-child(10n + 2) {
+  --confetti-x: 13%;
+  --confetti-order: 5;
+}
+.completion-confetti i:nth-child(10n + 3) {
+  --confetti-x: 22%;
+  --confetti-order: 2;
+}
+.completion-confetti i:nth-child(10n + 4) {
+  --confetti-x: 31%;
+  --confetti-order: 8;
+}
+.completion-confetti i:nth-child(10n + 5) {
+  --confetti-x: 41%;
+  --confetti-order: 1;
+}
+.completion-confetti i:nth-child(10n + 6) {
+  --confetti-x: 51%;
+  --confetti-order: 6;
+}
+.completion-confetti i:nth-child(10n + 7) {
+  --confetti-x: 61%;
+  --confetti-order: 3;
+}
+.completion-confetti i:nth-child(10n + 8) {
+  --confetti-x: 71%;
+  --confetti-order: 9;
+}
+.completion-confetti i:nth-child(10n + 9) {
+  --confetti-x: 82%;
+  --confetti-order: 4;
+}
+.completion-confetti i:nth-child(10n) {
+  --confetti-x: 94%;
+  --confetti-order: 7;
+}
+.completion-confetti i:nth-child(n + 11):nth-child(-n + 20) {
+  top: -28px;
+}
+.completion-confetti i:nth-child(n + 21):nth-child(-n + 30) {
+  top: -48px;
+}
+.completion-confetti i:nth-child(n + 31) {
+  top: -68px;
+}
+@keyframes completion-confetti-fall {
+  0% {
+    opacity: 0;
+    translate: 0 -4px;
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    translate: 18px 780px;
+    rotate: 540deg;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .completion-confetti i {
+    animation: none;
+  }
+}
 
 .compliance-result-card,
 .business-finalized-card {
@@ -107,6 +209,7 @@
   font-weight: 700;
 }
 .business-finalized-card {
+  position: relative;
   display: grid;
   grid-template-columns: 40px 1fr 18px;
   gap: 11px;

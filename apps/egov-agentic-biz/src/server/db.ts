@@ -66,6 +66,7 @@ function initialize(database: Database.Database) {
       tin_masked TEXT NOT NULL,
       records_json TEXT NOT NULL,
       tax_obligations_json TEXT NOT NULL,
+      files_json TEXT NOT NULL DEFAULT '[]',
       finalized_at TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -88,6 +89,12 @@ function initialize(database: Database.Database) {
     database.exec(
       "ALTER TABLE payments ADD COLUMN service_type TEXT NOT NULL DEFAULT 'dti-business-name'",
     );
+  }
+  const businessColumns = database.prepare("PRAGMA table_info(registered_businesses)").all() as {
+    name: string;
+  }[];
+  if (!businessColumns.some(({ name }) => name === "files_json")) {
+    database.exec("ALTER TABLE registered_businesses ADD COLUMN files_json TEXT NOT NULL DEFAULT '[]'");
   }
   if (!paymentColumns.some(({ name }) => name === "service_reference")) {
     database.exec("ALTER TABLE payments ADD COLUMN service_reference TEXT");

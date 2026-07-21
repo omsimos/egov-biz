@@ -36,6 +36,28 @@ describe("normalizeRegistrationPlan", () => {
 
     expect(normalizeRegistrationPlan(plan)).toEqual(plan);
   });
+
+  test("does not turn explicitly inapplicable self-employed steps into completed steps", () => {
+    const result = completeRegistrationPlan(
+      {
+        title: "Self-employed registration",
+        steps: [
+          { id: "name-registration", label: "DTI", status: "skipped" },
+          { id: "business-permit", label: "Business permit", status: "skipped" },
+          { id: "bir", label: "BIR", status: "completed" },
+          { id: "tax-compliance", label: "Tax setup", status: "in_progress" },
+        ],
+      },
+      { employer: false, sectorPermits: false },
+    );
+
+    expect(result.steps.map((step) => step.status)).toEqual([
+      "skipped",
+      "skipped",
+      "completed",
+      "completed",
+    ]);
+  });
 });
 
 describe("completeRegistrationPlan", () => {

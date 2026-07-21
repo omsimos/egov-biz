@@ -49,7 +49,13 @@ import {
 } from "@/lib/form-prefill";
 import type { BusinessPlan, IntakeAnswer, IntakeQuestion } from "@/lib/questions";
 import { isValidChoiceAnswer } from "@/lib/intake-validation";
-import { buildFinalBusiness, buildMockCompliance } from "@/lib/mock-compliance";
+import {
+  buildFinalBusiness,
+  buildFinalSelfEmployedBusiness,
+  buildMockCompliance,
+  buildSelfEmployedMockCompliance,
+} from "@/lib/mock-compliance";
+import { describesBusinessIdea, isRegistrationStart } from "@/lib/registration-intent";
 import { getConversation, saveMessages, setActiveStream } from "@/server/conversations";
 import {
   getLatestPaymentForConversation,
@@ -71,6 +77,20 @@ const PLACEHOLDER_ANSWER =
 
 function normalizedAnswerText(value: string | string[]) {
   return (Array.isArray(value) ? value.join(" ") : value).trim().replace(/\s+/g, " ");
+}
+
+function birFormConsentQuestion(): IntakeQuestion {
+  return {
+    id: "self-employed-bir-form-consent",
+    eyebrow: "Your confirmation",
+    title: "Generate your prefilled BIR Form 1901 now?",
+    helpText: "The demo PDF will use verified fields from your authenticated eGov profile.",
+    type: "single",
+    options: [
+      { id: "yes", label: "Yes, generate it", description: "Create the prefilled PDF now" },
+      { id: "no", label: "No, not now", description: "Pause before generating the form" },
+    ],
+  };
 }
 
 function hasCompletedTool(messages: UIMessage[], type: string) {
@@ -301,18 +321,6 @@ function questionsForIncompleteDtiForm(
   return questions;
 }
 
-function describesBusinessIdea(prompt: string) {
-  const value = prompt.toLowerCase();
-  return (
-    /\b(business|company|shop|store|clinic|practice|restaurant|bakery|cafe|coffee|food|catering|dental|dentist|medical|doctor|consulting|consultant|freelance|designer|developer|photograph|accounting|retail|rental|salon|laundry|agency|sole propriet|corporation|partnership)\b/.test(
-      value,
-    ) ||
-    /\b(?:sell|selling|offer|offering|provide|providing)\b.{0,50}\b(?:service|services|product|products|food|drinks|online)\b/.test(
-      value,
-    )
-  );
-}
-
 function latestUserText(messages: UIMessage[]) {
   for (const message of [...messages].reverse()) {
     if (message.role !== "user") continue;
@@ -520,18 +528,6 @@ function proposedNameQuestion(): IntakeQuestion {
   };
 }
 
-function isRegistrationStart(prompt: string) {
-  const value = prompt.toLowerCase();
-  const action = /\b(start|open|launch|set\s*up|establish|register|formalize|apply|create)\b/.test(
-    value,
-  );
-  const subject =
-    /\b(business|company|shop|store|clinic|practice|restaurant|bakery|cafe|service|freelance|sole propriet|corporation|partnership|permit|registration)\b/.test(
-      value,
-    );
-  return action && subject;
-}
-
 function promptHasWorkSetup(prompt: string) {
   return /\b(home[- ]based|from home|at home|online|remote(?:ly)?|virtual|storefront|shop|office|clinic|commercial (?:space|unit|kitchen)|physical (?:shop|location|premises))\b/i.test(
     prompt,
@@ -690,6 +686,7 @@ function planForAnswers(
   hasSearched: boolean,
   hasForm: boolean,
   intakeReady?: boolean,
+  registrationType?: BusinessPlan["registrationType"],
 ) {
   const answerIds = new Set(answers.map((answer) => answer.questionId));
   const detailsComplete =
@@ -700,23 +697,26 @@ function planForAnswers(
     steps: initialRegistrationPlan.steps.map((step) => ({
       ...step,
       status:
-        step.id === "details"
-          ? detailsComplete
-            ? "completed"
-            : "in_progress"
-          : step.id === "structure"
-            ? hasSearched
+        registrationType === "Self-employed" &&
+        ["name-registration", "local-clearance", "business-permit"].includes(step.id)
+          ? "skipped"
+          : step.id === "details"
+            ? detailsComplete
               ? "completed"
-              : detailsComplete
-                ? "in_progress"
-                : "pending"
-            : step.id === "name-registration"
-              ? hasForm
-                ? "in_progress"
-                : hasSearched
+              : "in_progress"
+            : step.id === "structure"
+              ? hasSearched
+                ? "completed"
+                : detailsComplete
                   ? "in_progress"
                   : "pending"
-              : "pending",
+              : step.id === "name-registration"
+                ? hasForm
+                  ? "in_progress"
+                  : hasSearched
+                    ? "in_progress"
+                    : "pending"
+                : "pending",
     })),
   });
 }
@@ -1037,6 +1037,12 @@ export async function POST(request: Request) {
   const latestPrompt = latestUserText(messages) || parsed.data.initialPrompt;
   const answers = toolAnswers(messages);
   const invalidAnswers = invalidIntakeAnswerIds(messages);
+  const birFormConsent = answers.find(
+    (answer) => answer.questionId === "self-employed-bir-form-consent",
+  );
+  const birFormConsentValue = birFormConsent
+    ? normalizedAnswerText(birFormConsent.value).toLowerCase()
+    : null;
   const initialLocation = resolveBusinessLocation(prompt, profile?.city ?? "Philippines", answers);
   const preference = addressPreference(answers);
   const confirmedBusinessAddress =
@@ -1327,7 +1333,7 @@ export async function POST(request: Request) {
     });
   }
 
-  if (isExplicitBirFormRequest(latestPrompt))
+  if (isExplicitBirFormRequest(latestPrompt) || birFormConsentValue === "yes")
     return manualResponse(conversation.id, messages, async (writer) => {
       if (!hasUserInfo) emitTool(writer, "user_info", {}, userInfoOutput);
       const toolCallId = crypto.randomUUID();
@@ -1338,14 +1344,170 @@ export async function POST(request: Request) {
         input: {},
       });
 
-      let text: string;
       try {
         const output = {
           artifact: await createBirFormArtifact(request, session.rawProfile),
           source: "Authenticated eGov SSO profile" as const,
         };
         writer.write({ type: "tool-output-available", toolCallId, output });
-        text = "Your prefilled BIR Form 1901 is ready. Select the PDF to preview it.";
+
+        const plan = makePlan(prompt, profile, answers);
+        if (plan.registrationType === "Self-employed" && birFormConsentValue === "yes") {
+          const compliance = buildSelfEmployedMockCompliance(plan, profile.fullName);
+          const taxRecords = compliance.records.filter((record) => record.kind === "tax");
+          const booksAndInvoiceRecords = taxRecords.filter((record) =>
+            ["books-of-accounts", "invoice-setup"].includes(record.id),
+          );
+          const registrationTaxRecords = taxRecords.filter(
+            (record) => !booksAndInvoiceRecords.includes(record),
+          );
+          const birCompletedPlan = normalizeRegistrationPlan({
+            ...initialRegistrationPlan,
+            steps: initialRegistrationPlan.steps.map((step) => ({
+              ...step,
+              status: ["details", "structure", "bir"].includes(step.id)
+                ? ("completed" as const)
+                : ["name-registration", "local-clearance", "business-permit"].includes(step.id)
+                  ? ("skipped" as const)
+                  : step.id === "tax-compliance"
+                    ? ("in_progress" as const)
+                    : ("pending" as const),
+            })),
+          });
+          emitTool(
+            writer,
+            "updatePlan",
+            {
+              ...birCompletedPlan,
+              note: "BIR Form 1901 generated. Setting up books, invoices, and tax filings.",
+            },
+            { plan: birCompletedPlan },
+          );
+
+          await wait(COMPLIANCE_MOCK_DELAY_MS);
+          const booksToolId = crypto.randomUUID();
+          writer.write({
+            type: "tool-input-available",
+            toolCallId: booksToolId,
+            toolName: "setupBooksAndInvoices",
+            input: {},
+          });
+          await wait(COMPLIANCE_MOCK_DELAY_MS);
+          writer.write({
+            type: "tool-output-available",
+            toolCallId: booksToolId,
+            output: { records: booksAndInvoiceRecords },
+          });
+
+          await wait(COMPLIANCE_MOCK_DELAY_MS);
+          emitTool(
+            writer,
+            "setupTaxCompliance",
+            {},
+            { records: registrationTaxRecords, obligations: compliance.taxObligations },
+          );
+          await wait(COMPLIANCE_MOCK_DELAY_MS);
+
+          const completedPlan = completeRegistrationPlan(birCompletedPlan, {
+            employer: false,
+            sectorPermits: false,
+          });
+          const business = upsertRegisteredBusiness(
+            profile.id,
+            buildFinalSelfEmployedBusiness({
+              conversationId: conversation.id,
+              profile,
+              plan,
+              businessAddress:
+                confirmedBusinessAddress ||
+                (preference === "profile" ? profile.address : "Address confirmed during intake"),
+              compliance,
+              files: [
+                {
+                  id: "bir-form-1901",
+                  title: "BIR Form 1901",
+                  filename: "BIR-Form-1901.pdf",
+                  documentType: "Registration application",
+                  status: "Generated",
+                  createdAt: new Date().toISOString(),
+                  url: output.artifact.url,
+                  note: "Prefilled from the authenticated eGov profile. Submission to BIR is still required.",
+                  demo: true,
+                },
+                {
+                  id: "bir-form-2303",
+                  title: "BIR Certificate of Registration (Form 2303)",
+                  filename: "DEMO-BIR-Form-2303.pdf",
+                  documentType: "Certificate of Registration",
+                  status: "Demo only",
+                  createdAt: new Date().toISOString(),
+                  url: null,
+                  note: "Demo-only preview. This is not an official certificate issued by BIR.",
+                  demo: true,
+                },
+                {
+                  id: "books-and-invoices",
+                  title: "Books and invoice setup",
+                  filename: "DEMO-Books-and-Invoices.pdf",
+                  documentType: "Accounting setup record",
+                  status: "Demo only",
+                  createdAt: new Date().toISOString(),
+                  url: null,
+                  note: "Demo summary of configured books and invoice controls.",
+                  demo: true,
+                },
+                {
+                  id: "tax-calendar",
+                  title: "Recurring tax filing calendar",
+                  filename: "DEMO-Tax-Calendar.pdf",
+                  documentType: "Tax calendar",
+                  status: "Demo only",
+                  createdAt: new Date().toISOString(),
+                  url: null,
+                  note: "Demo schedule. Filing obligations must be confirmed with BIR.",
+                  demo: true,
+                },
+              ],
+            }),
+          );
+          emitTool(
+            writer,
+            "updatePlan",
+            {
+              ...completedPlan,
+              note: "Books, invoices, and recurring tax filings are set up. Demo complete.",
+            },
+            { plan: completedPlan },
+          );
+          emitTool(
+            writer,
+            "finalizeBusinessRegistration",
+            {},
+            {
+              businessId: business.id,
+              businessName: business.name,
+              status: business.status,
+            },
+          );
+          const textId = crypto.randomUUID();
+          writer.write({ type: "text-start", id: textId });
+          writer.write({
+            type: "text-delta",
+            id: textId,
+            delta: `**All set up.** Your demo self-employed registration for **${business.name}** now includes the generated BIR Form 1901, books and invoices, and recurring tax filing reminders. DTI and the standard local-permit chain were skipped as not applicable. These are demo records, not official government registrations.`,
+          });
+          writer.write({ type: "text-end", id: textId });
+          return;
+        }
+
+        const textId = crypto.randomUUID();
+        writer.write({ type: "text-start", id: textId });
+        writer.write({
+          type: "text-delta",
+          id: textId,
+          delta: "Your prefilled BIR Form 1901 is ready. Select the PDF to preview it.",
+        });
+        writer.write({ type: "text-end", id: textId });
       } catch (error) {
         console.warn("BIR form artifact generation failed", {
           name: error instanceof Error ? error.name : "UnknownError",
@@ -1355,13 +1517,16 @@ export async function POST(request: Request) {
           toolCallId,
           errorText: "The PDF could not be generated.",
         } as never);
-        text = "I couldn’t generate the BIR form PDF. Please try again.";
+        const textId = crypto.randomUUID();
+        writer.write({ type: "text-start", id: textId });
+        writer.write({
+          type: "text-delta",
+          id: textId,
+          delta:
+            "I couldn’t generate the BIR form PDF, so tax setup and finalization were not run.",
+        });
+        writer.write({ type: "text-end", id: textId });
       }
-
-      const textId = crypto.randomUUID();
-      writer.write({ type: "text-start", id: textId });
-      writer.write({ type: "text-delta", id: textId, delta: text });
-      writer.write({ type: "text-end", id: textId });
     });
 
   const firstTurn =
@@ -1378,7 +1543,14 @@ export async function POST(request: Request) {
   if (!lastForm && continuingIntake) {
     const questions = intakeBatch(prompt, profile, answers);
     if (questions.length) {
-      const currentPlan = planForAnswers(answers, hasSearched, false, false);
+      const intakeRegistrationType = makePlan(prompt, profile, answers).registrationType;
+      const currentPlan = planForAnswers(
+        answers,
+        hasSearched,
+        false,
+        false,
+        intakeRegistrationType,
+      );
       return manualResponse(conversation.id, messages, (writer) => {
         if (!existingPlan || JSON.stringify(existingPlan) !== JSON.stringify(currentPlan))
           emitTool(
@@ -1411,6 +1583,109 @@ export async function POST(request: Request) {
       });
     }
   }
+
+  const businessPlan = makePlan(prompt, profile, answers);
+  const currentPlan = planForAnswers(
+    answers,
+    hasSearched,
+    Boolean(lastForm),
+    true,
+    businessPlan.registrationType,
+  );
+
+  if (
+    continuingIntake &&
+    !lastForm &&
+    businessPlan.registrationType === "Self-employed" &&
+    !hasCompletedTool(messages, "tool-prepareSelfEmployedRegistration")
+  )
+    return manualResponse(conversation.id, messages, (writer) => {
+      const preparedPlan = normalizeRegistrationPlan({
+        ...currentPlan,
+        steps: currentPlan.steps.map((step) => ({
+          ...step,
+          status: [
+            "details",
+            "structure",
+            "name-registration",
+            "local-clearance",
+            "business-permit",
+          ].includes(step.id)
+            ? step.id === "name-registration" ||
+              step.id === "local-clearance" ||
+              step.id === "business-permit"
+              ? ("skipped" as const)
+              : ("completed" as const)
+            : step.id === "bir"
+              ? ("in_progress" as const)
+              : ("pending" as const),
+        })),
+      });
+      emitTool(
+        writer,
+        "updatePlan",
+        { ...preparedPlan, note: "Self-employed route confirmed. DTI is not required." },
+        { plan: preparedPlan },
+      );
+      emitTool(writer, "user_info", {}, userInfoOutput);
+      const toolCallId = crypto.randomUUID();
+      writer.write({
+        type: "tool-input-available",
+        toolCallId,
+        toolName: "prepareSelfEmployedRegistration",
+        input: {},
+      });
+      writer.write({
+        type: "tool-output-available",
+        toolCallId,
+        output: {
+          registrationType: "Self-employed",
+          taxpayerName: profile.fullName,
+          professionalActivity: businessPlan.businessLabel,
+          businessCity: businessPlan.city,
+          rdo: businessPlan.rdo
+            ? `${businessPlan.rdo.code} - ${businessPlan.rdo.name}`
+            : "For BIR confirmation",
+          addressSource: preference === "profile" ? "Authenticated profile" : "Business address",
+          status: "Ready for BIR form preparation",
+          nextAction: "Confirm below whether to generate the prefilled BIR Form 1901.",
+          demo: true,
+        },
+      });
+      const textId = crypto.randomUUID();
+      writer.write({ type: "text-start", id: textId });
+      writer.write({
+        type: "text-delta",
+        id: textId,
+        delta:
+          "Your self-employed professional route goes directly to BIR; DTI business-name registration is not required when you operate under your legal name.",
+      });
+      writer.write({ type: "text-end", id: textId });
+      writer.write({
+        type: "tool-input-available",
+        toolCallId: crypto.randomUUID(),
+        toolName: "askUser",
+        input: { questions: [birFormConsentQuestion()] },
+      });
+    });
+
+  if (
+    continuingIntake &&
+    businessPlan.registrationType === "Self-employed" &&
+    hasCompletedTool(messages, "tool-prepareSelfEmployedRegistration") &&
+    birFormConsentValue === "no"
+  )
+    return manualResponse(conversation.id, messages, (writer) => {
+      const textId = crypto.randomUUID();
+      writer.write({ type: "text-start", id: textId });
+      writer.write({
+        type: "text-delta",
+        id: textId,
+        delta:
+          "Form generation is paused at your request. Your confirmed route remains self-employed BIR registration, with DTI and the standard local-permit chain marked not applicable.",
+      });
+      writer.write({ type: "text-end", id: textId });
+    });
 
   if (!process.env.AI_GATEWAY_API_KEY) {
     if (!continuingIntake && !lastForm)
@@ -1471,79 +1746,6 @@ export async function POST(request: Request) {
       }
     });
   }
-
-  const businessPlan = makePlan(prompt, profile, answers);
-  const currentPlan = planForAnswers(answers, hasSearched, Boolean(lastForm), true);
-
-  if (
-    continuingIntake &&
-    !lastForm &&
-    businessPlan.registrationType === "Self-employed" &&
-    !hasCompletedTool(messages, "tool-prepareSelfEmployedRegistration")
-  )
-    return manualResponse(conversation.id, messages, (writer) => {
-      const preparedPlan = normalizeRegistrationPlan({
-        ...currentPlan,
-        steps: currentPlan.steps.map((step) => ({
-          ...step,
-          status: [
-            "details",
-            "structure",
-            "name-registration",
-            "local-clearance",
-            "business-permit",
-          ].includes(step.id)
-            ? step.id === "name-registration" ||
-              step.id === "local-clearance" ||
-              step.id === "business-permit"
-              ? ("skipped" as const)
-              : ("completed" as const)
-            : step.id === "bir"
-              ? ("in_progress" as const)
-              : ("pending" as const),
-        })),
-      });
-      emitTool(
-        writer,
-        "updatePlan",
-        { ...preparedPlan, note: "Self-employed route confirmed. Preparing the BIR checkpoint." },
-        { plan: preparedPlan },
-      );
-      emitTool(writer, "user_info", {}, userInfoOutput);
-      const toolCallId = crypto.randomUUID();
-      writer.write({
-        type: "tool-input-available",
-        toolCallId,
-        toolName: "prepareSelfEmployedRegistration",
-        input: {},
-      });
-      writer.write({
-        type: "tool-output-available",
-        toolCallId,
-        output: {
-          registrationType: "Self-employed",
-          taxpayerName: profile.fullName,
-          professionalActivity: businessPlan.businessLabel,
-          businessCity: businessPlan.city,
-          rdo: businessPlan.rdo
-            ? `${businessPlan.rdo.code} - ${businessPlan.rdo.name}`
-            : "For BIR confirmation",
-          addressSource: preference === "profile" ? "Authenticated profile" : "Business address",
-          status: "Ready for BIR form preparation",
-          nextAction: "Ask me to prepare BIR Form 1901 when you are ready to generate the PDF.",
-          demo: true,
-        },
-      });
-      const textId = crypto.randomUUID();
-      writer.write({ type: "text-start", id: textId });
-      writer.write({
-        type: "text-delta",
-        id: textId,
-        delta:
-          "I’ve prepared your self-employed BIR registration checkpoint using the details you confirmed. The next executable step is generating the prefilled BIR Form 1901.",
-      });
-      writer.write({ type: "text-end", id: textId });
-    });
 
   if (
     continuingIntake &&

@@ -9,6 +9,7 @@
     "start": "next start",
     "generate:bir-form": "bun scripts/generate-bir-1901.ts --fixture",
     "generate:bir-form:complete": "bun scripts/generate-bir-1901.ts --complete-fixture",
+    "demo:reset-businesses": "node scripts/reset-demo-businesses.mjs",
     "check-types": "tsc --noEmit",
     "format": "oxfmt src scripts package.json tsconfig.json",
     "format:check": "oxfmt --check src scripts package.json tsconfig.json",
