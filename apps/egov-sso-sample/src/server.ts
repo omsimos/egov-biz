@@ -1,5 +1,7 @@
 import { eGovSsoApi, type EgovSsoCitizenProfile } from "@repo/egov/eGovSso";
 
+import { createAiFeature } from "./ai.js";
+
 interface ExchangeRequest {
   exchangeCode: string;
 }
@@ -24,6 +26,7 @@ const sessionTtlSeconds = readPositiveInteger(
 );
 const eGovSsoClient = eGovSsoApi.fromEnv({ baseUrl });
 const clientScript = await buildClientScript();
+const aiFeature = await createAiFeature(env);
 
 function requireEnvironment(name: string): string {
   const value = env[name]?.trim();
@@ -388,6 +391,18 @@ const server = Bun.serve({
       });
     }
 
+    if (request.method === "GET" && url.pathname === "/ai") {
+      return new Response(aiFeature.page(), {
+        headers: noStoreHeaders("text/html; charset=utf-8"),
+      });
+    }
+
+    if (request.method === "GET" && url.pathname === "/ai/client.js") {
+      return new Response(aiFeature.clientScript, {
+        headers: noStoreHeaders("text/javascript; charset=utf-8"),
+      });
+    }
+
     if (request.method === "GET" && url.pathname === "/health") {
       return Response.json(
         { configured: true, service: eGovSsoApi.catalog.name },
@@ -405,6 +420,10 @@ const server = Bun.serve({
 
     if (request.method === "POST" && url.pathname === "/api/auth/logout") {
       return logout(request);
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/ai/chat") {
+      return aiFeature.chat(request);
     }
 
     return Response.json({ error: "Not found." }, { status: 404 });
