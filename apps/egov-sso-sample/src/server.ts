@@ -92,76 +92,133 @@ function page(): string {
     <meta name="egov-sso-onsuccess" content="handleEgovSsoSuccess" />
     <title>eGov SSO Sample</title>
     <style>
-      :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+      :root {
+        color-scheme: light;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        --mono: ui-monospace, "SF Mono", Menlo, "Courier New", monospace;
+        --paper: #f4f1e8;
+        --ink: #17171a;
+        --ink-60: rgb(23 23 26 / 60%);
+        --ink-40: rgb(23 23 26 / 40%);
+        --ink-15: rgb(23 23 26 / 15%);
+        --blue: #1f3faa;
+        --red: #b3261e;
+        --green: #1d6b3c;
+        --amber: #8a6100;
+      }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100vh; background: #f3f6fb; color: #172033; }
-      main { width: min(1120px, calc(100% - 32px)); margin: 64px auto; }
-      .eyebrow { margin: 0 0 10px; color: #315ba9; font-size: 13px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
-      h1 { margin: 0; font-size: clamp(32px, 7vw, 52px); letter-spacing: -.04em; line-height: 1; }
-      .lede { margin: 18px 0 0; max-width: 560px; color: #59657a; font-size: 17px; line-height: 1.65; }
-      .card { margin-top: 32px; padding: 28px; border: 1px solid #d9e0eb; border-radius: 20px; background: #fff; box-shadow: 0 18px 55px rgb(39 60 97 / 10%); }
-      .status { margin: 0 0 22px; padding: 12px 14px; border-radius: 10px; background: #eef3fb; color: #40516e; font-size: 14px; }
-      .status[data-state="loading"] { background: #fff6d8; color: #705500; }
-      .status[data-state="success"] { background: #e3f7ea; color: #176438; }
-      .status[data-state="error"] { background: #fde8e7; color: #9d2924; }
-      #egov-sso-widget-button { min-height: 44px; }
-      .divider { display: flex; align-items: center; gap: 12px; margin: 24px 0; color: #8a94a5; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-      .divider::before, .divider::after { content: ""; height: 1px; flex: 1; background: #e3e8f0; }
-      .exchange-form { display: grid; gap: 10px; }
-      .exchange-form label { font-size: 14px; font-weight: 700; }
-      .exchange-row { display: flex; gap: 10px; }
-      .exchange-row input { min-width: 0; flex: 1; padding: 11px 12px; border: 1px solid #cfd7e4; border-radius: 9px; font: inherit; }
-      .exchange-row button { padding: 11px 16px; border: 0; border-radius: 9px; background: #315ba9; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
-      .exchange-help { margin: 0; color: #788397; font-size: 12px; line-height: 1.5; }
-      .result { margin-top: 24px; padding-top: 22px; border-top: 1px solid #e3e8f0; }
-      .profile-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
-      .profile-heading h2 { margin: 0; font-size: 26px; }
-      .result p { margin: 8px 0 0; color: #59657a; }
-      .result .server-message { font-size: 13px; }
-      .logout-button { flex: 0 0 auto; padding: 10px 14px; border: 1px solid #cfd7e4; border-radius: 9px; background: #fff; color: #263750; font: inherit; font-weight: 700; cursor: pointer; }
-      .profile-sections { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 24px; }
-      .profile-section { min-width: 0; padding: 18px; border: 1px solid #e1e6ee; border-radius: 14px; background: #f9fbfd; }
-      .profile-section h3 { margin: 0 0 14px; color: #263750; font-size: 16px; }
-      .profile-list, .nested-list { display: grid; gap: 12px; margin: 0; }
-      .profile-field { min-width: 0; }
-      .profile-field dt { margin: 0 0 3px; color: #788397; font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
-      .profile-field dd { margin: 0; overflow-wrap: anywhere; color: #263750; font-size: 14px; line-height: 1.5; }
-      .nested-list { margin-top: 6px; padding: 12px; border-left: 2px solid #d9e3f2; }
-      .nested-array { display: grid; gap: 10px; margin: 6px 0 0; padding: 0; list-style: none; }
-      .nested-array > li { padding: 10px; border: 1px solid #e1e6ee; border-radius: 10px; background: #fff; }
-      .profile-image { display: block; width: min(100%, 220px); max-height: 180px; border: 1px solid #d9e0eb; border-radius: 10px; background: #fff; object-fit: contain; }
-      .empty-value { color: #8a94a5; font-style: italic; }
-      .security { margin: 18px 2px 0; color: #788397; font-size: 12px; line-height: 1.55; }
+      body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink); -webkit-font-smoothing: antialiased; }
+      ::selection { background: rgb(31 63 170 / 20%); }
+      code { font-family: var(--mono); font-size: 0.92em; }
+      main { width: min(1100px, calc(100% - 48px)); margin: 0 auto; padding-bottom: 24px; }
+      .masthead { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 0 14px; border-bottom: 2px solid var(--ink); }
+      .wordmark { margin: 0; font-size: 15px; font-weight: 800; letter-spacing: -0.01em; }
+      .wordmark span { color: var(--ink-60); font-weight: 500; }
+      .form-no { margin: 0; color: var(--ink-60); font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; }
+      .stamp { margin: 0; padding: 5px 12px; border: 2px solid var(--red); color: var(--red); font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: 0.25em; text-transform: uppercase; transform: rotate(-3deg); }
+      .titleblock { padding: 46px 0 30px; }
+      .kicker { margin: 0; color: var(--ink-60); font-family: var(--mono); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; }
+      .titleblock h1 { margin: 12px 0 0; font-size: clamp(44px, 7vw, 84px); font-weight: 800; letter-spacing: -0.02em; line-height: 0.98; text-transform: uppercase; }
+      .lede { margin: 20px 0 0; max-width: 62ch; color: var(--ink-60); font-size: 15px; line-height: 1.65; }
+      .sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; padding: 12px 0 6px; border-top: 3px solid var(--ink); }
+      .sec-title { margin: 0; font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; }
+      .sec-no { margin-right: 10px; color: var(--ink-40); }
+      .status { margin: 0; max-width: 55%; color: var(--ink-60); font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-align: right; text-transform: uppercase; }
+      .status::before { content: "\\25CF\\00A0"; }
+      .status[data-state="loading"] { color: var(--amber); }
+      .status[data-state="loading"]::before { animation: blink 1s steps(2, start) infinite; }
+      .status[data-state="success"] { color: var(--green); }
+      .status[data-state="error"] { color: var(--red); }
+      @keyframes blink { 50% { opacity: 0; } }
+      #egov-sso-widget-button { display: flex; min-height: 48px; margin: 18px 0 6px; }
+      .divider { display: flex; align-items: center; gap: 16px; margin: 22px 0 18px; color: var(--ink-40); font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.2em; text-transform: uppercase; }
+      .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--ink-15); }
+      .exchange-form { display: grid; gap: 8px; padding-bottom: 26px; }
+      .field-label { color: var(--ink-60); font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; }
+      .exchange-row { display: flex; gap: 18px; align-items: flex-end; }
+      .exchange-row input { flex: 1; min-width: 0; padding: 10px 2px; border: 0; border-bottom: 2px solid var(--ink); background: transparent; color: var(--ink); font-family: var(--mono); font-size: 15px; letter-spacing: 0.06em; transition: border-color 120ms ease, background-color 120ms ease; }
+      .exchange-row input::placeholder { color: var(--ink-40); }
+      .exchange-row input:focus { border-color: var(--blue); outline: none; background: rgb(31 63 170 / 5%); }
+      .submit-button { padding: 12px 24px; border: 2px solid var(--ink); background: var(--ink); color: var(--paper); font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; cursor: pointer; transition: background-color 120ms ease, color 120ms ease, transform 60ms ease; }
+      .submit-button:active { transform: translate(1px, 2px); }
+      .exchange-help { margin: 6px 0 0; color: var(--ink-40); font-size: 12.5px; line-height: 1.6; }
+      .result { counter-reset: sec 1; }
+      .profile-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 30px 0 22px; }
+      .profile-heading h2 { margin: 0; font-size: clamp(30px, 4.5vw, 54px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.02; text-transform: uppercase; }
+      .server-message { margin: 10px 0 0; color: var(--ink-60); font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+      .logout-button { flex: 0 0 auto; padding: 11px 20px; border: 2px solid var(--ink); background: transparent; color: var(--ink); font-family: var(--mono); font-size: 11.5px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; cursor: pointer; transition: background-color 120ms ease, color 120ms ease, transform 60ms ease; }
+      .logout-button:active { transform: translate(1px, 2px); }
+      .logout-button:disabled { opacity: 0.4; cursor: default; }
+      .submit-button:focus-visible, .logout-button:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+      @media (hover: hover) and (pointer: fine) {
+        .submit-button:hover { background: var(--paper); color: var(--ink); }
+        .logout-button:hover { background: var(--ink); color: var(--paper); }
+      }
+      .profile-sections { margin: 0; }
+      .profile-section { min-width: 0; margin: 0 0 36px; counter-increment: sec; }
+      .profile-section h3 { display: flex; align-items: baseline; margin: 0; padding: 12px 0 4px; border-top: 3px solid var(--ink); font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; }
+      .profile-section h3::before { content: counter(sec, decimal-leading-zero); margin-right: 10px; color: var(--ink-40); }
+      .profile-list { display: block; margin: 6px 0 0; }
+      .profile-field { display: grid; grid-template-columns: clamp(150px, 24vw, 280px) 1fr; gap: 18px; align-items: baseline; min-width: 0; padding: 11px 0; border-bottom: 1px solid var(--ink-15); }
+      .profile-field dt { margin: 0; color: var(--ink-60); font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
+      .profile-field dd { margin: 0; overflow-wrap: anywhere; font-size: 14.5px; line-height: 1.55; }
+      .nested-list { display: block; margin: 2px 0 4px; padding-left: 16px; border-left: 2px solid var(--ink-15); }
+      .nested-list .profile-field { grid-template-columns: clamp(110px, 16vw, 190px) 1fr; padding: 8px 0; border-bottom-style: dotted; }
+      .nested-list .profile-field:last-child { border-bottom: 0; }
+      .nested-array { display: block; margin: 2px 0 4px; padding: 0; list-style: none; }
+      .nested-array > li { padding: 8px 0; }
+      .nested-array > li + li { border-top: 1px dotted var(--ink-15); }
+      .profile-image { display: block; width: min(100%, 200px); max-height: 170px; margin: 4px 0 2px; border: 2px solid var(--ink); background: #fff; object-fit: contain; }
+      .empty-value { color: var(--ink-40); }
+      .fineprint { margin-top: 40px; padding: 14px 0 0; border-top: 2px solid var(--ink); color: var(--ink-60); font-family: var(--mono); font-size: 11px; line-height: 1.8; letter-spacing: 0.03em; }
       [hidden] { display: none !important; }
-      @media (max-width: 620px) {
-        main { margin: 32px auto; }
-        .card { padding: 20px; }
-        .exchange-row, .profile-heading { align-items: stretch; flex-direction: column; }
+      @media (prefers-reduced-motion: reduce) {
+        .status[data-state="loading"]::before { animation: none; }
+      }
+      @media (max-width: 640px) {
+        main { width: calc(100% - 36px); }
+        .masthead { flex-wrap: wrap; row-gap: 10px; }
+        .titleblock { padding: 30px 0 22px; }
+        .sec-head { flex-direction: column; gap: 6px; }
+        .status { max-width: none; text-align: left; }
+        .exchange-row { flex-direction: column; align-items: stretch; }
+        .profile-heading { flex-direction: column; align-items: flex-start; padding-top: 22px; }
+        .profile-field, .nested-list .profile-field { grid-template-columns: 1fr; gap: 3px; }
       }
     </style>
   </head>
   <body>
     <main>
-      <p class="eyebrow">Bun + TypeScript</p>
-      <h1>eGov SSO sample</h1>
-      <p class="lede">Sign in through the official staging widget. The one-time exchange code is sent directly to this Bun server, which uses <code>@repo/egov/eGovSso</code> to retrieve the authenticated profile.</p>
-      <section class="card" aria-labelledby="auth-status">
-        <p class="status" id="auth-status" data-auth-status data-state="idle">Loading the eGovPH widget…</p>
+      <header class="masthead">
+        <p class="wordmark">eGovPH <span>/ Single Sign-On</span></p>
+        <p class="form-no">Form No. SSO-01 · Bun runtime</p>
+        <p class="stamp">Staging</p>
+      </header>
+      <section class="titleblock">
+        <p class="kicker">eGov Hackathon · Partner Sandbox · @repo/egov/eGovSso</p>
+        <h1>Citizen sign&#8209;in record</h1>
+        <p class="lede">The official eGovPH widget hands a one-time exchange code to this Bun server, which resolves it into an authenticated citizen profile. Complete section 01 below; the record is filled in on success.</p>
+      </section>
+      <section aria-label="Authentication">
+        <div class="sec-head">
+          <h2 class="sec-title"><span class="sec-no">01</span>Authentication</h2>
+          <p class="status" id="auth-status" data-auth-status data-state="idle">Loading the eGovPH widget…</p>
+        </div>
         <div data-auth-controls>
           <div id="egov-sso-widget-button"></div>
           <div class="divider">or use a staging test code</div>
           <form class="exchange-form" data-exchange-form>
-            <label for="exchange-code">Portal-generated exchange code</label>
+            <label class="field-label" for="exchange-code">Portal-generated exchange code</label>
             <div class="exchange-row">
-              <input id="exchange-code" data-exchange-code type="password" autocomplete="off" spellcheck="false" required />
-              <button type="submit">Authenticate</button>
+              <input id="exchange-code" data-exchange-code type="password" autocomplete="off" spellcheck="false" required placeholder="XXXX-XXXX-XXXX" />
+              <button class="submit-button" type="submit">Authenticate</button>
             </div>
             <p class="exchange-help">Use the API catalog’s built-in staging identity. The code is cleared immediately after submission.</p>
           </form>
         </div>
         <div class="result" data-auth-result hidden></div>
-        <p class="security">The partner secret and eGov access token stay server-side and are never rendered, persisted, or logged. An opaque HttpOnly cookie restores this profile while the sample server session remains active.</p>
       </section>
+      <footer class="fineprint">The partner secret and eGov access token stay server-side and are never rendered, persisted, or logged. An opaque HttpOnly cookie restores this record while the sample server session remains active.</footer>
     </main>
     <div id="egov-sso-widget-portal"></div>
     <script src="/client.js"></script>
