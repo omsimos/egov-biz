@@ -1,4 +1,5 @@
 import { createMCPClient } from "@ai-sdk/mcp";
+import type { EgovSsoCitizenProfile } from "@repo/egov/eGovSso";
 import {
   convertToModelMessages,
   createGateway,
@@ -26,6 +27,8 @@ import type {
   UserInfoOutput,
 } from "@/lib/business-chat";
 import { readSession } from "@/lib/auth/session";
+import { createBirFormArtifact } from "@/lib/bir-form/artifact";
+import { isExplicitBirFormRequest } from "@/lib/bir-form/request";
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import { initialRegistrationPlan } from "@/lib/registration-plan";
 import { dtiRegistrationFee, formatPeso } from "@/lib/dti-fees";
@@ -129,6 +132,16 @@ function userText(messages: UIMessage[]) {
       message.parts.filter((part) => part.type === "text").map((part) => part.text),
     )
     .join("\n");
+}
+
+function latestUserText(messages: UIMessage[]) {
+  const message = messages.findLast((item) => item.role === "user");
+  return (
+    message?.parts
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("\n") ?? ""
+  );
 }
 
 function businessAddressQuestion(city: string): IntakeQuestion {
@@ -510,19 +523,45 @@ async function searchOfficialWeb(query: string, numResults = 5) {
 }
 
 function agentTools(
+  request: Request,
   prompt: string,
   profile: CitizenProfile | null,
+  rawProfile: EgovSsoCitizenProfile,
   userInfo: UserInfoOutput,
+  hasUserInfo: boolean,
   businessCity: string,
   usesProfileAddress: boolean,
   confirmedBusinessAddress: string,
 ) {
+  let userInfoReady = hasUserInfo;
   return {
     user_info: tool({
       description:
         "Report which verified eGov SSO fields are available for server-side form prefilling. Values remain private and are applied by form tools. Call this before preparing a form.",
       inputSchema: z.object({}),
-      execute: () => userInfo,
+      execute: () => {
+        userInfoReady = true;
+        return userInfo;
+      },
+    }),
+    generate_bir_form: tool({
+      description:
+        "Generate a prefilled BIR Form 1901 PDF artifact from the authenticated eGov SSO profile. Invoke only when the citizen explicitly asks to generate, create, prepare, fill, or prefill the BIR form. Never invoke proactively or for questions about the form. user_info must complete first.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        if (!userInfoReady) throw new Error("Call user_info before generate_bir_form");
+        return {
+          artifact: await createBirFormArtifact(request, rawProfile),
+          source: "Authenticated eGov SSO profile" as const,
+        };
+      },
+      toModelOutput: ({ output }) => ({
+        type: "json",
+        value: {
+          artifact: output.artifact,
+          source: output.source,
+        },
+      }),
     }),
     askUser: tool({
       description:
@@ -601,6 +640,7 @@ export async function POST(request: Request) {
     source: "eGov SSO",
   };
   const conversationText = userText(messages).trim();
+  const latestPrompt = latestUserText(messages).trim();
   const prompt = conversationText || parsed.data.initialPrompt;
   const answers = toolAnswers(messages);
   const preference = addressPreference(answers);
@@ -608,14 +648,6 @@ export async function POST(request: Request) {
     answerText(answers, /business.*address|operating.*address|exact.*address/i) ||
     extractExplicitBusinessAddress(prompt);
   const initialLocation = resolveBusinessLocation(prompt, profile?.city ?? "Philippines", answers);
-  const tools = agentTools(
-    prompt,
-    profile,
-    userInfoOutput,
-    initialLocation.city,
-    preference === "profile",
-    confirmedBusinessAddress,
-  );
   const existingPlan = lastRegistrationPlan(messages);
   const hasSearched = messages.some((message) =>
     message.parts.some(
@@ -629,6 +661,60 @@ export async function POST(request: Request) {
     ),
   );
   const location = initialLocation;
+
+  if (isExplicitBirFormRequest(latestPrompt)) {
+    const stream = createUIMessageStream<BusinessChatMessage>({
+      originalMessages: messages,
+      execute: async ({ writer }) => {
+        if (!hasUserInfo) emitTool(writer, "user_info", {}, userInfoOutput);
+        const toolCallId = crypto.randomUUID();
+        writer.write({
+          type: "tool-input-available",
+          toolCallId,
+          toolName: "generate_bir_form",
+          input: {},
+        });
+
+        let text: string;
+        try {
+          const output = {
+            artifact: await createBirFormArtifact(request, session.rawProfile),
+            source: "Authenticated eGov SSO profile" as const,
+          };
+          writer.write({ type: "tool-output-available", toolCallId, output });
+          text = "Your prefilled BIR Form 1901 is ready. Select the PDF to preview it.";
+        } catch (error) {
+          console.warn("BIR form artifact generation failed", {
+            name: error instanceof Error ? error.name : "UnknownError",
+          });
+          writer.write({
+            type: "tool-output-error",
+            toolCallId,
+            errorText: "The PDF could not be generated.",
+          } as never);
+          text = "I couldn’t generate the BIR form PDF. Please try again.";
+        }
+
+        const textId = crypto.randomUUID();
+        writer.write({ type: "text-start", id: textId });
+        writer.write({ type: "text-delta", id: textId, delta: text });
+        writer.write({ type: "text-end", id: textId });
+      },
+    });
+    return createUIMessageStreamResponse({ stream });
+  }
+
+  const tools = agentTools(
+    request,
+    prompt,
+    profile,
+    session.rawProfile,
+    userInfoOutput,
+    hasUserInfo,
+    initialLocation.city,
+    preference === "profile",
+    confirmedBusinessAddress,
+  );
 
   if (!process.env.AI_GATEWAY_API_KEY) {
     const next = deterministicNext(prompt, profile, answers);
@@ -860,7 +946,13 @@ export async function POST(request: Request) {
   const result = streamText({
     model,
     tools,
-    activeTools: ["user_info", "webSearch", "editDtiBusinessNameForm", "updatePlan"],
+    activeTools: [
+      "user_info",
+      "generate_bir_form",
+      "webSearch",
+      "editDtiBusinessNameForm",
+      "updatePlan",
+    ],
     stopWhen: stepCountIs(4),
     system: `You guide a Filipino citizen through business registration in a human-in-the-loop chat. Be concise, warm, and factual. Prefer short paragraphs and lists. Use a markdown table only when comparing three or more records; never use a table for a two-column field/value summary.
 
@@ -869,6 +961,8 @@ Intake questions are handled by the API router before this response. Never call 
 Use updatePlan whenever registration progress changes. Keep 3–6 concise steps, preserve stable step IDs, mark finished work completed, and keep at most one step in_progress. The current plan is ${JSON.stringify(existingPlan ?? currentPlan)}.
 
 The user_info tool returns JSON metadata listing which authenticated eGov SSO fields are available for server-side form prefilling; it never returns the field values to the model. It is ${hasUserInfo ? "already loaded in this conversation" : "not loaded yet"}. Before creating or editing any government form, call user_info first if it has not been loaded. Form tools apply matching verified values on the server, so do not ask for information that is already available unless explicit consent or a business-specific value is required.
+
+generate_bir_form creates a prefilled BIR Form 1901 PDF artifact. Invoke it only when the citizen's latest message explicitly asks to generate, create, prepare, fill, or prefill that BIR form. Never invoke it proactively, for informational questions, or merely because BIR registration is part of the plan. Call user_info in an earlier tool step first when it is not already loaded. The tool takes no citizen data as input and applies authenticated profile values server-side.
 
 The verified residential address may prefill the business address only after the dedicated structured profile-address choice is answered with use-profile-address. Otherwise use only the business address captured by the structured address question; never copy an address from model-generated tool input.
 

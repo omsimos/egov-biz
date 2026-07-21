@@ -6,4 +6,5 @@
 .turbo/
 node_modules/
 dist/
+output/pdf/
 *.tsbuildinfo

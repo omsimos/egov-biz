@@ -240,7 +240,7 @@ function showProfile(result: AuthenticationResult): void {
     result.profile.middle_name,
     result.profile.last_name,
   ]
-    .filter((part) => part.trim().length > 0)
+    .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
     .join(" ");
   heading.textContent = `Welcome, ${displayName}`;
 

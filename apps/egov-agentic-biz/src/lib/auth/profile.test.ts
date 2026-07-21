@@ -50,4 +50,28 @@ describe("mapEgovCitizenProfile", () => {
     expect(result.tinMasked).toBe("");
     expect(result.rdo).toBe("");
   });
+
+  test("normalizes missing and malformed profile values", () => {
+    const result = mapEgovCitizenProfile({
+      address: null,
+      barangay: " San Isidro ",
+      first_name: " Josie ",
+      last_name: null,
+      municipality: " Quezon City ",
+      photo: 123,
+      postal: undefined,
+      street: " 1 Example Street ",
+      uniqid: " test-user ",
+    });
+
+    expect(result).toMatchObject({
+      address: "1 Example Street, San Isidro, Quezon City",
+      avatarUrl: null,
+      city: "Quezon City",
+      email: "",
+      firstName: "Josie",
+      fullName: "Josie",
+      id: "test-user",
+    });
+  });
 });

@@ -4,9 +4,12 @@ import { useChat } from "@ai-sdk/react";
 import {
   ArrowLeft,
   ArrowRight,
+  ArrowSquareOut,
   Check,
   CheckCircle,
   CircleNotch,
+  DownloadSimple,
+  FilePdf,
   GlobeHemisphereWest,
   ListChecks,
   MagnifyingGlass,
@@ -21,6 +24,7 @@ import { DefaultChatTransport, getToolName, isToolUIPart } from "ai";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 import { ProfileAvatar } from "@/components/profile-avatar";
+import type { BirFormArtifact } from "@/lib/bir-form/artifact";
 import type {
   BusinessChatMessage,
   DtiBusinessNameForm,
@@ -268,14 +272,42 @@ function DtiFormCard({
   );
 }
 
+function BirFormArtifactCard({
+  artifact,
+  onPreview,
+}: {
+  artifact: BirFormArtifact;
+  onPreview: () => void;
+}) {
+  return (
+    <button className="pdf-artifact-card" type="button" onClick={onPreview}>
+      <span className="pdf-artifact-icon">
+        <FilePdf weight="fill" />
+      </span>
+      <span className="pdf-artifact-copy">
+        <small>PDF ARTIFACT</small>
+        <strong>BIR Form 1901</strong>
+        <span>
+          {artifact.pageCount} pages · {Math.max(1, Math.round(artifact.size / 1024))} KB
+        </span>
+      </span>
+      <span className="pdf-artifact-action">
+        Preview <ArrowRight weight="bold" />
+      </span>
+    </button>
+  );
+}
+
 function ToolPart({
   part,
   latestPlanId,
   onSubmitPay,
+  onPreviewPdf,
 }: {
   part: BusinessChatMessage["parts"][number];
   latestPlanId: string | null;
   onSubmitPay: (form: DtiBusinessNameForm) => void;
+  onPreviewPdf: (artifact: BirFormArtifact) => void;
 }) {
   if (!isToolUIPart(part)) return null;
   const name = getToolName(part);
@@ -298,6 +330,36 @@ function ToolPart({
       </div>
     );
   if (part.type === "tool-webSearch") return <SearchTool part={part} />;
+  if (part.type === "tool-generate_bir_form") {
+    if (part.state === "output-available")
+      return (
+        <BirFormArtifactCard
+          artifact={part.output.artifact}
+          onPreview={() => onPreviewPdf(part.output.artifact)}
+        />
+      );
+    if (part.state === "output-error")
+      return (
+        <div className="chat-tool-row error">
+          <X />
+          <div>
+            <small>PDF generation failed</small>
+            <span>Try asking me to generate the BIR form again</span>
+          </div>
+          <FilePdf />
+        </div>
+      );
+    return (
+      <div className="chat-tool-row active">
+        <CircleNotch className="spin" />
+        <div>
+          <small>Generating BIR Form 1901</small>
+          <span className="chat-shimmer">Prefilling the authenticated profile</span>
+        </div>
+        <FilePdf />
+      </div>
+    );
+  }
   if (part.type === "tool-updatePlan") {
     if (part.toolCallId !== latestPlanId) return null;
     if (part.state === "output-available")
@@ -412,6 +474,60 @@ function PaymentDialog({ form, onClose }: { form: DtiBusinessNameForm; onClose: 
   );
 }
 
+function PdfPreviewDialog({
+  artifact,
+  onClose,
+}: {
+  artifact: BirFormArtifact;
+  onClose: () => void;
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    dialogRef.current?.focus();
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [onClose]);
+
+  return (
+    <div className="chat-dialog-layer pdf-preview-layer">
+      <button className="chat-dialog-scrim" onClick={onClose} aria-label="Close PDF preview" />
+      <section
+        className="pdf-preview-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pdf-preview-title"
+        tabIndex={-1}
+        ref={dialogRef}
+      >
+        <header>
+          <span>
+            <FilePdf weight="fill" />
+          </span>
+          <div>
+            <small>PDF PREVIEW</small>
+            <h2 id="pdf-preview-title">BIR Form 1901</h2>
+          </div>
+          <button className="chat-dialog-close" onClick={onClose} aria-label="Close">
+            <X />
+          </button>
+        </header>
+        <iframe src={artifact.url} title="BIR Form 1901 PDF preview" />
+        <footer>
+          <a href={artifact.url} download={artifact.filename}>
+            <DownloadSimple weight="bold" /> Download PDF
+          </a>
+          <a href={artifact.url} target="_blank" rel="noreferrer">
+            <ArrowSquareOut weight="bold" /> Open full screen
+          </a>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 export function BusinessChatScreen({
   initialPrompt,
   profile,
@@ -423,6 +539,7 @@ export function BusinessChatScreen({
 }) {
   const [input, setInput] = useState("");
   const [paymentForm, setPaymentForm] = useState<DtiBusinessNameForm | null>(null);
+  const [pdfArtifact, setPdfArtifact] = useState<BirFormArtifact | null>(null);
   const [answeringToolCallId, setAnsweringToolCallId] = useState<string | null>(null);
   const answeredToolCalls = useRef(new Set<string>());
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -542,6 +659,7 @@ export function BusinessChatScreen({
                       part={part}
                       latestPlanId={latestPlanId}
                       onSubmitPay={setPaymentForm}
+                      onPreviewPdf={setPdfArtifact}
                     />
                   ) : null,
                 )}
@@ -600,6 +718,9 @@ export function BusinessChatScreen({
         )}
       </footer>
       {paymentForm && <PaymentDialog form={paymentForm} onClose={() => setPaymentForm(null)} />}
+      {pdfArtifact && (
+        <PdfPreviewDialog artifact={pdfArtifact} onClose={() => setPdfArtifact(null)} />
+      )}
     </div>
   );
 }

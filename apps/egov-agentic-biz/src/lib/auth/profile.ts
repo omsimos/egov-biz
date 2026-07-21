@@ -1,42 +1,58 @@
-import type { EgovSsoCitizenProfile } from "@repo/egov/eGovSso";
 import type { CitizenProfile } from "@/lib/citizen-profile";
 
-function joinNonEmpty(parts: ReadonlyArray<string | null | undefined>, separator = " ") {
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function joinNonEmpty(parts: ReadonlyArray<unknown>, separator = " ") {
   return parts
-    .map((part) => part?.trim() ?? "")
+    .map(stringValue)
     .filter((part) => part.length > 0)
     .join(separator);
 }
 
-export function mapEgovCitizenProfile(profile: EgovSsoCitizenProfile): CitizenProfile {
+export function mapEgovCitizenProfile(profile: unknown): CitizenProfile {
+  const rawProfile = recordValue(profile);
   const fullName = joinNonEmpty([
-    profile.first_name,
-    profile.middle_name,
-    profile.last_name,
-    profile.suffix,
+    rawProfile.first_name,
+    rawProfile.middle_name,
+    rawProfile.last_name,
+    rawProfile.suffix,
   ]);
   const address =
-    profile.address.trim() ||
+    stringValue(rawProfile.address) ||
     joinNonEmpty(
-      [profile.street, profile.barangay, profile.municipality, profile.province, profile.postal],
+      [
+        rawProfile.street,
+        rawProfile.barangay,
+        rawProfile.municipality,
+        rawProfile.province,
+        rawProfile.postal,
+      ],
       ", ",
     );
 
   return {
-    id: profile.uniqid,
-    firstName: profile.first_name.trim(),
+    id: stringValue(rawProfile.uniqid),
+    firstName: stringValue(rawProfile.first_name),
     fullName,
-    email: profile.email.trim(),
-    mobile: profile.mobile.trim(),
+    email: stringValue(rawProfile.email),
+    mobile: stringValue(rawProfile.mobile),
     address,
-    city: profile.municipality.trim(),
-    barangay: profile.barangay.trim(),
-    province: profile.province.trim(),
-    birthDate: profile.birth_date.trim(),
-    gender: profile.gender.trim(),
-    nationality: profile.nationality.trim(),
+    city: stringValue(rawProfile.municipality),
+    barangay: stringValue(rawProfile.barangay),
+    province: stringValue(rawProfile.province),
+    birthDate: stringValue(rawProfile.birth_date),
+    gender: stringValue(rawProfile.gender),
+    nationality: stringValue(rawProfile.nationality),
     tinMasked: "",
     rdo: "",
-    avatarUrl: profile.photo.trim().length > 0 ? "/api/auth/avatar" : null,
+    avatarUrl: stringValue(rawProfile.photo) ? "/api/auth/avatar" : null,
   };
 }

@@ -18,107 +18,107 @@ export interface EgovSsoTokenResponse {
 }
 
 export interface EgovSsoEducationalAttainment {
-  educational_background: string;
-  from: string;
-  level: string;
-  school: string;
-  to: string;
+  educational_background?: string | null;
+  from?: string | null;
+  level?: string | null;
+  school?: string | null;
+  to?: string | null;
 }
 
 export interface EgovSsoAdditionalInformation {
   birth_place?: {
-    birth_country: string;
-    birth_municipality: string;
-    birth_province: string;
-  };
-  educational_attainment?: EgovSsoEducationalAttainment[];
+    birth_country?: string | null;
+    birth_municipality?: string | null;
+    birth_province?: string | null;
+  } | null;
+  educational_attainment?: EgovSsoEducationalAttainment[] | null;
   emergency_information?: {
-    emergency_contact: string;
-    emergency_name: string;
-    emergency_relationship: string;
-  };
-  expected_salary?: { expected_salary: string };
+    emergency_contact?: string | null;
+    emergency_name?: string | null;
+    emergency_relationship?: string | null;
+  } | null;
+  expected_salary?: { expected_salary?: string | null } | null;
   father_details?: {
-    father_birthdate: string;
-    father_firstname: string;
-    father_lastname: string;
-  };
+    father_birthdate?: string | null;
+    father_firstname?: string | null;
+    father_lastname?: string | null;
+  } | null;
   health_data?: {
-    complexion: string;
-    eyes_color: string;
-    height: string;
-    weight: string;
-  };
-  industry?: { industry: string };
+    complexion?: string | null;
+    eyes_color?: string | null;
+    height?: string | null;
+    weight?: string | null;
+  } | null;
+  industry?: { industry?: string | null } | null;
   mother_details?: {
-    mother_birthdate: string;
-    mother_maiden_firstname: string;
-    mother_maiden_lastname: string;
-    mother_maiden_middlename: string;
-  };
-  occupation?: { occupation: string };
+    mother_birthdate?: string | null;
+    mother_maiden_firstname?: string | null;
+    mother_maiden_lastname?: string | null;
+    mother_maiden_middlename?: string | null;
+  } | null;
+  occupation?: { occupation?: string | null } | null;
   other_personal_information?: {
-    marital_status: string;
-    religion: string;
-  };
+    marital_status?: string | null;
+    religion?: string | null;
+  } | null;
   [key: string]: unknown;
 }
 
 export interface EgovSsoPassport {
-  birth_date: string;
-  expiry_date: string;
-  first_name: string;
-  gender: string;
-  issued_date: string;
-  last_name: string;
-  middle_name: string;
-  passport_number: string;
-  place_issued: string;
-  suffix: string | null;
+  birth_date?: string | null;
+  expiry_date?: string | null;
+  first_name?: string | null;
+  gender?: string | null;
+  issued_date?: string | null;
+  last_name?: string | null;
+  middle_name?: string | null;
+  passport_number?: string | null;
+  place_issued?: string | null;
+  suffix?: string | null;
 }
 
 export interface EgovSsoNationalId {
-  code: string;
-  face_url: string;
-  pcn: string;
-  signature: string | null;
+  code?: string | null;
+  face_url?: string | null;
+  pcn?: string | null;
+  signature?: string | null;
 }
 
 export interface EgovSsoCitizenProfile {
-  additional_information: EgovSsoAdditionalInformation;
-  address: string;
-  address_line_2: string | null;
-  barangay: string;
-  barangay_code: string;
-  birth_date: string;
-  country: string;
-  country_alpha_2_code: string;
-  country_alpha_3_code: string;
-  country_id: number;
-  email: string;
-  first_name: string;
-  foreign_address: unknown | null;
-  gender: string;
-  last_name: string;
-  middle_name: string;
-  mobile: string;
-  municipality: string;
-  municipality_code: string;
-  national_id: EgovSsoNationalId | null;
-  nationality: string;
-  passport: EgovSsoPassport | null;
-  photo: string;
-  postal: string | null;
-  province: string;
-  province_code: string;
-  region: string;
-  region_code: string;
-  signature: string | null;
-  signature_url: string | null;
-  street: string;
-  suffix: string | null;
-  tin_id: unknown | null;
-  uniqid: string;
+  additional_information?: EgovSsoAdditionalInformation | null;
+  address?: string | null;
+  address_line_2?: string | null;
+  barangay?: string | null;
+  barangay_code?: string | null;
+  birth_date?: string | null;
+  country?: string | null;
+  country_alpha_2_code?: string | null;
+  country_alpha_3_code?: string | null;
+  country_id?: number | null;
+  email?: string | null;
+  first_name?: string | null;
+  foreign_address?: unknown | null;
+  gender?: string | null;
+  last_name?: string | null;
+  middle_name?: string | null;
+  mobile?: string | null;
+  municipality?: string | null;
+  municipality_code?: string | null;
+  national_id?: EgovSsoNationalId | null;
+  nationality?: string | null;
+  passport?: EgovSsoPassport | null;
+  photo?: string | null;
+  postal?: string | null;
+  province?: string | null;
+  province_code?: string | null;
+  region?: string | null;
+  region_code?: string | null;
+  signature?: string | null;
+  signature_url?: string | null;
+  street?: string | null;
+  suffix?: string | null;
+  tin_id?: unknown | null;
+  uniqid?: string | null;
 }
 
 export interface EgovSsoAuthenticationResponse {

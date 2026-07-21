@@ -1,4 +1,5 @@
 import type { UIMessage } from "ai";
+import type { BirFormArtifact } from "@/lib/bir-form/artifact";
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import type { BusinessPlan, IntakeQuestion } from "@/lib/questions";
 
@@ -44,9 +45,14 @@ export type UserInfoOutput = {
   >;
   source: "eGov SSO";
 };
+export type GenerateBirFormOutput = {
+  artifact: BirFormArtifact;
+  source: "Authenticated eGov SSO profile";
+};
 
 export type BusinessChatTools = {
   user_info: { input: Record<string, never>; output: UserInfoOutput };
+  generate_bir_form: { input: Record<string, never>; output: GenerateBirFormOutput };
   askUser: { input: AskUserInput; output: AskUserOutput };
   webSearch: { input: WebSearchInput; output: WebSearchOutput };
   editDtiBusinessNameForm: { input: EditDtiInput; output: EditDtiOutput };

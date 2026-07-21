@@ -521,6 +521,66 @@
 .dti-form-card footer button svg {
   width: 15px;
 }
+.pdf-artifact-card {
+  width: 100%;
+  padding: 13px;
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  gap: 11px;
+  align-items: center;
+  border: 1px solid #d9e2f2;
+  border-radius: 16px;
+  color: var(--ink);
+  background: #fff;
+  box-shadow: 0 5px 18px rgba(38, 55, 86, 0.08);
+  text-align: left;
+  cursor: pointer;
+}
+.pdf-artifact-card:hover {
+  border-color: #adc2ef;
+  background: #fbfcff;
+}
+.pdf-artifact-icon {
+  width: 44px;
+  height: 50px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: #fff;
+  background: #d94040;
+}
+.pdf-artifact-icon svg {
+  width: 25px;
+}
+.pdf-artifact-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.pdf-artifact-copy small {
+  color: #7b879a;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+.pdf-artifact-copy strong {
+  font-size: 14px;
+}
+.pdf-artifact-copy > span {
+  color: #788498;
+  font-size: 10px;
+}
+.pdf-artifact-action {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--blue);
+  font-size: 11px;
+  font-weight: 800;
+}
+.pdf-artifact-action svg {
+  width: 13px;
+}
 .chat-composer-shell {
   padding: 9px 12px max(12px, env(safe-area-inset-bottom));
   border-top: 1px solid #e1e6ef;
@@ -792,6 +852,95 @@
   box-shadow: 0 -15px 40px rgba(14, 28, 53, 0.2);
   animation: chat-sheet-in 0.25s ease-out;
 }
+.pdf-preview-layer {
+  align-items: stretch;
+  padding-top: 18px;
+}
+.pdf-preview-dialog {
+  width: 100%;
+  min-height: 0;
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  border-radius: 22px 22px 0 0;
+  outline: 0;
+  background: #f3f5f9;
+  box-shadow: 0 -15px 40px rgba(14, 28, 53, 0.24);
+  animation: chat-sheet-in 0.25s ease-out;
+}
+.pdf-preview-dialog > header {
+  min-height: 68px;
+  padding: 12px 54px 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid #dde3ed;
+  background: #fff;
+}
+.pdf-preview-dialog > header > span {
+  width: 38px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: #fff;
+  background: #d94040;
+}
+.pdf-preview-dialog > header > span svg {
+  width: 22px;
+}
+.pdf-preview-dialog > header div {
+  display: grid;
+  gap: 1px;
+}
+.pdf-preview-dialog > header small {
+  color: #7a879a;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+.pdf-preview-dialog > header h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.pdf-preview-dialog iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #d9dde5;
+}
+.pdf-preview-dialog > footer {
+  padding: 10px 12px max(12px, env(safe-area-inset-bottom));
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  border-top: 1px solid #dfe4ed;
+  background: #fff;
+}
+.pdf-preview-dialog > footer a {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid #ccd7e9;
+  border-radius: 11px;
+  color: var(--blue);
+  background: #f8faff;
+  font-size: 11px;
+  font-weight: 800;
+  text-decoration: none;
+}
+.pdf-preview-dialog > footer a:first-child {
+  border-color: var(--blue);
+  color: #fff;
+  background: var(--blue);
+}
+.pdf-preview-dialog > footer svg {
+  width: 15px;
+}
 .chat-dialog-close {
   position: absolute;
   right: 14px;
@@ -969,7 +1118,8 @@
   .chat-working-shimmer,
   .chat-shimmer,
   .spin,
-  .chat-payment-dialog {
+  .chat-payment-dialog,
+  .pdf-preview-dialog {
     animation: none;
   }
   .chat-shimmer,
