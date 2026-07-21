@@ -1,6 +1,12 @@
 import type { EgovSsoCitizenProfile } from "@repo/egov/eGovSso";
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import { mapEgovCitizenProfile } from "@/lib/auth/profile";
+import {
+  deleteStoredAuthSession,
+  pruneStoredAuthSessions,
+  readStoredAuthSession,
+  storeAuthSession,
+} from "@/server/auth-sessions";
 
 export const AUTH_COOKIE_NAME = "egov_agentic_biz_session";
 
@@ -25,8 +31,6 @@ const globalSessionRegistry = globalThis as typeof globalThis & {
 };
 
 function sessions(): SessionRegistry {
-  // Hackathon sample boundary: survives browser refreshes while this server process lives.
-  // Production deployments must replace this with a shared session store.
   globalSessionRegistry.egovAgenticBizSessions ??= new Map();
   return globalSessionRegistry.egovAgenticBizSessions;
 }
@@ -62,6 +66,7 @@ function pruneExpiredSessions() {
   for (const [sessionId, session] of sessions()) {
     if (session.expiresAt <= now) sessions().delete(sessionId);
   }
+  pruneStoredAuthSessions(now);
 }
 
 export function createSession(rawProfile: EgovSsoCitizenProfile) {
@@ -74,6 +79,7 @@ export function createSession(rawProfile: EgovSsoCitizenProfile) {
     profile: mapEgovCitizenProfile(rawProfile),
     rawProfile,
   };
+  storeAuthSession(sessionId, rawProfile, session.expiresAt);
   sessions().set(sessionId, session);
   return { maxAge, session, sessionId };
 }
@@ -82,10 +88,21 @@ export function readSession(request: Request): AuthenticatedSession | undefined 
   const sessionId = cookieValue(request, AUTH_COOKIE_NAME);
   if (!sessionId) return undefined;
 
-  const session = sessions().get(sessionId);
-  if (!session) return undefined;
+  let session = sessions().get(sessionId);
+  if (!session) {
+    const storedSession = readStoredAuthSession(sessionId);
+    if (!storedSession) return undefined;
+    session = {
+      artifacts: new Map(),
+      expiresAt: storedSession.expiresAt,
+      profile: mapEgovCitizenProfile(storedSession.rawProfile),
+      rawProfile: storedSession.rawProfile,
+    };
+    sessions().set(sessionId, session);
+  }
   if (session.expiresAt <= Date.now()) {
     sessions().delete(sessionId);
+    deleteStoredAuthSession(sessionId);
     return undefined;
   }
 
@@ -94,7 +111,10 @@ export function readSession(request: Request): AuthenticatedSession | undefined 
 
 export function deleteSession(request: Request) {
   const sessionId = cookieValue(request, AUTH_COOKIE_NAME);
-  if (sessionId) sessions().delete(sessionId);
+  if (sessionId) {
+    sessions().delete(sessionId);
+    deleteStoredAuthSession(sessionId);
+  }
 }
 
 export function storeSessionArtifact(

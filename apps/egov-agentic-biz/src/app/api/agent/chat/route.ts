@@ -5,6 +5,7 @@ import {
   createGateway,
   createUIMessageStream,
   createUIMessageStreamResponse,
+  isToolUIPart,
   stepCountIs,
   streamText,
   tool,
@@ -33,7 +34,11 @@ import {
 import { readSession } from "@/lib/auth/session";
 import { createBirFormArtifact } from "@/lib/bir-form/artifact";
 import { isExplicitBirFormRequest } from "@/lib/bir-form/request";
-import { initialRegistrationPlan } from "@/lib/registration-plan";
+import {
+  completeRegistrationPlan,
+  initialRegistrationPlan,
+  normalizeRegistrationPlan,
+} from "@/lib/registration-plan";
 import { dtiRegistrationFee, formatPeso } from "@/lib/dti-fees";
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import {
@@ -43,6 +48,8 @@ import {
   resolveBusinessFormAddress,
 } from "@/lib/form-prefill";
 import type { BusinessPlan, IntakeAnswer, IntakeQuestion } from "@/lib/questions";
+import { isValidChoiceAnswer } from "@/lib/intake-validation";
+import { buildFinalBusiness, buildMockCompliance } from "@/lib/mock-compliance";
 import { getConversation, saveMessages, setActiveStream } from "@/server/conversations";
 import {
   getLatestPaymentForConversation,
@@ -50,18 +57,28 @@ import {
   isPaidStatus,
 } from "@/server/payments";
 import { getResumableContext } from "@/server/resumable";
+import { upsertRegisteredBusiness } from "@/server/registered-businesses";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 const BARANGAY_CLEARANCE_MOCK_DELAY_MS = 2_000;
 const EBPLS_PERMIT_MOCK_DELAY_MS = 5_000;
+const COMPLIANCE_MOCK_DELAY_MS = 900;
 
 const PLACEHOLDER_ANSWER =
   /^(?:a+s+s+|asdf+|test(?:ing)?|sample|placeholder|none|n\/?a|not sure|unknown|idk|tbd|xxx+|-+)$/i;
 
 function normalizedAnswerText(value: string | string[]) {
   return (Array.isArray(value) ? value.join(" ") : value).trim().replace(/\s+/g, " ");
+}
+
+function hasCompletedTool(messages: UIMessage[], type: string) {
+  return messages.some((message) =>
+    message.parts.some(
+      (part) => isToolUIPart(part) && part.type === type && part.state === "output-available",
+    ),
+  );
 }
 
 function isMeaningfulBusinessName(value: string) {
@@ -79,7 +96,9 @@ function isCompleteBusinessAddress(value: string) {
   return addressMarker && (text.includes(",") || text.split(" ").length >= 4);
 }
 
-function isUsableIntakeAnswer(answer: IntakeAnswer) {
+function isUsableIntakeAnswer(answer: IntakeAnswer, question?: IntakeQuestion) {
+  if (question?.type === "single" || question?.type === "multi")
+    return isValidChoiceAnswer(question, answer.value);
   const text = normalizedAnswerText(answer.value);
   if (!text || PLACEHOLDER_ANSWER.test(text)) return false;
   if (answer.questionId === "business-address") return isCompleteBusinessAddress(text);
@@ -164,7 +183,7 @@ const ebplsBusinessPermitApplicationSchema = z.object({
 const planStepSchema = z.object({
   id: z.string().min(1).max(60),
   label: z.string().min(1).max(120),
-  status: z.enum(["pending", "in_progress", "completed"]),
+  status: z.enum(["pending", "in_progress", "completed", "skipped"]),
 });
 const registrationPlanSchema = z.object({
   title: z.string().min(1).max(120),
@@ -247,7 +266,7 @@ function lastEbplsReceipt(messages: UIMessage[]) {
 }
 
 function planAfterPermitIssued(plan: RegistrationPlan): RegistrationPlan {
-  return normalizePlan({
+  return normalizeRegistrationPlan({
     ...plan,
     steps: plan.steps.map((step) => ({
       ...step,
@@ -308,7 +327,7 @@ function latestUserText(messages: UIMessage[]) {
 }
 
 function planAfterBarangayClearance(plan: RegistrationPlan): RegistrationPlan {
-  return normalizePlan({
+  return normalizeRegistrationPlan({
     ...plan,
     steps: plan.steps.map((step) => ({
       ...step,
@@ -326,7 +345,7 @@ function planAfterBarangayClearance(plan: RegistrationPlan): RegistrationPlan {
 }
 
 function planAfterEbplsSubmission(plan: RegistrationPlan): RegistrationPlan {
-  return normalizePlan({
+  return normalizeRegistrationPlan({
     ...plan,
     steps: plan.steps.map((step) => ({
       ...step,
@@ -444,7 +463,7 @@ function issueEbplsPermit(receipt: EbplsBusinessPermitReceipt): EbplsBusinessPer
 
 function planAfterPayment(plan: RegistrationPlan | null): RegistrationPlan {
   const source = plan ?? initialRegistrationPlan;
-  return normalizePlan({
+  return normalizeRegistrationPlan({
     ...source,
     steps: source.steps.map((step) => ({
       ...step,
@@ -555,7 +574,12 @@ function intakeBatch(prompt: string, profile: CitizenProfile | null, answers: In
         /(?:called|named|name is|business name(?: is|:)?|trade name(?: is|:)?)\s+[“"]?([^.”"\n]+)/i,
       )?.[1]
       ?.trim() ?? "";
-  if (!answered.has("proposed-business-name") && !isMeaningfulBusinessName(promptName))
+  const registrationType = makePlan(prompt, profile, answers).registrationType;
+  if (
+    registrationType !== "Self-employed" &&
+    !answered.has("proposed-business-name") &&
+    !isMeaningfulBusinessName(promptName)
+  )
     questions.push(proposedNameQuestion());
   return questions;
 }
@@ -598,7 +622,7 @@ function toolAnswers(messages: UIMessage[]): IntakeAnswer[] {
           value: answer.value,
           labels: answer.labels,
         };
-        if (isUsableIntakeAnswer(intakeAnswer)) answers.set(question.id, intakeAnswer);
+        if (isUsableIntakeAnswer(intakeAnswer, question)) answers.set(question.id, intakeAnswer);
         else answers.delete(question.id);
       }
     }
@@ -632,7 +656,7 @@ function invalidIntakeAnswerIds(messages: UIMessage[]) {
           value: answer.value,
           labels: answer.labels,
         };
-        if (isUsableIntakeAnswer(intakeAnswer)) invalid.delete(question.id);
+        if (isUsableIntakeAnswer(intakeAnswer, question)) invalid.delete(question.id);
         else invalid.add(question.id);
       }
     }
@@ -646,19 +670,6 @@ function lastRegistrationPlan(messages: UIMessage[]): RegistrationPlan | null {
         return (part.output as { plan: RegistrationPlan }).plan;
     }
   return null;
-}
-
-function normalizePlan(plan: RegistrationPlan): RegistrationPlan {
-  let foundActive = false;
-  return {
-    title: plan.title,
-    steps: plan.steps.map((step) => {
-      if (step.status !== "in_progress") return step;
-      if (foundActive) return { ...step, status: "pending" as const };
-      foundActive = true;
-      return step;
-    }),
-  };
 }
 
 function emitTool(
@@ -684,7 +695,7 @@ function planForAnswers(
   const detailsComplete =
     intakeReady ??
     (answerIds.has("workers") && answerIds.has("business-address") && answers.length >= 3);
-  return normalizePlan({
+  return normalizeRegistrationPlan({
     ...initialRegistrationPlan,
     steps: initialRegistrationPlan.steps.map((step) => ({
       ...step,
@@ -998,7 +1009,9 @@ function agentTools(
     updatePlan: tool({
       description: "Create or update the concise registration checklist whenever progress changes.",
       inputSchema: registrationPlanSchema.extend({ note: z.string().max(180).optional() }),
-      execute: (input) => ({ plan: normalizePlan({ title: input.title, steps: input.steps }) }),
+      execute: (input) => ({
+        plan: normalizeRegistrationPlan({ title: input.title, steps: input.steps }),
+      }),
     }),
   };
 }
@@ -1152,6 +1165,35 @@ export async function POST(request: Request) {
         return Response.json({ error: "EBPLS assessment not found." }, { status: 409 });
       const receipt = issueEbplsPermit(previousEbplsReceipt);
       const issuedPlan = planAfterPermitIssued(existingPlan ?? initialRegistrationPlan);
+      const businessPlan = makePlan(prompt, profile, answers);
+      const compliance = buildMockCompliance(businessPlan, receipt);
+      const sectorRecords = compliance.records.filter((record) => record.kind === "permit");
+      const employerRecords = compliance.records.filter((record) => record.kind === "employer");
+      const taxRecords = compliance.records.filter((record) => record.kind === "tax");
+      const booksAndInvoiceRecords = taxRecords.filter((record) =>
+        ["books-of-accounts", "invoice-setup"].includes(record.id),
+      );
+      const registrationTaxRecords = taxRecords.filter(
+        (record) => !booksAndInvoiceRecords.includes(record),
+      );
+      const sectorRequired = sectorRecords.some((record) => record.status !== "Not required");
+      const employerRequired = employerRecords.some((record) => record.status !== "Not required");
+      const completedPlan = completeRegistrationPlan(issuedPlan, {
+        employer: employerRequired,
+        sectorPermits: sectorRequired,
+      });
+      const business = upsertRegisteredBusiness(
+        profile.id,
+        buildFinalBusiness({
+          conversationId: conversation.id,
+          profile,
+          plan: businessPlan,
+          dtiForm: lastForm,
+          clearance: previousClearance,
+          receipt,
+          compliance,
+        }),
+      );
       return manualResponse(conversation.id, messages, async (writer) => {
         const ebplsId = crypto.randomUUID();
         writer.write({
@@ -1182,13 +1224,55 @@ export async function POST(request: Request) {
           { ...issuedPlan, note: "Mayor’s/business permit issued. Moving to BIR registration." },
           { plan: issuedPlan },
         );
+        await wait(COMPLIANCE_MOCK_DELAY_MS);
+        const booksToolId = crypto.randomUUID();
+        writer.write({
+          type: "tool-input-available",
+          toolCallId: booksToolId,
+          toolName: "setupBooksAndInvoices",
+          input: {},
+        });
+        await wait(COMPLIANCE_MOCK_DELAY_MS);
+        writer.write({
+          type: "tool-output-available",
+          toolCallId: booksToolId,
+          output: { records: booksAndInvoiceRecords },
+        });
+        emitTool(
+          writer,
+          "setupTaxCompliance",
+          {},
+          {
+            records: registrationTaxRecords,
+            obligations: compliance.taxObligations,
+          },
+        );
+        await wait(COMPLIANCE_MOCK_DELAY_MS);
+        emitTool(writer, "completeSectorPermits", {}, { records: sectorRecords });
+        await wait(COMPLIANCE_MOCK_DELAY_MS);
+        emitTool(writer, "registerEmployerAgencies", {}, { records: employerRecords });
+        emitTool(
+          writer,
+          "updatePlan",
+          { ...completedPlan, note: "Demo compliance setup complete and business record saved." },
+          { plan: completedPlan },
+        );
+        emitTool(
+          writer,
+          "finalizeBusinessRegistration",
+          {},
+          {
+            businessId: business.id,
+            businessName: business.name,
+            status: business.status,
+          },
+        );
         const textId = crypto.randomUUID();
         writer.write({ type: "text-start", id: textId });
         writer.write({
           type: "text-delta",
           id: textId,
-          delta:
-            "Your mock mayor’s/business permit has been issued through **EBPLS**. The next checkpoint is BIR registration with the correct RDO.",
+          delta: `**All set up.** The demo registration for **${business.name}** is complete, including books, invoices, recurring tax reminders, permits, and employer checks. I saved everything to your linked business record. Every generated reference is marked as a mock and is not an official government record.`,
         });
         writer.write({ type: "text-end", id: textId });
       });
@@ -1286,8 +1370,10 @@ export async function POST(request: Request) {
     !lastForm;
   const continuingIntake =
     answers.length > 0 ||
+    Boolean(existingPlan) ||
     isRegistrationStart(latestPrompt) ||
-    (firstTurn && describesBusinessIdea(parsed.data.initialPrompt));
+    describesBusinessIdea(parsed.data.initialPrompt) ||
+    (firstTurn && describesBusinessIdea(latestPrompt));
 
   if (!lastForm && continuingIntake) {
     const questions = intakeBatch(prompt, profile, answers);
@@ -1391,6 +1477,76 @@ export async function POST(request: Request) {
 
   if (
     continuingIntake &&
+    !lastForm &&
+    businessPlan.registrationType === "Self-employed" &&
+    !hasCompletedTool(messages, "tool-prepareSelfEmployedRegistration")
+  )
+    return manualResponse(conversation.id, messages, (writer) => {
+      const preparedPlan = normalizeRegistrationPlan({
+        ...currentPlan,
+        steps: currentPlan.steps.map((step) => ({
+          ...step,
+          status: [
+            "details",
+            "structure",
+            "name-registration",
+            "local-clearance",
+            "business-permit",
+          ].includes(step.id)
+            ? step.id === "name-registration" ||
+              step.id === "local-clearance" ||
+              step.id === "business-permit"
+              ? ("skipped" as const)
+              : ("completed" as const)
+            : step.id === "bir"
+              ? ("in_progress" as const)
+              : ("pending" as const),
+        })),
+      });
+      emitTool(
+        writer,
+        "updatePlan",
+        { ...preparedPlan, note: "Self-employed route confirmed. Preparing the BIR checkpoint." },
+        { plan: preparedPlan },
+      );
+      emitTool(writer, "user_info", {}, userInfoOutput);
+      const toolCallId = crypto.randomUUID();
+      writer.write({
+        type: "tool-input-available",
+        toolCallId,
+        toolName: "prepareSelfEmployedRegistration",
+        input: {},
+      });
+      writer.write({
+        type: "tool-output-available",
+        toolCallId,
+        output: {
+          registrationType: "Self-employed",
+          taxpayerName: profile.fullName,
+          professionalActivity: businessPlan.businessLabel,
+          businessCity: businessPlan.city,
+          rdo: businessPlan.rdo
+            ? `${businessPlan.rdo.code} - ${businessPlan.rdo.name}`
+            : "For BIR confirmation",
+          addressSource: preference === "profile" ? "Authenticated profile" : "Business address",
+          status: "Ready for BIR form preparation",
+          nextAction: "Ask me to prepare BIR Form 1901 when you are ready to generate the PDF.",
+          demo: true,
+        },
+      });
+      const textId = crypto.randomUUID();
+      writer.write({ type: "text-start", id: textId });
+      writer.write({
+        type: "text-delta",
+        id: textId,
+        delta:
+          "I’ve prepared your self-employed BIR registration checkpoint using the details you confirmed. The next executable step is generating the prefilled BIR Form 1901.",
+      });
+      writer.write({ type: "text-end", id: textId });
+    });
+
+  if (
+    continuingIntake &&
     !hasSearched &&
     !lastForm &&
     businessPlan.registrationType === "Sole proprietor"
@@ -1486,6 +1642,7 @@ export async function POST(request: Request) {
     activeTools: [
       "user_info",
       "generate_bir_form",
+      "askUser",
       "webSearch",
       "editDtiBusinessNameForm",
       "updatePlan",
@@ -1493,9 +1650,11 @@ export async function POST(request: Request) {
     stopWhen: stepCountIs(4),
     system: `You guide a Filipino citizen through business registration in a human-in-the-loop chat. Be concise, warm, and factual. Prefer short paragraphs and lists. Use a markdown table only when comparing three or more records; never use a table for a two-column field/value summary.
 
-Intake questions are handled by the API router before this response. Never call askUser. Never print A/B/C choices in prose. Never ask users to provide a TIN.
+Standard intake questions are handled by the API router before this response. If you discover a consequential missing fact that prevents the next tool call, call askUser with one compact structured batch and stop. Never print A/B/C choices in prose. Never ask users to provide a TIN.
 
-Use updatePlan whenever registration progress changes. Keep the comprehensive 8–12 checkpoint plan, preserve stable step IDs, mark finished work completed, and keep at most one step in_progress. The current plan is ${JSON.stringify(existingPlan ?? currentPlan)}.
+For an active registration workflow, every response must advance or explicitly block the workflow. If the next checkpoint is ready, call the applicable tool now; do not merely describe the step, offer to help later, or end with phrases such as “if you want” or “I can help with that next.” If required information is missing, call askUser. Prose-only responses are allowed only for unrelated informational requests, explicit requests to review/explain, tool errors, or a genuinely completed workflow.
+
+Use updatePlan whenever registration progress changes. Keep the comprehensive 8–12 checkpoint plan and preserve stable step IDs. Mark finished work completed, requirements that do not apply to this route skipped, and keep at most one step in_progress. Never mark a requirement completed merely because the user started at a later checkpoint. The current plan is ${JSON.stringify(existingPlan ?? currentPlan)}.
 
 The user_info tool reports which authenticated eGov SSO fields are available for server-side form prefilling; it never returns their values to the model. It is ${hasUserInfo ? "already loaded in this conversation" : "not loaded yet"}. Call it before a government form tool when it has not already completed.
 

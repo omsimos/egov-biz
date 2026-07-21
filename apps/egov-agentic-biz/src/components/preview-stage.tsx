@@ -32,6 +32,8 @@ const previewBusinesses: RegisteredBusiness[] = [
     type: "Sole proprietorship",
     registrationNumber: "DTI-2026-104382",
     status: "Active",
+    finalizedAt: "2026-07-22T00:00:00.000Z",
+    nextTaxDue: "2026-08-10",
   },
 ];
 
@@ -79,6 +81,7 @@ export function PreviewStage() {
             initialPrompt=""
             onBack={() => setScreen("home")}
             onDelete={noop}
+            onOpenBusiness={noop}
             onResume={noop}
             onSubmit={noop}
             profile={previewProfile}

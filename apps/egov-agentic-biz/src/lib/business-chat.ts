@@ -2,6 +2,7 @@ import type { UIMessage } from "ai";
 import type { BirFormArtifact } from "@/lib/bir-form/artifact";
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import type { BusinessPlan, IntakeQuestion } from "@/lib/questions";
+import type { BusinessRecord, TaxObligation } from "@/lib/registered-business";
 
 export type DtiBusinessNameForm = {
   applicationType: "New registration";
@@ -77,10 +78,33 @@ export type EbplsBusinessPermitReceipt = EbplsBusinessPermitApplication & {
 };
 export type SubmitEbplsBusinessPermitInput = { application: EbplsBusinessPermitApplication };
 export type SubmitEbplsBusinessPermitOutput = { receipt: EbplsBusinessPermitReceipt };
+export type SetupBooksAndInvoicesOutput = { records: BusinessRecord[] };
+export type PrepareSelfEmployedRegistrationOutput = {
+  registrationType: "Self-employed";
+  taxpayerName: string;
+  professionalActivity: string;
+  businessCity: string;
+  rdo: string;
+  addressSource: "Business address" | "Authenticated profile";
+  status: "Ready for BIR form preparation";
+  nextAction: string;
+  demo: true;
+};
+export type SetupTaxComplianceOutput = {
+  records: BusinessRecord[];
+  obligations: TaxObligation[];
+};
+export type CompleteSectorPermitsOutput = { records: BusinessRecord[] };
+export type RegisterEmployerAgenciesOutput = { records: BusinessRecord[] };
+export type FinalizeBusinessRegistrationOutput = {
+  businessId: string;
+  businessName: string;
+  status: "Active";
+};
 export type AgentPlanStep = {
   id: string;
   label: string;
-  status: "pending" | "in_progress" | "completed";
+  status: "pending" | "in_progress" | "completed" | "skipped";
 };
 export type RegistrationPlan = { title: string; steps: AgentPlanStep[] };
 export type UpdatePlanInput = RegistrationPlan & { note?: string };
@@ -115,9 +139,30 @@ export type BusinessChatTools = {
     input: SubmitBarangayClearanceInput;
     output: SubmitBarangayClearanceOutput;
   };
+  prepareSelfEmployedRegistration: {
+    input: Record<string, never>;
+    output: PrepareSelfEmployedRegistrationOutput;
+  };
   submitEbplsBusinessPermit: {
     input: SubmitEbplsBusinessPermitInput;
     output: SubmitEbplsBusinessPermitOutput;
+  };
+  setupBooksAndInvoices: {
+    input: Record<string, never>;
+    output: SetupBooksAndInvoicesOutput;
+  };
+  setupTaxCompliance: { input: Record<string, never>; output: SetupTaxComplianceOutput };
+  completeSectorPermits: {
+    input: Record<string, never>;
+    output: CompleteSectorPermitsOutput;
+  };
+  registerEmployerAgencies: {
+    input: Record<string, never>;
+    output: RegisterEmployerAgenciesOutput;
+  };
+  finalizeBusinessRegistration: {
+    input: Record<string, never>;
+    output: FinalizeBusinessRegistrationOutput;
   };
   updatePlan: { input: UpdatePlanInput; output: UpdatePlanOutput };
 };

@@ -4,6 +4,172 @@
   grid-template-rows: 36px 62px minmax(0, 1fr) auto;
   background: #f4f6fa;
 }
+
+.compliance-result-card,
+.business-finalized-card {
+  border: 1px solid #d7e1ee;
+  border-radius: 17px;
+  background: #fff;
+  color: var(--ink);
+  overflow: hidden;
+}
+.compliance-result-card > header {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 11px;
+  padding: 14px;
+  background: #f5f9ff;
+}
+.compliance-result-card > header > span,
+.business-finalized-card > span {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #e6f0ff;
+  color: var(--blue);
+}
+.compliance-result-card header div,
+.business-finalized-card div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.compliance-result-card small,
+.business-finalized-card small {
+  color: var(--blue);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+.compliance-result-card strong,
+.business-finalized-card strong {
+  font-size: 14px;
+}
+.compliance-result-card p,
+.business-finalized-card p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.compliance-result-card ul {
+  margin: 0;
+  padding: 4px 14px;
+  list-style: none;
+}
+.compliance-result-card li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #edf0f4;
+}
+.compliance-result-card li:last-child {
+  border-bottom: 0;
+}
+.compliance-result-card li div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.compliance-result-card li strong {
+  font-size: 12px;
+}
+.compliance-result-card li span {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.compliance-result-card li i {
+  border-radius: 99px;
+  padding: 4px 7px;
+  background: #e9f7f1;
+  color: var(--success);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 900;
+}
+.compliance-result-card li i.muted {
+  background: #f0f2f5;
+  color: #747e8e;
+}
+.compliance-result-card footer {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 14px;
+  border-top: 1px solid #e3eaf3;
+  color: var(--blue);
+  font-size: 11px;
+  font-weight: 700;
+}
+.business-finalized-card {
+  display: grid;
+  grid-template-columns: 40px 1fr 18px;
+  gap: 11px;
+  align-items: center;
+  padding: 14px;
+  text-decoration: none;
+}
+.business-finalized-card > svg {
+  color: var(--blue);
+}
+.self-employed-setup-card {
+  overflow: hidden;
+  border: 1px solid #cdddf5;
+  border-radius: 17px;
+  background: #fff;
+}
+.self-employed-setup-card > header {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 14px;
+  background: #eef5ff;
+}
+.self-employed-setup-card > header > span {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--blue);
+}
+.self-employed-setup-card > header div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.self-employed-setup-card > header small {
+  color: var(--blue);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+}
+.self-employed-setup-card > header strong {
+  font-size: 12px;
+}
+.self-employed-setup-card > header i {
+  padding: 4px 7px;
+  border-radius: 99px;
+  background: #e4f5ed;
+  color: var(--success);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 900;
+}
+.self-employed-setup-card > footer {
+  padding: 11px 14px;
+  border-top: 1px solid #e5ebf3;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
 .chat-status-bar {
   padding: 5px 18px 0;
   display: flex;
@@ -2511,6 +2677,19 @@
 .registration-plan-items li.completed i {
   border-color: var(--success);
   background: var(--success);
+}
+.registration-plan-items li.skipped {
+  color: #939dac;
+}
+.registration-plan-items li.skipped i {
+  border-color: #d2d8e2;
+  color: #8b96a8;
+  background: #f1f3f6;
+}
+.registration-plan-skipped-label {
+  color: #9aa3b1;
+  font-size: inherit;
+  font-style: italic;
 }
 .registration-plan-items li.in_progress {
   color: var(--ink);

@@ -9,6 +9,7 @@ import {
   CheckCircle,
   CircleNotch,
   Buildings,
+  CalendarDots,
   Certificate,
   DownloadSimple,
   FilePdf,
@@ -19,9 +20,11 @@ import {
   Info,
   ListChecks,
   MagnifyingGlass,
+  Minus,
   PaperPlaneRight,
   PencilSimple,
   ShieldCheck,
+  Storefront,
   StopCircle,
   Plus,
   CaretDown,
@@ -46,6 +49,7 @@ import {
 } from "@/lib/business-chat";
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import type { IntakeQuestion } from "@/lib/questions";
+import type { BusinessRecord, TaxObligation } from "@/lib/registered-business";
 
 type AskUserPart = Extract<BusinessChatMessage["parts"][number], { type: "tool-askUser" }>;
 type ReadyAskUserPart = AskUserPart & {
@@ -68,6 +72,50 @@ function textOf(message: BusinessChatMessage) {
     .filter((part) => part.type === "text")
     .map((part) => part.text)
     .join("");
+}
+
+function ComplianceResultCard({
+  title,
+  subtitle,
+  records,
+  obligations = [],
+}: {
+  title: string;
+  subtitle: string;
+  records: BusinessRecord[];
+  obligations?: TaxObligation[];
+}) {
+  return (
+    <article className="compliance-result-card">
+      <header>
+        <span>
+          <ShieldCheck weight="duotone" />
+        </span>
+        <div>
+          <small>DEMO RESULT</small>
+          <strong>{title}</strong>
+          <p>{subtitle}</p>
+        </div>
+      </header>
+      <ul>
+        {records.map((record) => (
+          <li key={record.id}>
+            <div>
+              <strong>{record.title}</strong>
+              <span>{record.agency}</span>
+            </div>
+            <i className={record.status === "Not required" ? "muted" : ""}>{record.status}</i>
+          </li>
+        ))}
+      </ul>
+      {obligations.length > 0 && (
+        <footer>
+          <CalendarDots weight="duotone" />
+          <span>{obligations.length} tax reminders added to the business calendar</span>
+        </footer>
+      )}
+    </article>
+  );
 }
 
 function DetailRows({ rows }: { rows: [string, string][] }) {
@@ -306,12 +354,14 @@ function latestRegistrationPlan(messages: BusinessChatMessage[]) {
 function PlanDock({ plan, active }: { plan: RegistrationPlan; active: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const completed = plan.steps.filter((step) => step.status === "completed").length;
-  const allCompleted = plan.steps.length > 0 && completed === plan.steps.length;
+  const allResolved =
+    plan.steps.length > 0 &&
+    plan.steps.every((step) => step.status === "completed" || step.status === "skipped");
   const current =
     plan.steps.find((step) => step.status === "in_progress") ??
     plan.steps.find((step) => step.status === "pending") ??
     plan.steps.at(-1);
-  const currentLabel = allCompleted
+  const currentLabel = allResolved
     ? "Registration plan complete"
     : (current?.label ?? "Preparing your registration plan");
 
@@ -328,7 +378,7 @@ function PlanDock({ plan, active }: { plan: RegistrationPlan; active: boolean })
         onClick={() => setExpanded((open) => !open)}
       >
         <span className={`registration-plan-status ${current?.status ?? "pending"}`}>
-          {allCompleted || current?.status === "completed" ? (
+          {allResolved || current?.status === "completed" ? (
             <Check weight="bold" />
           ) : current?.status === "in_progress" ? (
             <ArrowRight weight="bold" />
@@ -362,9 +412,12 @@ function PlanDock({ plan, active }: { plan: RegistrationPlan; active: boolean })
                   className={`${step.status}${finishLine ? " finish-line" : ""}`}
                   key={step.id}
                   aria-current={step.status === "in_progress" ? "step" : undefined}
+                  aria-label={step.status === "skipped" ? `${step.label} — skipped` : undefined}
                 >
                   <i aria-hidden="true">
-                    {finishLine ? (
+                    {step.status === "skipped" ? (
+                      <Minus weight="bold" />
+                    ) : finishLine ? (
                       <FlagCheckered weight={step.status === "completed" ? "fill" : "duotone"} />
                     ) : step.status === "completed" ? (
                       <Check weight="bold" />
@@ -372,7 +425,12 @@ function PlanDock({ plan, active }: { plan: RegistrationPlan; active: boolean })
                       <ArrowRight weight="bold" />
                     ) : null}
                   </i>
-                  <span>{step.label}</span>
+                  <span>
+                    {step.label}
+                    {step.status === "skipped" && (
+                      <small className="registration-plan-skipped-label"> (skipped)</small>
+                    )}
+                  </span>
                 </li>
               );
             })}
@@ -761,6 +819,110 @@ function ToolPart({
         </div>
         <FilePdf />
       </div>
+    );
+  }
+  if (part.type === "tool-setupBooksAndInvoices") {
+    if (part.state !== "output-available")
+      return (
+        <div className="chat-tool-row active">
+          <CircleNotch className="spin" />
+          <div>
+            <small>Setting up books and invoices</small>
+            <span className="chat-shimmer">Preparing mock accounting records</span>
+          </div>
+          <FileText />
+        </div>
+      );
+    return (
+      <ComplianceResultCard
+        title="Books and invoices set up"
+        subtitle="Accounting books and sample invoice controls are ready"
+        records={part.output.records}
+      />
+    );
+  }
+  if (part.type === "tool-prepareSelfEmployedRegistration") {
+    if (part.state !== "output-available")
+      return (
+        <div className="chat-tool-row active">
+          <CircleNotch className="spin" />
+          <div>
+            <small>Preparing self-employed registration</small>
+            <span className="chat-shimmer">Matching the BIR route and RDO</span>
+          </div>
+          <FileText />
+        </div>
+      );
+    return (
+      <article className="self-employed-setup-card">
+        <header>
+          <span>
+            <FileText weight="duotone" />
+          </span>
+          <div>
+            <small>BIR REGISTRATION CHECKPOINT</small>
+            <strong>{part.output.status}</strong>
+          </div>
+          <i>Prepared</i>
+        </header>
+        <DetailRows
+          rows={[
+            ["Taxpayer", part.output.taxpayerName],
+            ["Activity", part.output.professionalActivity],
+            ["Business city", part.output.businessCity],
+            ["RDO", part.output.rdo],
+            ["Address source", part.output.addressSource],
+          ]}
+        />
+        <footer>{part.output.nextAction}</footer>
+      </article>
+    );
+  }
+  if (part.type === "tool-setupTaxCompliance") {
+    if (part.state !== "output-available") return null;
+    return (
+      <ComplianceResultCard
+        title="Tax calendar set up"
+        subtitle="BIR registration and recurring filing reminders"
+        records={part.output.records}
+        obligations={part.output.obligations}
+      />
+    );
+  }
+  if (part.type === "tool-completeSectorPermits") {
+    if (part.state !== "output-available") return null;
+    return (
+      <ComplianceResultCard
+        title="Sector checks resolved"
+        subtitle="Food, fire, sanitary, and sector requirements"
+        records={part.output.records}
+      />
+    );
+  }
+  if (part.type === "tool-registerEmployerAgencies") {
+    if (part.state !== "output-available") return null;
+    return (
+      <ComplianceResultCard
+        title="Employer registrations resolved"
+        subtitle="SSS, PhilHealth, and Pag-IBIG applicability"
+        records={part.output.records}
+      />
+    );
+  }
+  if (part.type === "tool-finalizeBusinessRegistration") {
+    if (part.state !== "output-available") return null;
+    return (
+      <a className="business-finalized-card" href={`/?business=${part.output.businessId}`}>
+        <span>
+          <Storefront weight="duotone" />
+        </span>
+        <div>
+          <small>LINKED BUSINESS SAVED</small>
+          <strong>{part.output.businessName}</strong>
+          <p>Open records and tax calendar</p>
+        </div>
+        <ArrowRight weight="bold" />
+      </a>
     );
   }
   if (part.type === "tool-webSearch") return <SearchTool part={part} />;

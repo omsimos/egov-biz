@@ -51,3 +51,40 @@ export const initialRegistrationPlan: RegistrationPlan = {
     },
   ],
 };
+
+export function normalizeRegistrationPlan(plan: RegistrationPlan): RegistrationPlan {
+  let foundActive = false;
+  const steps = plan.steps.map((step) => {
+    if (step.status !== "in_progress") return step;
+    if (foundActive) return { ...step, status: "pending" as const };
+    foundActive = true;
+    return step;
+  });
+  const activeIndex = steps.findIndex((step) => step.status === "in_progress");
+
+  return {
+    title: plan.title,
+    steps: steps.map((step, index) =>
+      activeIndex > index && step.status === "pending"
+        ? { ...step, status: "skipped" as const }
+        : step,
+    ),
+  };
+}
+
+export function completeRegistrationPlan(
+  plan: RegistrationPlan,
+  applicability: { employer: boolean; sectorPermits: boolean },
+): RegistrationPlan {
+  return {
+    ...plan,
+    steps: plan.steps.map((step) => ({
+      ...step,
+      status:
+        (step.id === "employer" && !applicability.employer) ||
+        (step.id === "sector-permits" && !applicability.sectorPermits)
+          ? ("skipped" as const)
+          : ("completed" as const),
+    })),
+  };
+}

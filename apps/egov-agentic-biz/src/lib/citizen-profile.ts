@@ -16,10 +16,4 @@ export type CitizenProfile = {
   avatarUrl: string | null;
 };
 
-export type RegisteredBusiness = {
-  id: string;
-  name: string;
-  type: string;
-  registrationNumber: string;
-  status: "Active" | "Draft";
-};
+export type { RegisteredBusinessListItem as RegisteredBusiness } from "@/lib/registered-business";

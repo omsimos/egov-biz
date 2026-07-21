@@ -24,6 +24,392 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* Linked business record */
+.business-detail-screen {
+  background: #f7f9fc;
+}
+.business-detail-scroll {
+  height: calc(100% - 36px - 57px - 73px);
+  overflow-y: auto;
+  padding: 14px 16px 28px;
+  scrollbar-width: none;
+}
+.business-detail-scroll::-webkit-scrollbar {
+  display: none;
+}
+.business-detail-loading {
+  height: 210px;
+  border-radius: 18px;
+}
+.business-detail-error {
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+}
+.business-detail-error svg {
+  width: 40px;
+  height: 40px;
+  color: var(--blue);
+}
+.business-detail-error strong {
+  color: var(--ink);
+}
+.business-identity-card {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 18px;
+  background: #123f92;
+  color: #fff;
+}
+.business-identity-card > span {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: rgb(255 255 255 / 12%);
+}
+.business-identity-card > span svg {
+  width: 26px;
+  height: 26px;
+}
+.business-identity-card > div {
+  min-width: 0;
+}
+.business-identity-card small {
+  display: block;
+  margin-bottom: 4px;
+  color: #bed3ff;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+.business-identity-card h1 {
+  margin: 0;
+  font-size: 21px;
+  line-height: 1.15;
+}
+.business-identity-card p {
+  margin: 5px 0 0;
+  color: #dce7ff;
+  font-size: 12px;
+}
+.business-identity-card > i {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  margin-top: 2px;
+  padding: 5px 8px;
+  border-radius: 99px;
+  background: rgb(255 255 255 / 12%);
+  color: #d9f9e9;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+}
+.business-detail-tabs {
+  position: sticky;
+  top: -14px;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+  margin: 12px 0 16px;
+  padding: 4px;
+  border: 1px solid #e0e6ef;
+  border-radius: 13px;
+  background: #eef2f7;
+}
+.business-detail-tabs button {
+  min-height: 34px;
+  border-radius: 9px;
+  color: #657085;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.business-detail-tabs button.active {
+  background: #fff;
+  color: var(--blue);
+}
+.business-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.business-overview > section {
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+}
+.business-overview h2,
+.business-records-list h2,
+.tax-calendar-list h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.business-overview dl {
+  margin: 10px 0 0;
+}
+.business-overview dl div {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 10px;
+  padding: 6px 0;
+}
+.business-overview dt {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.business-overview dd {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.business-overview section > p {
+  margin: 10px 0 5px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.business-overview section > span {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.next-tax-card {
+  display: grid;
+  grid-template-columns: 40px 1fr 16px;
+  gap: 10px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid #cdddf5;
+  border-radius: 16px;
+  background: #eef5ff;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.next-tax-card > svg:first-child {
+  width: 30px;
+  height: 30px;
+  color: var(--blue);
+}
+.next-tax-card div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.next-tax-card small {
+  color: var(--blue);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+.next-tax-card strong {
+  font-size: 12px;
+}
+.next-tax-card span {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.next-tax-card > svg:last-child {
+  color: var(--blue);
+}
+.demo-record-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 3px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+.demo-record-note svg {
+  width: 13px;
+  flex: none;
+  color: var(--blue);
+}
+.business-records-list,
+.tax-calendar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.business-records-list > header,
+.tax-calendar-list > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.business-records-list > header span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.business-records-list article {
+  display: grid;
+  grid-template-columns: 38px 1fr auto;
+  gap: 10px;
+  align-items: start;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: #fff;
+}
+.business-records-list article > span {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+.business-records-list article > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+.business-records-list article strong {
+  font-size: 12px;
+}
+.business-records-list article p,
+.business-records-list article small,
+.business-records-list article em {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.business-records-list article em {
+  margin-top: 4px;
+  font-style: normal;
+}
+.business-records-list article > i {
+  padding: 4px 6px;
+  border-radius: 99px;
+  background: #e9f7f1;
+  color: var(--success);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 900;
+}
+.business-records-list article > i.muted {
+  background: #f0f2f5;
+  color: #747e8e;
+}
+.tax-calendar-list > header {
+  padding: 2px 2px 0;
+}
+.tax-calendar-list > header small {
+  color: var(--blue);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+.tax-calendar-list > header svg {
+  width: 30px;
+  height: 30px;
+  color: var(--blue);
+}
+.tax-calendar-list > p {
+  margin: 0 2px 4px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+.tax-calendar-list article {
+  display: grid;
+  grid-template-columns: 47px 1fr auto;
+  gap: 11px;
+  align-items: start;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: #fff;
+}
+.tax-calendar-list time {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 7px 4px;
+  border-radius: 11px;
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+.tax-calendar-list time strong {
+  font-size: 18px;
+  line-height: 1;
+}
+.tax-calendar-list time span {
+  margin-top: 3px;
+  font-size: 9px;
+  font-weight: 900;
+}
+.tax-calendar-list article > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+.tax-calendar-list article small {
+  color: var(--blue);
+  font-size: 9px;
+  font-weight: 800;
+}
+.tax-calendar-list article strong {
+  font-size: 12px;
+  line-height: 1.3;
+}
+.tax-calendar-list article span {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.tax-calendar-list article p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 9px;
+  line-height: 1.35;
+}
+.tax-calendar-list article > i {
+  color: var(--blue);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 900;
+}
+.business-record-link {
+  width: 100%;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.business-record-link:active {
+  transform: translateY(1px);
+}
+.business-record-end {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.business-record-end > svg {
+  width: 14px;
+  color: #8792a5;
+}
+
 :root {
   --blue: #0755e9;
   --blue-dark: #073caa;

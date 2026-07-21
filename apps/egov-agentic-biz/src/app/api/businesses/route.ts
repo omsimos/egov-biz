@@ -1,19 +1,18 @@
 import { NextResponse } from "next/server";
 import { readSession } from "@/lib/auth/session";
-import type { RegisteredBusiness } from "@/lib/citizen-profile";
+import { listRegisteredBusinesses } from "@/server/registered-businesses";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  if (!readSession(request)) {
+  const session = readSession(request);
+  if (!session) {
     return NextResponse.json(
       { error: "Authentication required." },
       { headers: { "Cache-Control": "no-store" }, status: 401 },
     );
   }
 
-  // eGov SSO authenticates the citizen profile; it does not return registered businesses.
-  // Keep this empty until an authoritative business-registry contract is integrated.
-  const businesses: RegisteredBusiness[] = [];
+  const businesses = listRegisteredBusinesses(session.profile.id);
   return NextResponse.json({ data: businesses }, { headers: { "Cache-Control": "no-store" } });
 }

@@ -48,6 +48,38 @@ function initialize(database: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_payments_conversation_created
       ON payments(conversation_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS registered_businesses (
+      id TEXT PRIMARY KEY,
+      conversation_id TEXT NOT NULL UNIQUE,
+      profile_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      category TEXT NOT NULL,
+      registration_number TEXT NOT NULL,
+      status TEXT NOT NULL,
+      owner_name TEXT NOT NULL,
+      business_activity TEXT NOT NULL,
+      business_address TEXT NOT NULL,
+      city TEXT NOT NULL,
+      rdo TEXT NOT NULL,
+      tin_masked TEXT NOT NULL,
+      records_json TEXT NOT NULL,
+      tax_obligations_json TEXT NOT NULL,
+      finalized_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_registered_businesses_profile_updated
+      ON registered_businesses(profile_id, updated_at DESC);
+
+    CREATE TABLE IF NOT EXISTS auth_sessions (
+      id TEXT PRIMARY KEY,
+      raw_profile_json TEXT NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires
+      ON auth_sessions(expires_at);
   `);
   const paymentColumns = database.prepare("PRAGMA table_info(payments)").all() as {
     name: string;

@@ -51,6 +51,12 @@ describe("mapEgovCitizenProfile", () => {
     expect(result.rdo).toBe("");
   });
 
+  test("exposes only a masked TIN", () => {
+    const result = mapEgovCitizenProfile({ ...profile, tin_id: "123-456-789-00000" });
+
+    expect(result.tinMasked).toBe("123-456-***-000");
+  });
+
   test("normalizes missing and malformed profile values", () => {
     const result = mapEgovCitizenProfile({
       address: null,

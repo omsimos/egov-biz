@@ -5,8 +5,12 @@ import {
   ArrowRight,
   BellSimple,
   Briefcase,
+  CalendarDots,
+  CaretRight,
+  CheckCircle,
   Coffee,
   DotsThree,
+  FileText,
   FolderOpen,
   Laptop,
   ShieldCheck,
@@ -27,10 +31,11 @@ import type {
   PaymentServiceType,
 } from "@/lib/business-chat";
 import type { CitizenProfile, RegisteredBusiness } from "@/lib/citizen-profile";
+import type { RegisteredBusiness as RegisteredBusinessDetail } from "@/lib/registered-business";
 import { useApi } from "@/lib/use-api";
 import { useAuthSession } from "@/lib/use-auth-session";
 
-type Screen = "restoring" | "home" | "business" | "chat";
+type Screen = "restoring" | "home" | "business" | "business-detail" | "chat";
 
 const suggestions = [
   "I want to start a coffee subscription business in Makati",
@@ -38,6 +43,192 @@ const suggestions = [
   "Help me open a small online shop",
 ];
 
+function formatBusinessDate(value: string) {
+  return new Date(`${value.length === 10 ? `${value}T00:00:00Z` : value}`).toLocaleDateString(
+    "en-PH",
+    { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Manila" },
+  );
+}
+
+function BusinessDetailScreen({
+  business,
+  loading,
+  error,
+  onBack,
+  profile,
+}: {
+  business: RegisteredBusinessDetail | null;
+  loading: boolean;
+  error: string | null;
+  onBack: () => void;
+  profile: CitizenProfile;
+}) {
+  const [tab, setTab] = useState<"overview" | "records" | "calendar">("overview");
+  return (
+    <div className="screen business-detail-screen">
+      <StatusBar />
+      <Header title="Business record" onBack={onBack} profile={profile} />
+      <div className="business-detail-scroll" id="app-content">
+        {loading ? (
+          <div className="business-detail-loading skeleton-card" />
+        ) : error || !business ? (
+          <div className="business-detail-error">
+            <Briefcase weight="duotone" />
+            <strong>Business record unavailable</strong>
+            <span>{error ?? "This linked record could not be found."}</span>
+          </div>
+        ) : (
+          <>
+            <section className="business-identity-card">
+              <span>
+                <Storefront weight="duotone" />
+              </span>
+              <div>
+                <small>LINKED TO {business.tinMasked || "YOUR EGOV ACCOUNT"}</small>
+                <h1>{business.name}</h1>
+                <p>
+                  {business.type} in {business.city}
+                </p>
+              </div>
+              <i>
+                <CheckCircle weight="fill" /> {business.status}
+              </i>
+            </section>
+            <nav className="business-detail-tabs" aria-label="Business record sections">
+              {(["overview", "records", "calendar"] as const).map((item) => (
+                <button
+                  className={tab === item ? "active" : ""}
+                  key={item}
+                  type="button"
+                  onClick={() => setTab(item)}
+                >
+                  {item === "overview"
+                    ? "Overview"
+                    : item === "records"
+                      ? "Records"
+                      : "Tax calendar"}
+                </button>
+              ))}
+            </nav>
+            {tab === "overview" && (
+              <div className="business-overview">
+                <section>
+                  <h2>Registration</h2>
+                  <dl>
+                    <div>
+                      <dt>Business permit</dt>
+                      <dd>{business.registrationNumber}</dd>
+                    </div>
+                    <div>
+                      <dt>Owner</dt>
+                      <dd>{business.ownerName}</dd>
+                    </div>
+                    <div>
+                      <dt>RDO</dt>
+                      <dd>{business.rdo || "Needs confirmation"}</dd>
+                    </div>
+                    <div>
+                      <dt>Completed</dt>
+                      <dd>{formatBusinessDate(business.finalizedAt)}</dd>
+                    </div>
+                  </dl>
+                </section>
+                <section>
+                  <h2>Business address</h2>
+                  <p>{business.businessAddress}</p>
+                  <span>{business.businessActivity}</span>
+                </section>
+                <button type="button" className="next-tax-card" onClick={() => setTab("calendar")}>
+                  <CalendarDots weight="duotone" />
+                  <div>
+                    <small>NEXT TAX REMINDER</small>
+                    <strong>{business.taxObligations[0]?.title ?? "No reminders scheduled"}</strong>
+                    <span>
+                      {business.taxObligations[0]
+                        ? formatBusinessDate(business.taxObligations[0].dueDate)
+                        : ""}
+                    </span>
+                  </div>
+                  <CaretRight weight="bold" />
+                </button>
+                <p className="demo-record-note">
+                  <ShieldCheck weight="fill" /> Demo records only. They are not official agency
+                  documents.
+                </p>
+              </div>
+            )}
+            {tab === "records" && (
+              <section className="business-records-list">
+                <header>
+                  <h2>Registrations and permits</h2>
+                  <span>{business.records.length} records</span>
+                </header>
+                {business.records.map((record) => (
+                  <article key={record.id}>
+                    <span>
+                      <FileText weight="duotone" />
+                    </span>
+                    <div>
+                      <strong>{record.title}</strong>
+                      <p>{record.agency}</p>
+                      <small>{record.referenceNumber}</small>
+                      <em>{record.note}</em>
+                    </div>
+                    <i className={record.status === "Not required" ? "muted" : ""}>
+                      {record.status}
+                    </i>
+                  </article>
+                ))}
+              </section>
+            )}
+            {tab === "calendar" && (
+              <section className="tax-calendar-list">
+                <header>
+                  <div>
+                    <small>TAX CALENDAR</small>
+                    <h2>Upcoming obligations</h2>
+                  </div>
+                  <CalendarDots weight="duotone" />
+                </header>
+                <p>
+                  Sample reminders generated from this demo registration. Confirm actual tax types
+                  and deadlines with BIR.
+                </p>
+                {business.taxObligations.map((obligation) => {
+                  const date = new Date(`${obligation.dueDate}T00:00:00Z`);
+                  return (
+                    <article key={obligation.id}>
+                      <time dateTime={obligation.dueDate}>
+                        <strong>
+                          {date.toLocaleDateString("en-PH", { day: "2-digit", timeZone: "UTC" })}
+                        </strong>
+                        <span>
+                          {date
+                            .toLocaleDateString("en-PH", { month: "short", timeZone: "UTC" })
+                            .toUpperCase()}
+                        </span>
+                      </time>
+                      <div>
+                        <small>
+                          {obligation.formCode} · {obligation.frequency}
+                        </small>
+                        <strong>{obligation.title}</strong>
+                        <span>{obligation.periodLabel}</span>
+                        <p>{obligation.note}</p>
+                      </div>
+                      <i>{obligation.status}</i>
+                    </article>
+                  );
+                })}
+              </section>
+            )}
+          </>
+        )}
+      </div>
+      <BottomNav active="none" />
+    </div>
+  );
+}
 function Header({
   title,
   onBack,
@@ -79,6 +270,7 @@ export function BusinessLanding({
   onSubmit,
   onResume,
   onDelete,
+  onOpenBusiness,
 }: {
   profile: CitizenProfile | null;
   businesses: RegisteredBusiness[] | null;
@@ -89,6 +281,7 @@ export function BusinessLanding({
   onSubmit: (prompt: string) => void;
   onResume: (id: string) => void;
   onDelete: (conversation: ConversationSummary) => void;
+  onOpenBusiness: (id: string) => void;
 }) {
   const [prompt, setPrompt] = useState(initialPrompt);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -197,9 +390,22 @@ export function BusinessLanding({
           </div>
           {businessesLoading ? (
             <div className="business-record skeleton-card" />
+          ) : businesses?.length === 0 ? (
+            <div className="business-empty">
+              <Briefcase weight="duotone" />
+              <div>
+                <strong>No linked businesses yet</strong>
+                <span>Complete a registration plan to save its records and tax calendar here.</span>
+              </div>
+            </div>
           ) : (
             businesses?.map((business) => (
-              <article className="business-record" key={business.id}>
+              <button
+                className="business-record business-record-link"
+                key={business.id}
+                type="button"
+                onClick={() => onOpenBusiness(business.id)}
+              >
                 <span className="record-icon">
                   <Briefcase weight="duotone" />
                 </span>
@@ -208,8 +414,11 @@ export function BusinessLanding({
                   <span>{business.type}</span>
                   <small>{business.registrationNumber}</small>
                 </div>
-                <i>{business.status}</i>
-              </article>
+                <span className="business-record-end">
+                  <i>{business.status}</i>
+                  <CaretRight weight="bold" />
+                </span>
+              </button>
             ))
           )}
           <p>
@@ -239,10 +448,20 @@ export function EgaphBusinessApp({
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
   const [paymentService, setPaymentService] = useState<PaymentServiceType | null>(null);
+  const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(null);
+  const [businessRevision, setBusinessRevision] = useState(0);
   const { error: authError, logout, profile, status } = useAuthSession();
   const { data: businesses, loading: businessesLoading } = useApi<RegisteredBusiness[]>(
-    "/api/businesses",
+    `/api/businesses?revision=${businessRevision}`,
     status === "authenticated",
+  );
+  const {
+    data: selectedBusiness,
+    error: selectedBusinessError,
+    loading: selectedBusinessLoading,
+  } = useApi<RegisteredBusinessDetail>(
+    selectedBusinessId ? `/api/businesses/${encodeURIComponent(selectedBusinessId)}` : "",
+    status === "authenticated" && Boolean(selectedBusinessId),
   );
   const refreshConversations = useCallback(async () => {
     const response = await fetch("/api/conversations");
@@ -274,6 +493,12 @@ export function EgaphBusinessApp({
     void (async () => {
       await refreshConversations();
       const url = new URL(window.location.href);
+      const businessId = url.searchParams.get("business");
+      if (businessId) {
+        setSelectedBusinessId(businessId);
+        setScreen("business-detail");
+        return;
+      }
       const id = url.searchParams.get("chat");
       if (!id) {
         setScreen("home");
@@ -318,7 +543,6 @@ export function EgaphBusinessApp({
     setPrompt(value);
     setPaymentStatus(null);
     setPaymentService(null);
-    setPaymentService(null);
     setScreen("chat");
     window.history.pushState({}, "", `?chat=${encodeURIComponent(created.id)}`);
     await refreshConversations();
@@ -327,8 +551,20 @@ export function EgaphBusinessApp({
     setScreen("business");
     setConversation(null);
     setPaymentStatus(null);
+    setPaymentService(null);
+    setBusinessRevision((current) => current + 1);
     window.history.pushState({}, "", window.location.pathname);
     void refreshConversations();
+  };
+  const openBusiness = (id: string) => {
+    setSelectedBusinessId(id);
+    setScreen("business-detail");
+    window.history.pushState({}, "", `?business=${encodeURIComponent(id)}`);
+  };
+  const leaveBusinessDetail = () => {
+    setSelectedBusinessId(null);
+    setScreen("business");
+    window.history.pushState({}, "", window.location.pathname);
   };
   const deleteSession = async (item: ConversationSummary) => {
     if (
@@ -411,6 +647,16 @@ export function EgaphBusinessApp({
                 onSubmit={startChat}
                 onResume={(id) => void openConversation(id)}
                 onDelete={(item) => void deleteSession(item)}
+                onOpenBusiness={openBusiness}
+              />
+            )}
+            {screen === "business-detail" && (
+              <BusinessDetailScreen
+                business={selectedBusiness}
+                loading={selectedBusinessLoading}
+                error={selectedBusinessError}
+                onBack={leaveBusinessDetail}
+                profile={profile}
               />
             )}
             {screen === "chat" && conversation && (
