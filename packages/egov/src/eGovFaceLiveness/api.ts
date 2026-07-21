@@ -112,7 +112,7 @@ export const faceLivenessCatalog = defineEgovCatalog({
   summary: "Create liveness checks and retrieve their verification results.",
 });
 
-export const faceLivenessApi = Object.freeze({
+export const eGovFaceLivenessApi = Object.freeze({
   catalog: faceLivenessCatalog,
   create: createFaceLivenessClient,
   fromEnv: createFaceLivenessClientFromEnv,

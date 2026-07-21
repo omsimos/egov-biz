@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 
 import {
   createFaceLivenessClientFromEnv,
-  faceLivenessApi,
+  eGovFaceLivenessApi,
   faceLivenessCatalog,
-} from "../src/faceLiveness/index.js";
+} from "../src/eGovFaceLiveness/index.js";
 
 describe("Face Liveness", () => {
   test("binds EGOVLIVENESS_API_KEY and creates a session", async () => {
@@ -61,6 +61,6 @@ describe("Face Liveness", () => {
       "create-session",
       "get-verification-result",
     ]);
-    expect(faceLivenessApi.catalog).toBe(faceLivenessCatalog);
+    expect(eGovFaceLivenessApi.catalog).toBe(faceLivenessCatalog);
   });
 });

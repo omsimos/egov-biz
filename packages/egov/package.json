@@ -68,13 +68,13 @@
       "types": "./dist/eReport/types.d.ts",
       "import": "./dist/eReport/types.js"
     },
-    "./faceLiveness": {
-      "types": "./dist/faceLiveness/index.d.ts",
-      "import": "./dist/faceLiveness/index.js"
+    "./eGovFaceLiveness": {
+      "types": "./dist/eGovFaceLiveness/index.d.ts",
+      "import": "./dist/eGovFaceLiveness/index.js"
     },
-    "./faceLiveness/types": {
-      "types": "./dist/faceLiveness/types.d.ts",
-      "import": "./dist/faceLiveness/types.js"
+    "./eGovFaceLiveness/types": {
+      "types": "./dist/eGovFaceLiveness/types.d.ts",
+      "import": "./dist/eGovFaceLiveness/types.js"
     }
   },
   "scripts": {
