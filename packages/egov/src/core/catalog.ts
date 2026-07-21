@@ -35,6 +35,7 @@ export interface EgovCatalogEndpoint {
   parameters: readonly EgovCatalogParameter[];
   path: string;
   responses: readonly EgovCatalogResponse[];
+  rpcMethod?: string;
 }
 
 export interface EgovCatalogService {

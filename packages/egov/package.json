@@ -43,6 +43,22 @@
     "./eGovAi/types": {
       "types": "./dist/eGovAi/types.d.ts",
       "import": "./dist/eGovAi/types.js"
+    },
+    "./eGovPay": {
+      "types": "./dist/eGovPay/index.d.ts",
+      "import": "./dist/eGovPay/index.js"
+    },
+    "./eGovPay/types": {
+      "types": "./dist/eGovPay/types.d.ts",
+      "import": "./dist/eGovPay/types.js"
+    },
+    "./eGovChain": {
+      "types": "./dist/eGovChain/index.d.ts",
+      "import": "./dist/eGovChain/index.js"
+    },
+    "./eGovChain/types": {
+      "types": "./dist/eGovChain/types.d.ts",
+      "import": "./dist/eGovChain/types.js"
     }
   },
   "scripts": {
