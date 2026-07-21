@@ -57,7 +57,7 @@ type ReadyAskUserPart = AskUserPart & {
   input: { questions?: IntakeQuestion[]; question?: IntakeQuestion };
 };
 type PendingQuestion = { part: ReadyAskUserPart; questions: IntakeQuestion[] };
-type PaymentRequest = {
+export type PaymentRequest = {
   serviceType: PaymentServiceType;
   serviceLabel: string;
   proposedName: string;
@@ -84,7 +84,7 @@ function CompletionConfetti() {
   );
 }
 
-function ComplianceResultCard({
+export function ComplianceResultCard({
   title,
   subtitle,
   records,
@@ -141,7 +141,7 @@ function DetailRows({ rows }: { rows: [string, string][] }) {
   );
 }
 
-function BarangayClearanceCard({
+export function BarangayClearanceCard({
   clearance,
   paid,
   onPay,
@@ -240,7 +240,7 @@ function BarangayClearanceCard({
   );
 }
 
-function EbplsPermitCard({
+export function EbplsPermitCard({
   receipt,
   paid,
   onPay,
@@ -670,7 +670,7 @@ function SearchTool({
   );
 }
 
-function DtiFormCard({
+export function DtiFormCard({
   form,
   note,
   paid,
@@ -1025,7 +1025,7 @@ function ToolPart({
   );
 }
 
-function PaymentDialog({
+export function PaymentDialog({
   payment,
   conversationId,
   onClose,

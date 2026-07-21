@@ -50,7 +50,7 @@ function formatBusinessDate(value: string) {
   );
 }
 
-function BusinessDetailScreen({
+export function BusinessDetailScreen({
   business,
   loading,
   error,

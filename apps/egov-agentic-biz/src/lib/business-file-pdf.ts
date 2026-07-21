@@ -18,7 +18,7 @@ function wrap(text: string, width = 72) {
 export async function generateDemoBusinessFilePdf(
   business: RegisteredBusiness,
   file: BusinessFile,
-+) {
+) {
   const document = await PDFDocument.create();
   const page = document.addPage([612, 792]);
   const regular = await document.embedFont(StandardFonts.Helvetica);
@@ -59,7 +59,13 @@ export async function generateDemoBusinessFilePdf(
       font: bold,
       color: rgb(0.25, 0.34, 0.45),
     });
-    page.drawText(value, { x: 190, y: y - 1, size: 10, font: regular, color: rgb(0.08, 0.12, 0.2) });
+    page.drawText(value, {
+      x: 190,
+      y: y - 1,
+      size: 10,
+      font: regular,
+      color: rgb(0.08, 0.12, 0.2),
+    });
     page.drawLine({
       start: { x: 42, y: y - 12 },
       end: { x: 570, y: y - 12 },
@@ -90,12 +96,15 @@ export async function generateDemoBusinessFilePdf(
     font: bold,
     color: rgb(0.68, 0.16, 0.13),
   });
-  page.drawText("It is not Form 2303 or any certificate issued by the Bureau of Internal Revenue.", {
-    x: 58,
-    y: 65,
-    size: 9,
-    font: regular,
-    color: rgb(0.68, 0.16, 0.13),
-  });
+  page.drawText(
+    "It is not Form 2303 or any certificate issued by the Bureau of Internal Revenue.",
+    {
+      x: 58,
+      y: 65,
+      size: 9,
+      font: regular,
+      color: rgb(0.68, 0.16, 0.13),
+    },
+  );
   return document.save();
 }

@@ -140,7 +140,7 @@
   background: #f7f9fc;
 }
 .business-detail-scroll {
-  height: calc(100% - 36px - 57px - 73px);
+  height: calc(100% - 36px - 58px - 76px);
   overflow-y: auto;
   padding: 14px 16px 28px;
   scrollbar-width: none;
@@ -524,6 +524,17 @@
   color: #8792a5;
 }
 
+/* Streamdown markdown inside the citizen's blue chat bubble ships Tailwind
+   text-foreground/text-muted-foreground utilities (dark ink). Force the
+   bubble's own white so text stays readable on the blue background. */
+.message-bubble,
+.message-bubble * {
+  color: #fff;
+}
+.message-bubble a {
+  text-decoration: underline;
+}
+
 :root {
   --blue: #0755e9;
   --blue-dark: #073caa;
@@ -641,6 +652,35 @@ a:focus-visible {
 .preview-switch button.active {
   background: #fff;
   color: var(--ink);
+}
+.preview-cards-screen {
+  background: #f4f6fa;
+}
+.preview-cards-scroll {
+  height: calc(100% - 36px);
+  overflow-y: auto;
+  scrollbar-width: none;
+  padding: 12px 14px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.preview-cards-scroll > * {
+  flex: none;
+}
+.preview-cards-scroll::-webkit-scrollbar {
+  display: none;
+}
+.preview-cards-toggle {
+  align-self: center;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  padding: 7px 14px;
+  background: #fff;
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
 }
 .context-panel {
   display: none;
@@ -3327,6 +3367,29 @@ a:focus-visible {
     height: 100%;
     min-height: 0;
     border-radius: 37px;
+  }
+}
+
+/* Narrow phones: keep all six service bubbles inside the viewport. */
+@media (max-width: 374px) {
+  .home-services {
+    gap: 0;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  .home-services button {
+    font-size: 12px;
+  }
+  .service-bubble {
+    width: 50px;
+    height: 50px;
+  }
+  .service-bubble svg {
+    width: 28px;
+    height: 28px;
+  }
+  .service-bubble i {
+    right: -4px;
   }
 }
 

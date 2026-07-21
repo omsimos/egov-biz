@@ -94,7 +94,9 @@ function initialize(database: Database.Database) {
     name: string;
   }[];
   if (!businessColumns.some(({ name }) => name === "files_json")) {
-    database.exec("ALTER TABLE registered_businesses ADD COLUMN files_json TEXT NOT NULL DEFAULT '[]'");
+    database.exec(
+      "ALTER TABLE registered_businesses ADD COLUMN files_json TEXT NOT NULL DEFAULT '[]'",
+    );
   }
   if (!paymentColumns.some(({ name }) => name === "service_reference")) {
     database.exec("ALTER TABLE payments ADD COLUMN service_reference TEXT");
