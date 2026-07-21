@@ -4,6 +4,7 @@ import {
   createGateway,
   createUIMessageStream,
   createUIMessageStreamResponse,
+  generateObject,
   stepCountIs,
   streamText,
   tool,
@@ -21,13 +22,29 @@ import type { BusinessPlan, IntakeAnswer, IntakeQuestion } from "@/lib/questions
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const optionSchema = z.object({ id: z.string(), label: z.string(), description: z.string().optional(), icon: z.enum(["store", "laptop", "coffee", "home", "pin", "calendar"]).optional() });
-const questionSchema = z.object({ id: z.string(), eyebrow: z.string(), title: z.string(), helpText: z.string(), type: z.enum(["single", "multi", "number", "text"]), options: z.array(optionSchema).optional(), placeholder: z.string().optional(), suffix: z.string().optional(), minimum: z.number().optional(), maximum: z.number().optional() });
+const optionSchema = z.object({ id: z.string().min(1).max(60), label: z.string().min(1).max(100), description: z.string().max(140).optional(), icon: z.enum(["store", "laptop", "coffee", "home", "pin", "calendar"]).optional() });
+const questionSchema = z.object({ id: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(60), eyebrow: z.string().min(1).max(30), title: z.string().min(1).max(120), helpText: z.string().max(180), type: z.enum(["single", "multi", "number", "text"]), options: z.array(optionSchema).max(8).optional(), placeholder: z.string().max(100).optional(), suffix: z.string().max(30).optional(), minimum: z.number().optional(), maximum: z.number().optional() }).superRefine((question, context) => {
+  if ((question.type === "single" || question.type === "multi") && (!question.options || question.options.length < 2)) context.addIssue({ code: "custom", message: "Choice questions need at least two options", path: ["options"] });
+});
 const dtiFormSchema = z.object({ applicationType: z.literal("New registration"), status: z.enum(["Draft", "Ready to submit", "Submitted"]), proposedName: z.string(), businessActivity: z.string(), territorialScope: z.enum(["Barangay", "City / municipality", "Regional", "National"]), ownerName: z.string(), businessAddress: z.string(), city: z.string(), feeLabel: z.string(), missingFields: z.array(z.string()) });
 const planStepSchema = z.object({ id: z.string().min(1).max(60), label: z.string().min(1).max(120), status: z.enum(["pending", "in_progress", "completed"]) });
 const registrationPlanSchema = z.object({ title: z.string().min(1).max(120), steps: z.array(planStepSchema).min(2).max(8) });
 const profileSchema = z.object({ firstName: z.string(), fullName: z.string(), mobile: z.string(), address: z.string(), city: z.string(), barangay: z.string(), tinMasked: z.string(), rdo: z.string(), avatarUrl: z.string() });
 const requestSchema = z.object({ messages: z.array(z.unknown()), profile: profileSchema.nullable(), initialPrompt: z.string().trim().min(1).max(2_000) });
+const generatedRouteSchema = z.object({
+  businessLabel: z.string().min(1).max(100),
+  registrationType: z.enum(["Sole proprietor", "Self-employed", "Company", "Needs review"]),
+  category: z.enum(["professional-services", "retail", "food-service", "food-manufacturing", "vehicle-rental", "general-services"]),
+  flags: z.array(z.enum(["food", "food-manufacturing", "physical-premises", "vehicles", "employees"])),
+  setup: z.array(z.string().max(100)).max(4),
+  people: z.number().int().min(1).max(100_000),
+});
+const intakeDecisionSchema = z.object({
+  status: z.enum(["question", "ready"]),
+  question: questionSchema.nullable(),
+  route: generatedRouteSchema.nullable(),
+});
+type GeneratedRoute = z.infer<typeof generatedRouteSchema>;
 
 function userText(messages: UIMessage[]) {
   return messages.filter((message) => message.role === "user").flatMap((message) => message.parts.filter((part) => part.type === "text").map((part) => part.text)).join("\n");
@@ -71,9 +88,9 @@ function emitTool(writer: Parameters<Parameters<typeof createUIMessageStream<Bus
   writer.write({ type: "tool-output-available", toolCallId, output } as never);
 }
 
-function planForAnswers(answers: IntakeAnswer[], hasSearched: boolean, hasForm: boolean) {
+function planForAnswers(answers: IntakeAnswer[], hasSearched: boolean, hasForm: boolean, intakeReady?: boolean) {
   const answerIds = new Set(answers.map((answer) => answer.questionId));
-  const detailsComplete = answerIds.has("workers") && answerIds.has("business-address") && answers.length >= 3;
+  const detailsComplete = intakeReady ?? (answerIds.has("workers") && answerIds.has("business-address") && answers.length >= 3);
   return normalizePlan({ ...initialRegistrationPlan, steps: initialRegistrationPlan.steps.map((step) => ({ ...step, status:
     step.id === "details" ? (detailsComplete ? "completed" : "in_progress") :
     step.id === "official-check" ? (hasSearched ? "completed" : detailsComplete ? "in_progress" : "pending") :
@@ -88,7 +105,7 @@ function lastDtiForm(messages: UIMessage[]) {
   return null;
 }
 
-function makePlan(prompt: string, profile: CitizenProfile | null, answers: IntakeAnswer[]): BusinessPlan {
+function makePlan(prompt: string, profile: CitizenProfile | null, answers: IntakeAnswer[], generated?: GeneratedRoute): BusinessPlan {
   const inferred = inferCategory(prompt);
   const location = resolveBusinessLocation(prompt, profile?.city ?? "Philippines", answers);
   const rdo = selectRdo(location, answers, `${prompt} ${profile?.barangay ?? ""}`);
@@ -96,9 +113,49 @@ function makePlan(prompt: string, profile: CitizenProfile | null, answers: Intak
   const hasEmployees = labels.some((label) => /yes|employee|worker/i.test(label) && !/no /i.test(label));
   const hasPremises = labels.some((label) => /shop|office|commercial/i.test(label));
   const flags = [...new Set([...inferred.flags, ...(hasPremises ? ["physical-premises" as const] : []), ...(hasEmployees ? ["employees" as const] : [])])];
-  const registrationType = inferred.category === "professional-services" ? "Self-employed" as const : "Sole proprietor" as const;
-  const businessLabel = inferred.category === "professional-services" ? "Professional services" : inferred.category === "vehicle-rental" ? "Vehicle rental business" : inferred.category.startsWith("food") ? "Food business" : "New business";
-  return { businessLabel, registrationType, city: location.city, setup: labels.slice(0, 4), people: hasEmployees ? 2 : 1, category: inferred.category, flags, rdo, rationale: buildRationale(registrationType, inferred.category, location.city, rdo, flags, profile?.rdo), citations: citationsForPlan(registrationType, flags) };
+  const registrationType = generated?.registrationType ?? (inferred.category === "professional-services" ? "Self-employed" as const : "Sole proprietor" as const);
+  const category = generated?.category ?? inferred.category;
+  const businessLabel = generated?.businessLabel ?? (category === "professional-services" ? "Professional services" : category === "vehicle-rental" ? "Vehicle rental business" : category.startsWith("food") ? "Food business" : "New business");
+  const generatedFlags = generated?.flags ?? [];
+  const finalFlags = [...new Set([...flags, ...generatedFlags])];
+  return { businessLabel, registrationType, city: location.city, setup: generated?.setup ?? labels.slice(0, 4), people: generated?.people ?? (hasEmployees ? 2 : 1), category, flags: finalFlags, rdo, rationale: buildRationale(registrationType, category, location.city, rdo, finalFlags, profile?.rdo), citations: citationsForPlan(registrationType, finalFlags) };
+}
+
+function answerText(answers: IntakeAnswer[], pattern: RegExp) {
+  return answers.find((answer) => pattern.test(`${answer.questionId} ${answer.question}`))?.labels.join(", ") ?? "";
+}
+
+function makeDtiForm(description: string, prompt: string, profile: CitizenProfile | null, answers: IntakeAnswer[], plan: BusinessPlan): DtiBusinessNameForm {
+  const proposedNameMatch = prompt.match(/(?:called|named|name is|business name(?: is|:)?|trade name(?: is|:)?)\s+[“"]?([^.”"\n]+)/i);
+  const proposedName = answerText(answers, /proposed.*name|business.*name|trade.*name/i) || proposedNameMatch?.[1]?.trim() || "";
+  const businessAddress = answerText(answers, /business.*address|operating.*address|exact.*address/i);
+  const scope: DtiBusinessNameForm["territorialScope"] = /nationwide|national/i.test(prompt) ? "National" : /region(?:al|wide)/i.test(prompt) ? "Regional" : /barangay only|within (?:the )?barangay/i.test(prompt) ? "Barangay" : "City / municipality";
+  const missingFields = [...(!proposedName ? ["Proposed business name"] : []), ...(!businessAddress ? ["Business address"] : [])];
+  return { applicationType: "New registration", status: missingFields.length ? "Draft" : "Ready to submit", proposedName, businessActivity: description.slice(0, 160), territorialScope: scope, ownerName: profile?.fullName ?? "", businessAddress, city: plan.city, feeLabel: formatPeso(dtiRegistrationFee(scope)), missingFields };
+}
+
+function repeatedQuestion(question: IntakeQuestion, answers: IntakeAnswer[]) {
+  const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return answers.some((answer) => answer.questionId === question.id || normalize(answer.question) === normalize(question.title));
+}
+
+async function decideIntake(prompt: string, city: string, answers: IntakeAnswer[]) {
+  const inferred = inferCategory(prompt);
+  const result = await generateObject({
+    model: createGateway({ apiKey: process.env.AI_GATEWAY_API_KEY! }).chat(process.env.CHAT_MODEL ?? "google/gemini-2.5-flash-lite"),
+    schema: intakeDecisionSchema,
+    system: `You are the intake router for Philippine business registration. Return one structured decision, not conversational prose.
+
+Use the citizen's description and prior answers. Infer obvious facts instead of asking the citizen to classify the business. Ask exactly one question only when its answer can materially change the registration route, tax-office jurisdiction, permit path, or regulated-agency checks. Tailor it to this specific activity. Do not run a fixed questionnaire. Do not routinely ask about employees, premises, ownership, or address when those facts do not affect the path. Never repeat a known or answered fact. Never ask for a TIN or other sensitive identifier.
+
+For a question, use a stable semantic kebab-case ID, short plain language, and the best input type. Choice questions need 2–6 complete options. Set route to null. If the registration path is already clear, return ready immediately, set question to null, and return the inferred route. One-owner trade-name, product, food, subscription, or rental activity is normally Sole proprietor. Independent professional work under the person's own name is normally Self-employed. Explicit partners or a corporation use Company. Do not ask the citizen to choose among these labels when the activity already makes it clear.`,
+    prompt: `Business description and citizen updates:\n${prompt}\n\nResolved business city: ${city}\nCatalog hint: ${inferred.category}; ${inferred.flags.join(", ") || "no flags"}\nPrior structured answers: ${answers.length ? JSON.stringify(answers.map(({ questionId, question, labels }) => ({ questionId, question, labels }))) : "None"}`,
+    abortSignal: AbortSignal.timeout(20_000),
+  });
+  const decision = result.object;
+  if (decision.status === "question" && decision.question && !repeatedQuestion(decision.question, answers) && !/\b(?:tin|taxpayer identification)\b/i.test(decision.question.title)) return decision;
+  if (decision.status === "ready" && decision.route) return decision;
+  throw new Error("The intake router returned an invalid or repeated decision");
 }
 
 function deterministicNext(prompt: string, profile: CitizenProfile | null, answers: IntakeAnswer[]) {
@@ -164,7 +221,8 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: "Invalid chat request" }, { status: 400 });
   const messages = parsed.data.messages as BusinessChatMessage[];
   const profile = parsed.data.profile;
-  const prompt = `${parsed.data.initialPrompt}\n${userText(messages)}`;
+  const conversationText = userText(messages).trim();
+  const prompt = conversationText || parsed.data.initialPrompt;
   const answers = toolAnswers(messages);
   const initialLocation = resolveBusinessLocation(prompt, profile?.city ?? "Philippines", answers);
   const tools = agentTools(prompt, profile, initialLocation.city, initialLocation.source === "profile");
@@ -172,24 +230,6 @@ export async function POST(request: Request) {
   const hasSearched = messages.some((message) => message.parts.some((part) => part.type === "tool-webSearch" && part.state === "output-available"));
   const lastForm = lastDtiForm(messages);
   const location = initialLocation;
-  const answered = new Set(answers.map((answer) => answer.questionId));
-  const firstQuestion = fallbackQuestionFor(prompt, 0);
-  const deterministicQuestion = (!selectRdo(location, answers, `${prompt} ${profile?.barangay ?? ""}`) && location.rdos.length > 1 && !answered.has("business-area")) ? locationQuestion(location.city, location.rdos) : !answered.has(firstQuestion.id) ? firstQuestion : !answered.has("workers") ? fallbackQuestionFor(prompt, 1) : !answered.has("business-address") ? businessAddressQuestion(location.city) : null;
-  const currentPlan = planForAnswers(answers, hasSearched, Boolean(lastForm));
-
-  // HITL is a hard server boundary: emit one question and close the turn.
-  if (deterministicQuestion) {
-    const stream = createUIMessageStream<BusinessChatMessage>({ originalMessages: messages, execute: ({ writer }) => {
-      emitTool(writer, "updatePlan", { ...currentPlan, note: "Registration details are ready." }, { plan: currentPlan });
-      if (!existingPlan || JSON.stringify(existingPlan) !== JSON.stringify(currentPlan)) emitTool(writer, "updatePlan", { ...currentPlan, note: "Updated for the current registration step." }, { plan: currentPlan });
-      const textId = crypto.randomUUID();
-      writer.write({ type: "text-start", id: textId });
-      writer.write({ type: "text-delta", id: textId, delta: "I need one detail before I continue." });
-      writer.write({ type: "text-end", id: textId });
-      writer.write({ type: "tool-input-available", toolCallId: crypto.randomUUID(), toolName: "askUser", input: { question: deterministicQuestion } });
-    } });
-    return createUIMessageStreamResponse({ stream });
-  }
 
   if (!process.env.AI_GATEWAY_API_KEY) {
     const next = deterministicNext(prompt, profile, answers);
@@ -207,26 +247,64 @@ export async function POST(request: Request) {
     return createUIMessageStreamResponse({ stream });
   }
 
-  if (!hasSearched && !lastForm) {
-    const next = deterministicNext(prompt, profile, answers);
-    if (!("form" in next) || !next.form) return Response.json({ error: "The application is not ready." }, { status: 409 });
+  let generatedRoute: GeneratedRoute | undefined;
+  if (!lastForm) {
+    try {
+      const decision = await decideIntake(prompt, location.city, answers);
+      if (decision.status === "question" && decision.question) {
+        const currentPlan = planForAnswers(answers, hasSearched, false, false);
+        const stream = createUIMessageStream<BusinessChatMessage>({ originalMessages: messages, execute: ({ writer }) => {
+          if (!existingPlan || JSON.stringify(existingPlan) !== JSON.stringify(currentPlan)) emitTool(writer, "updatePlan", { ...currentPlan, note: "Updated for the current registration step." }, { plan: currentPlan });
+          const textId = crypto.randomUUID();
+          writer.write({ type: "text-start", id: textId });
+          writer.write({ type: "text-delta", id: textId, delta: "One detail could change your registration path." });
+          writer.write({ type: "text-end", id: textId });
+          writer.write({ type: "tool-input-available", toolCallId: crypto.randomUUID(), toolName: "askUser", input: { question: decision.question } });
+        } });
+        return createUIMessageStreamResponse({ stream });
+      }
+      generatedRoute = decision.route ?? undefined;
+    } catch (error) {
+      console.warn("Business intake routing failed; using controlled fallback", { name: error instanceof Error ? error.name : "UnknownError" });
+      const next = deterministicNext(prompt, profile, answers);
+      if ("question" in next) {
+        const fallbackPlan = planForAnswers(answers, hasSearched, false, false);
+        const stream = createUIMessageStream<BusinessChatMessage>({ originalMessages: messages, execute: ({ writer }) => {
+          if (!existingPlan || JSON.stringify(existingPlan) !== JSON.stringify(fallbackPlan)) emitTool(writer, "updatePlan", { ...fallbackPlan, note: "Updated for the current registration step." }, { plan: fallbackPlan });
+          const textId = crypto.randomUUID();
+          writer.write({ type: "text-start", id: textId });
+          writer.write({ type: "text-delta", id: textId, delta: "I need one detail before I continue." });
+          writer.write({ type: "text-end", id: textId });
+          writer.write({ type: "tool-input-available", toolCallId: crypto.randomUUID(), toolName: "askUser", input: { question: next.question } });
+        } });
+        return createUIMessageStreamResponse({ stream });
+      }
+    }
+  }
+
+  const businessPlan = makePlan(prompt, profile, answers, generatedRoute);
+  const currentPlan = planForAnswers(answers, hasSearched, Boolean(lastForm), true);
+
+  if (!hasSearched && !lastForm && businessPlan.registrationType === "Sole proprietor") {
+    const form = makeDtiForm(parsed.data.initialPrompt, prompt, profile, answers, businessPlan);
     const stream = createUIMessageStream<BusinessChatMessage>({ originalMessages: messages, execute: async ({ writer }) => {
       emitTool(writer, "updatePlan", { ...currentPlan, note: "Checking current DTI guidance." }, { plan: currentPlan });
-      const query = `site:dti.gov.ph OR site:bnrs.dti.gov.ph business name registration ${next.form.territorialScope}`;
+      const query = `site:dti.gov.ph OR site:bnrs.dti.gov.ph business name registration ${form.territorialScope}`;
       const searchId = crypto.randomUUID();
       writer.write({ type: "tool-input-available", toolCallId: searchId, toolName: "webSearch", input: { query, numResults: 5 } });
       const search = await searchOfficialWeb(query, 5);
       writer.write({ type: "tool-output-available", toolCallId: searchId, output: search });
-      const afterSearch = planForAnswers(answers, true, false);
+      const afterSearch = planForAnswers(answers, true, false, true);
       emitTool(writer, "updatePlan", { ...afterSearch, note: "Official guidance checked. Preparing the application." }, { plan: afterSearch });
       const formId = crypto.randomUUID();
-      writer.write({ type: "tool-input-available", toolCallId: formId, toolName: "editDtiBusinessNameForm", input: { form: next.form, note: "Prepared from your profile and confirmed answers." } });
-      writer.write({ type: "tool-output-available", toolCallId: formId, output: { form: next.form } });
-      const readyPlan = planForAnswers(answers, true, true);
+      writer.write({ type: "tool-input-available", toolCallId: formId, toolName: "editDtiBusinessNameForm", input: { form, note: "Prepared from your profile and confirmed answers." } });
+      writer.write({ type: "tool-output-available", toolCallId: formId, output: { form } });
+      writer.write({ type: "data-plan", id: crypto.randomUUID(), data: { plan: businessPlan } });
+      const readyPlan = planForAnswers(answers, true, true, true);
       emitTool(writer, "updatePlan", { ...readyPlan, note: "The DTI application is ready for review." }, { plan: readyPlan });
       const textId = crypto.randomUUID();
       writer.write({ type: "text-start", id: textId });
-      writer.write({ type: "text-delta", id: textId, delta: "Your DTI business name application is ready to review. You can correct any field here before continuing to eGovPay." });
+      writer.write({ type: "text-delta", id: textId, delta: form.missingFields.length ? "I prepared your DTI business name application. Add the missing fields or correct anything here before payment." : "Your DTI business name application is ready to review. You can correct any field here before continuing to eGovPay." });
       writer.write({ type: "text-end", id: textId });
     } });
     return createUIMessageStreamResponse({ stream });
@@ -235,13 +313,13 @@ export async function POST(request: Request) {
   const model = createGateway({ apiKey: process.env.AI_GATEWAY_API_KEY }).chat(process.env.CHAT_MODEL ?? "google/gemini-2.5-flash-lite");
   const result = streamText({
     model, tools, activeTools: ["webSearch", "editDtiBusinessNameForm", "updatePlan"], stopWhen: stepCountIs(4),
-    system: `You guide a Filipino citizen through business registration in a human-in-the-loop chat. Be concise, warm, and factual.
+    system: `You guide a Filipino citizen through business registration in a human-in-the-loop chat. Be concise, warm, and factual. Prefer short paragraphs and lists. Use a markdown table only when comparing three or more records; never use a table for a two-column field/value summary.
 
-Questions are controlled outside this model loop. Never call askUser. Never print A/B/C choices in prose. Never ask users to provide a TIN.
+Intake questions are handled by the API router before this response. Never call askUser. Never print A/B/C choices in prose. Never ask users to provide a TIN.
 
 Use updatePlan whenever registration progress changes. Keep 3–6 concise steps, preserve stable step IDs, mark finished work completed, and keep at most one step in_progress. The current plan is ${JSON.stringify(existingPlan ?? currentPlan)}.
 
-The resolved business city is ${location.city}. Explicit locations override the profile. ${deterministicQuestion ? `The next useful question is ${JSON.stringify(deterministicQuestion)}. Call askUser with exactly this question, then stop.` : "The minimum intake is clear."}
+The resolved business city is ${location.city}. Explicit locations override the profile. The minimum intake is clear. The resolved route is ${JSON.stringify(businessPlan)}.
 
 For a sole proprietor, create or update a DTI Business Name Registration draft with editDtiBusinessNameForm. DTI handles sole-proprietor business-name registration; do not call it a BIR form. Preserve known fields and copy the exact profile owner name. Never invent an address or fee. If the business city differs from the profile city and no full business address was supplied, leave the address blank and list Business address under missingFields. Use the official DTI territorial-scope fee plus documentary stamp supplied by the application; never invent a fee. The citizen may correct any field in ordinary chat; apply the correction by calling editDtiBusinessNameForm with the full revised form. Current form: ${JSON.stringify(lastForm)}.
 

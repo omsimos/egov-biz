@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { createEgovPayClientFromEnv, eGovPayApi, egovPayCatalog } from "../src/eGovPay/index.js";
+import {
+  createEgovPayClient,
+  createEgovPayClientFromEnv,
+  createEgovPayDigest,
+  eGovPayApi,
+  egovPayCatalog,
+} from "../src/eGovPay/index.js";
 
 describe("eGovPay", () => {
   test("injects the service env values and computes the payment digest", async () => {
@@ -28,7 +34,32 @@ describe("eGovPay", () => {
     const body = (await capturedRequest?.json()) as Record<string, unknown>;
     expect(capturedRequest?.headers.get("x-egovpay-token")).toBe("test_api_key");
     expect(body.settlement_template_uuid).toBe("template-uuid");
-    expect(body.digest).toMatch(/^[a-f0-9]{64}$/);
+    expect(body.digest).toBe(await createEgovPayDigest(1000, "TXN-1", "api_key"));
+  });
+
+  test("uses production tokens unchanged for the payment digest", async () => {
+    let capturedRequest: Request | undefined;
+    const client = createEgovPayClient({
+      apiKey: "production_api_key",
+      baseUrl: "https://pay.example.test",
+      settlementTemplateUuid: "template-uuid",
+      fetch: async (input, init) => {
+        capturedRequest = new Request(input, init);
+        return Response.json({ data: {} }, { status: 201 });
+      },
+    });
+
+    await client.generatePayment({
+      amount: 500,
+      callbackUrl: "https://merchant.test/callback",
+      items: [{ amount: 500, name: "Fee" }],
+      redirectUrl: "https://merchant.test/complete",
+      transactionId: "TXN-2",
+    });
+
+    const body = (await capturedRequest?.json()) as Record<string, unknown>;
+    expect(capturedRequest?.headers.get("x-egovpay-token")).toBe("production_api_key");
+    expect(body.digest).toBe(await createEgovPayDigest(500, "TXN-2", "production_api_key"));
   });
 
   test("maps detail and void operations to their UUID paths", async () => {

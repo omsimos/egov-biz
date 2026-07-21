@@ -33,6 +33,10 @@ function textOf(message: BusinessChatMessage) {
   return message.parts.filter((part) => part.type === "text").map((part) => part.text).join("");
 }
 
+function Markdown({ children, streaming = false }: { children: string; streaming?: boolean }) {
+  return <Streamdown controls={false} isAnimating={streaming} mode={streaming ? "streaming" : "static"}>{children}</Streamdown>;
+}
+
 function latestPlanToolCallId(messages: BusinessChatMessage[]) {
   for (const message of [...messages].reverse()) for (const part of [...message.parts].reverse()) {
     if (part.type === "tool-updatePlan" && (part.state === "output-available" || part.state === "input-available")) return part.toolCallId;
@@ -133,10 +137,15 @@ export function BusinessChatScreen({ initialPrompt, profile, onBack }: { initial
   const busy = status === "submitted" || status === "streaming";
   const latestPlanId = latestPlanToolCallId(messages);
   const pending: PendingQuestion | null = (() => {
-    const last = messages.at(-1); if (!last || last.role !== "assistant") return null;
-    const calls = last.parts.filter((part): part is ReadyAskUserPart => part.type === "tool-askUser" && part.state === "input-available");
-    const current = calls[0];
-    return calls.length === 1 && current ? { part: current, question: current.input.question } : null;
+    for (const message of [...messages].reverse()) {
+      for (const part of [...message.parts].reverse()) {
+        if (part.type === "tool-askUser" && part.state === "input-available") {
+          const current = part as ReadyAskUserPart;
+          return { part: current, question: current.input.question };
+        }
+      }
+    }
+    return null;
   })();
 
   useEffect(() => { if (!seeded.current) { seeded.current = true; void sendMessage({ text: initialPrompt }); } }, [initialPrompt, sendMessage]);
@@ -155,6 +164,7 @@ export function BusinessChatScreen({ initialPrompt, profile, onBack }: { initial
     const user = message.role === "user"; const text = textOf(message);
      const hasVisibleTool = message.parts.some((part) => isToolUIPart(part) && getToolName(part) !== "askUser" && (part.type !== "tool-updatePlan" || part.toolCallId === latestPlanId));
      if (!text && !hasVisibleTool) return null;
-     return <article className={`chat-message ${user ? "user" : "assistant"}`} key={message.id}>{!user && <span className="message-avatar"><Sparkle weight="fill" /></span>}<div className="message-content">{text && (user ? <div className="message-bubble"><Streamdown>{text}</Streamdown></div> : <div className="assistant-prose"><Streamdown>{text}</Streamdown></div>)}{message.parts.map((part, index) => isToolUIPart(part) ? <ToolPart key={`${message.id}-${index}`} part={part} latestPlanId={latestPlanId} onSubmitPay={setPaymentForm} /> : null)}</div></article>;
-  })}{busy && messages.at(-1)?.role !== "assistant" && <div className="chat-working" role="status"><span className="message-avatar"><Sparkle weight="fill" /></span><div><i /><i /><i /></div></div>}{error && <div className="chat-error">I couldn’t continue. Please try again.</div>}</main><footer className="chat-composer-shell">{pending ? <QuestionComposer key={pending.part.toolCallId} pending={pending} disabled={busy || answeringToolCallId === pending.part.toolCallId} onAnswer={answer} /> : <form className="chat-composer" onSubmit={submit}><textarea rows={1} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(event); } }} placeholder="Ask or correct your application…" aria-label="Message" /><div><span><ShieldCheck weight="fill" /> You can correct any field here</span>{busy ? <button type="button" onClick={() => void stop()} aria-label="Stop"><StopCircle weight="fill" /></button> : <button type="submit" disabled={!input.trim()} aria-label="Send"><PaperPlaneRight weight="fill" /></button>}</div></form>}</footer>{paymentForm && <PaymentDialog form={paymentForm} profile={profile} onClose={() => setPaymentForm(null)} />}</div>;
+      const streaming = busy && message.id === messages.at(-1)?.id;
+      return <article className={`chat-message ${user ? "user" : "assistant"}`} key={message.id}>{!user && <span className="message-avatar"><Sparkle weight="fill" /></span>}<div className="message-content">{text && (user ? <div className="message-bubble"><Markdown>{text}</Markdown></div> : <div className="assistant-prose"><Markdown streaming={streaming}>{text}</Markdown></div>)}{message.parts.map((part, index) => isToolUIPart(part) ? <ToolPart key={`${message.id}-${index}`} part={part} latestPlanId={latestPlanId} onSubmitPay={setPaymentForm} /> : null)}</div></article>;
+  })}{busy && <div className="chat-working" role="status" aria-live="polite"><span className="message-avatar"><Sparkle weight="fill" /></span><div className="chat-working-shimmer">Working on the next step…</div></div>}{error && <div className="chat-error">I couldn’t continue. Please try again.</div>}</main><footer className="chat-composer-shell">{pending ? <QuestionComposer key={pending.part.toolCallId} pending={pending} disabled={busy || answeringToolCallId === pending.part.toolCallId} onAnswer={answer} /> : <form className="chat-composer" onSubmit={submit}><textarea rows={1} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(event); } }} placeholder="Ask or correct your application…" aria-label="Message" /><div><span><ShieldCheck weight="fill" /> You can correct any field here</span>{busy ? <button type="button" onClick={() => void stop()} aria-label="Stop"><StopCircle weight="fill" /></button> : <button type="submit" disabled={!input.trim()} aria-label="Send"><PaperPlaneRight weight="fill" /></button>}</div></form>}</footer>{paymentForm && <PaymentDialog form={paymentForm} profile={profile} onClose={() => setPaymentForm(null)} />}</div>;
 }

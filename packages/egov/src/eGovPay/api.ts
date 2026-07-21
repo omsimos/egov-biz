@@ -28,6 +28,13 @@ function encodeTransactionUuid(transactionUuid: string): string {
   return encodeURIComponent(transactionUuid);
 }
 
+function digestKey(apiKey: string): string {
+  // Staging tokens use the prefix to route the request, but eGovPay signs the
+  // transaction with the token value after that prefix. Production tokens are
+  // used unchanged.
+  return apiKey.startsWith("test_") ? apiKey.slice(5) : apiKey;
+}
+
 export async function createEgovPayDigest(
   amount: number,
   transactionId: string,
@@ -59,7 +66,7 @@ export function createEgovPayClient(options: EgovPayClientOptions): EgovPayClien
       const digest = await createEgovPayDigest(
         request.amount,
         request.transactionId,
-        options.apiKey,
+        digestKey(options.apiKey),
       );
 
       return transport.request<EgovPayGeneratePaymentResponse>({
