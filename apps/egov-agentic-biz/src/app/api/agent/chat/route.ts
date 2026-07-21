@@ -1043,6 +1043,8 @@ export async function POST(request: Request) {
   const birFormConsentValue = birFormConsent
     ? normalizedAnswerText(birFormConsent.value).toLowerCase()
     : null;
+  const shouldGenerateBirForm =
+    isExplicitBirFormRequest(latestPrompt) || birFormConsentValue === "yes";
   const initialLocation = resolveBusinessLocation(prompt, profile?.city ?? "Philippines", answers);
   const preference = addressPreference(answers);
   const confirmedBusinessAddress =
@@ -1333,7 +1335,7 @@ export async function POST(request: Request) {
     });
   }
 
-  if (isExplicitBirFormRequest(latestPrompt) || birFormConsentValue === "yes")
+  if (shouldGenerateBirForm)
     return manualResponse(conversation.id, messages, async (writer) => {
       if (!hasUserInfo) emitTool(writer, "user_info", {}, userInfoOutput);
       const toolCallId = crypto.randomUUID();
@@ -1349,10 +1351,9 @@ export async function POST(request: Request) {
           artifact: await createBirFormArtifact(request, session.rawProfile),
           source: "Authenticated eGov SSO profile" as const,
         };
-        writer.write({ type: "tool-output-available", toolCallId, output });
 
         const plan = makePlan(prompt, profile, answers);
-        if (plan.registrationType === "Self-employed" && birFormConsentValue === "yes") {
+        if (plan.registrationType === "Self-employed") {
           const compliance = buildSelfEmployedMockCompliance(plan, profile.fullName);
           const taxRecords = compliance.records.filter((record) => record.kind === "tax");
           const booksAndInvoiceRecords = taxRecords.filter((record) =>
@@ -1373,44 +1374,6 @@ export async function POST(request: Request) {
                     ? ("in_progress" as const)
                     : ("pending" as const),
             })),
-          });
-          emitTool(
-            writer,
-            "updatePlan",
-            {
-              ...birCompletedPlan,
-              note: "BIR Form 1901 generated. Setting up books, invoices, and tax filings.",
-            },
-            { plan: birCompletedPlan },
-          );
-
-          await wait(COMPLIANCE_MOCK_DELAY_MS);
-          const booksToolId = crypto.randomUUID();
-          writer.write({
-            type: "tool-input-available",
-            toolCallId: booksToolId,
-            toolName: "setupBooksAndInvoices",
-            input: {},
-          });
-          await wait(COMPLIANCE_MOCK_DELAY_MS);
-          writer.write({
-            type: "tool-output-available",
-            toolCallId: booksToolId,
-            output: { records: booksAndInvoiceRecords },
-          });
-
-          await wait(COMPLIANCE_MOCK_DELAY_MS);
-          emitTool(
-            writer,
-            "setupTaxCompliance",
-            {},
-            { records: registrationTaxRecords, obligations: compliance.taxObligations },
-          );
-          await wait(COMPLIANCE_MOCK_DELAY_MS);
-
-          const completedPlan = completeRegistrationPlan(birCompletedPlan, {
-            employer: false,
-            sectorPermits: false,
           });
           const business = upsertRegisteredBusiness(
             profile.id,
@@ -1439,10 +1402,10 @@ export async function POST(request: Request) {
                   title: "BIR Certificate of Registration (Form 2303)",
                   filename: "DEMO-BIR-Form-2303.pdf",
                   documentType: "Certificate of Registration",
-                  status: "Demo only",
+                  status: "Available",
                   createdAt: new Date().toISOString(),
                   url: null,
-                  note: "Demo-only preview. This is not an official certificate issued by BIR.",
+                  note: "Preview file. This is not an official certificate issued by BIR.",
                   demo: true,
                 },
                 {
@@ -1450,7 +1413,7 @@ export async function POST(request: Request) {
                   title: "Books and invoice setup",
                   filename: "DEMO-Books-and-Invoices.pdf",
                   documentType: "Accounting setup record",
-                  status: "Demo only",
+                  status: "Available",
                   createdAt: new Date().toISOString(),
                   url: null,
                   note: "Demo summary of configured books and invoice controls.",
@@ -1461,7 +1424,7 @@ export async function POST(request: Request) {
                   title: "Recurring tax filing calendar",
                   filename: "DEMO-Tax-Calendar.pdf",
                   documentType: "Tax calendar",
-                  status: "Demo only",
+                  status: "Available",
                   createdAt: new Date().toISOString(),
                   url: null,
                   note: "Demo schedule. Filing obligations must be confirmed with BIR.",
@@ -1470,12 +1433,66 @@ export async function POST(request: Request) {
               ],
             }),
           );
+          const completedPlan = completeRegistrationPlan(birCompletedPlan, {
+            employer: false,
+            sectorPermits: false,
+          });
+
+          writer.write({ type: "tool-output-available", toolCallId, output });
+          emitTool(
+            writer,
+            "updatePlan",
+            {
+              ...birCompletedPlan,
+              note: "BIR Form 1901 generated. Setting up books, invoices, and tax filings.",
+            },
+            { plan: birCompletedPlan },
+          );
+
+          await wait(COMPLIANCE_MOCK_DELAY_MS);
+          const booksToolId = crypto.randomUUID();
+          writer.write({
+            type: "tool-input-available",
+            toolCallId: booksToolId,
+            toolName: "setupBooksAndInvoices",
+            input: {},
+          });
+          await wait(COMPLIANCE_MOCK_DELAY_MS);
+          writer.write({
+            type: "tool-output-available",
+            toolCallId: booksToolId,
+            output: { records: booksAndInvoiceRecords },
+          });
+          emitTool(
+            writer,
+            "updatePlan",
+            {
+              ...birCompletedPlan,
+              note: "Books and invoices are configured. Setting up recurring tax filings.",
+            },
+            { plan: birCompletedPlan },
+          );
+
+          await wait(COMPLIANCE_MOCK_DELAY_MS);
+          const taxToolId = crypto.randomUUID();
+          writer.write({
+            type: "tool-input-available",
+            toolCallId: taxToolId,
+            toolName: "setupTaxCompliance",
+            input: {},
+          });
+          await wait(COMPLIANCE_MOCK_DELAY_MS);
+          writer.write({
+            type: "tool-output-available",
+            toolCallId: taxToolId,
+            output: { records: registrationTaxRecords, obligations: compliance.taxObligations },
+          });
           emitTool(
             writer,
             "updatePlan",
             {
               ...completedPlan,
-              note: "Books, invoices, and recurring tax filings are set up. Demo complete.",
+              note: "Books, invoices, and recurring tax filings are set up.",
             },
             { plan: completedPlan },
           );

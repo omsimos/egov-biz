@@ -1,4 +1,5 @@
 import { readSession } from "@/lib/auth/session";
+import { createBirFormArtifact } from "@/lib/bir-form/artifact";
 import { generateDemoBusinessFilePdf } from "@/lib/business-file-pdf";
 import { getRegisteredBusiness } from "@/server/registered-businesses";
 
@@ -16,6 +17,10 @@ export async function GET(
   if (!business || !file)
     return Response.json({ error: "Business file not found." }, { status: 404 });
   if (file.url) return Response.redirect(new URL(file.url, request.url));
+  if (file.id === "bir-form-1901") {
+    const artifact = await createBirFormArtifact(request, session.rawProfile);
+    return Response.redirect(new URL(artifact.url, request.url));
+  }
 
   const bytes = await generateDemoBusinessFilePdf(business, file);
   return new Response(new Uint8Array(bytes), {

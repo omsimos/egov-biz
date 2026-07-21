@@ -47,25 +47,34 @@ export function StatusBar() {
 export function BottomNav({ active = "home" }: { active?: "home" | "none" }) {
   return (
     <nav className="bottom-nav" aria-label="Primary navigation">
-      <button className={active === "home" ? "active" : ""} type="button">
+      <button
+        className={active === "home" ? "active" : ""}
+        data-cuelume-toggle="tick"
+        type="button"
+      >
         <House weight={active === "home" ? "fill" : "regular"} />
         <span>Home</span>
       </button>
-      <button type="button">
+      <button data-cuelume-toggle="tick" type="button">
         <Scan />
         <span>Scan</span>
       </button>
-      <button aria-label="Digital ID" className="id-button" type="button">
+      <button
+        aria-label="Digital ID"
+        className="id-button"
+        data-cuelume-toggle="page"
+        type="button"
+      >
         <span className="id-orb">
           <IdentificationCard weight="fill" />
         </span>
         <span>Digital ID</span>
       </button>
-      <button type="button">
+      <button data-cuelume-toggle="tick" type="button">
         <FileText />
         <span>History</span>
       </button>
-      <button type="button">
+      <button data-cuelume-toggle="tick" type="button">
         <SquaresFour />
         <span>Account</span>
       </button>

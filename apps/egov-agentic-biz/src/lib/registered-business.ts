@@ -20,7 +20,7 @@ export type BusinessFile = {
   title: string;
   filename: string;
   documentType: string;
-  status: "Generated" | "Demo only";
+  status: "Generated" | "Available";
   createdAt: string;
   url: string | null;
   note: string;

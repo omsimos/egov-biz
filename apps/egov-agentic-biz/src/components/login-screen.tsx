@@ -128,6 +128,7 @@ export function LoginScreen({ initialError }: { initialError?: string }) {
           <div className="test-code-label">
             <label htmlFor="exchange-code">Exchange code</label>
             <button
+              data-cuelume-toggle="droplet"
               disabled={!exchangeCode || loading}
               onClick={() => setExchangeCode("")}
               type="button"
@@ -147,6 +148,7 @@ export function LoginScreen({ initialError }: { initialError?: string }) {
             />
             <button
               aria-label="Continue with exchange code"
+              data-cuelume-toggle="loading"
               disabled={!exchangeCode.trim() || !intentReady || loading}
               type="submit"
             >
@@ -169,7 +171,7 @@ export function LoginScreen({ initialError }: { initialError?: string }) {
           Forgot your code? Generate one
         </a>
 
-        <button className="faceid-pill" type="button">
+        <button className="faceid-pill" data-cuelume-toggle="page" type="button">
           <UserFocus weight="regular" /> Login with Face ID
         </button>
 

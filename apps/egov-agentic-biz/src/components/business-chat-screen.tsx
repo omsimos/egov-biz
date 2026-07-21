@@ -32,6 +32,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { DefaultChatTransport, getToolName, isToolUIPart } from "ai";
+import { play } from "cuelume";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 import { StatusBar } from "@/components/phone-chrome";
@@ -102,7 +103,7 @@ export function ComplianceResultCard({
           <ShieldCheck weight="duotone" />
         </span>
         <div>
-          <small>DEMO RESULT</small>
+          <small>SETUP RESULT</small>
           <strong>{title}</strong>
           <p>{subtitle}</p>
         </div>
@@ -220,6 +221,7 @@ export function BarangayClearanceCard({
           </div>
           <button
             type="button"
+            data-cuelume-toggle="page"
             disabled={paid}
             onClick={() =>
               onPay({
@@ -382,6 +384,7 @@ function PlanDock({ plan, active }: { plan: RegistrationPlan; active: boolean })
     >
       <button
         className="registration-plan-toggle"
+        data-cuelume-toggle={expanded ? "droplet" : "bloom"}
         type="button"
         aria-expanded={expanded}
         aria-controls="registration-plan-items"
@@ -494,6 +497,7 @@ function QuestionComposer({
     event.preventDefault();
     if (!canContinue || disabled) return;
     if (!lastQuestion) {
+      play("page");
       setQuestionIndex((current) => current + 1);
       return;
     }
@@ -559,6 +563,7 @@ function QuestionComposer({
                     return (
                       <label key={option.id} className={checked ? "selected" : ""}>
                         <input
+                          data-cuelume-toggle="toggle"
                           type={question.type === "multi" ? "checkbox" : "radio"}
                           name={question.id}
                           value={option.id}
@@ -728,7 +733,7 @@ export function DtiFormCard({
           <small>PAYMENT</small>
           <strong>{form.feeLabel}</strong>
         </div>
-        <button onClick={onSubmitPay} disabled={paid}>
+        <button data-cuelume-toggle="bloom" onClick={onSubmitPay} disabled={paid}>
           {paid ? (
             <>
               <CheckCircle weight="fill" /> Paid
@@ -752,7 +757,12 @@ function BirFormArtifactCard({
   onPreview: () => void;
 }) {
   return (
-    <button className="pdf-artifact-card" type="button" onClick={onPreview}>
+    <button
+      className="pdf-artifact-card"
+      data-cuelume-toggle="page"
+      type="button"
+      onClick={onPreview}
+    >
       <span className="pdf-artifact-icon">
         <FilePdf weight="fill" />
       </span>
@@ -889,7 +899,17 @@ function ToolPart({
     );
   }
   if (part.type === "tool-setupTaxCompliance") {
-    if (part.state !== "output-available") return null;
+    if (part.state !== "output-available")
+      return (
+        <div className="chat-tool-row active">
+          <CircleNotch className="spin" />
+          <div>
+            <small>Setting up recurring tax filings</small>
+            <span className="chat-shimmer">Building the mock BIR filing calendar</span>
+          </div>
+          <CalendarDots />
+        </div>
+      );
     return (
       <ComplianceResultCard
         title="Tax calendar set up"
@@ -922,12 +942,16 @@ function ToolPart({
   if (part.type === "tool-finalizeBusinessRegistration") {
     if (part.state !== "output-available") return null;
     return (
-      <a className="business-finalized-card" href={`/?business=${part.output.businessId}`}>
+      <a
+        className="business-finalized-card"
+        data-cuelume-toggle="page"
+        href={`/?business=${part.output.businessId}`}
+      >
         <span>
           <Storefront weight="duotone" />
         </span>
         <div>
-          <small>ALL SET UP · DEMO COMPLETE</small>
+          <small>ALL SET UP</small>
           <strong>{part.output.businessName}</strong>
           <p>Open records and tax calendar</p>
         </div>
@@ -1046,6 +1070,7 @@ export function PaymentDialog({
     return () => window.removeEventListener("keydown", close);
   }, [onClose]);
   const openCheckout = async () => {
+    play("loading");
     setOpening(true);
     setPaymentError("");
     try {
@@ -1069,6 +1094,7 @@ export function PaymentDialog({
         throw new Error(result.error || "eGovPay could not open checkout.");
       window.location.assign(result.checkoutUrl);
     } catch (error) {
+      play("error");
       setPaymentError(error instanceof Error ? error.message : "eGovPay could not open checkout.");
       setOpening(false);
     }
@@ -1076,7 +1102,12 @@ export function PaymentDialog({
 
   return (
     <div className="chat-dialog-layer">
-      <button className="chat-dialog-scrim" onClick={onClose} aria-label="Close payment" />
+      <button
+        className="chat-dialog-scrim"
+        data-cuelume-toggle="droplet"
+        onClick={onClose}
+        aria-label="Close payment"
+      />
       <section
         className="chat-payment-dialog"
         role="dialog"
@@ -1085,7 +1116,12 @@ export function PaymentDialog({
         tabIndex={-1}
         ref={dialogRef}
       >
-        <button className="chat-dialog-close" onClick={onClose} aria-label="Close">
+        <button
+          className="chat-dialog-close"
+          data-cuelume-toggle="droplet"
+          onClick={onClose}
+          aria-label="Close"
+        >
           <X />
         </button>
         <div className="payment-service">
@@ -1141,7 +1177,12 @@ function PdfPreviewDialog({
 
   return (
     <div className="chat-dialog-layer pdf-preview-layer">
-      <button className="chat-dialog-scrim" onClick={onClose} aria-label="Close PDF preview" />
+      <button
+        className="chat-dialog-scrim"
+        data-cuelume-toggle="droplet"
+        onClick={onClose}
+        aria-label="Close PDF preview"
+      />
       <section
         className="pdf-preview-dialog"
         role="dialog"
@@ -1158,16 +1199,21 @@ function PdfPreviewDialog({
             <small>PDF PREVIEW</small>
             <h2 id="pdf-preview-title">BIR Form 1901</h2>
           </div>
-          <button className="chat-dialog-close" onClick={onClose} aria-label="Close">
+          <button
+            className="chat-dialog-close"
+            data-cuelume-toggle="droplet"
+            onClick={onClose}
+            aria-label="Close"
+          >
             <X />
           </button>
         </header>
         <iframe src={artifact.url} title="BIR Form 1901 PDF preview" />
         <footer>
-          <a href={artifact.url} download={artifact.filename}>
+          <a data-cuelume-toggle="success" href={artifact.url} download={artifact.filename}>
             <DownloadSimple weight="bold" /> Download PDF
           </a>
-          <a href={artifact.url} target="_blank" rel="noreferrer">
+          <a data-cuelume-toggle="page" href={artifact.url} target="_blank" rel="noreferrer">
             <ArrowSquareOut weight="bold" /> Open full screen
           </a>
         </footer>
@@ -1247,6 +1293,12 @@ export function BusinessChatScreen({
         part.type === "tool-finalizeBusinessRegistration" && part.state === "output-available",
     ),
   );
+  const completedPlanSteps =
+    latestPlan?.plan.steps.filter((step) => step.status === "completed").length ?? 0;
+  const previousStatus = useRef(status);
+  const previousCompletedPlanSteps = useRef(completedPlanSteps);
+  const wasRegistrationFinalized = useRef(registrationFinalized);
+  const hadError = useRef(Boolean(error));
   const pending: PendingQuestion | null = (() => {
     for (const message of [...visibleMessages].reverse()) {
       for (const part of [...message.parts].reverse()) {
@@ -1287,6 +1339,34 @@ export function BusinessChatScreen({
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [visibleMessages, pending, status]);
+  useEffect(() => {
+    const previous = previousStatus.current;
+    if (status === "submitted" && previous !== "submitted") play("loading");
+    if (
+      status === "ready" &&
+      (previous === "submitted" || previous === "streaming") &&
+      !registrationFinalized &&
+      completedPlanSteps <= previousCompletedPlanSteps.current &&
+      !error &&
+      !continuationError
+    )
+      play("ready");
+    previousStatus.current = status;
+  }, [completedPlanSteps, continuationError, error, registrationFinalized, status]);
+  useEffect(() => {
+    if (completedPlanSteps > previousCompletedPlanSteps.current && !registrationFinalized)
+      play("success");
+    previousCompletedPlanSteps.current = completedPlanSteps;
+  }, [completedPlanSteps, registrationFinalized]);
+  useEffect(() => {
+    if (registrationFinalized && !wasRegistrationFinalized.current) play("success");
+    wasRegistrationFinalized.current = registrationFinalized;
+  }, [registrationFinalized]);
+  useEffect(() => {
+    const failed = Boolean(error || continuationError);
+    if (failed && !hadError.current) play("error");
+    hadError.current = failed;
+  }, [continuationError, error]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -1344,13 +1424,17 @@ export function BusinessChatScreen({
       {registrationFinalized && <CompletionConfetti />}
       <StatusBar />
       <header className="chat-header">
-        <button onClick={onBack} aria-label="Go back">
+        <button data-cuelume-toggle="page" onClick={onBack} aria-label="Go back">
           <ArrowLeft />
         </button>
         <div className="chat-agent-avatar">
           <Headset weight="fill" />
         </div>
-        <button className="chat-session-trigger" onClick={() => setHistoryOpen((open) => !open)}>
+        <button
+          className="chat-session-trigger"
+          data-cuelume-toggle={historyOpen ? "droplet" : "bloom"}
+          onClick={() => setHistoryOpen((open) => !open)}
+        >
           <span>
             <h1>{conversation.title}</h1>
             <small>
@@ -1361,6 +1445,7 @@ export function BusinessChatScreen({
         </button>
         <button
           className="chat-new-session"
+          data-cuelume-toggle="page"
           onClick={onNewConversation}
           aria-label="Create a new registration plan"
         >
@@ -1375,6 +1460,7 @@ export function BusinessChatScreen({
               >
                 <button
                   className="chat-session-open"
+                  data-cuelume-toggle="page"
                   onClick={() => {
                     setHistoryOpen(false);
                     onSelectConversation(item.id);
@@ -1384,6 +1470,7 @@ export function BusinessChatScreen({
                 </button>
                 <button
                   className="chat-session-delete"
+                  data-cuelume-toggle="droplet"
                   onClick={() => onDeleteConversation(item)}
                   aria-label={`Delete ${item.title}`}
                 >
@@ -1459,6 +1546,7 @@ export function BusinessChatScreen({
             {paid && (
               <button
                 type="button"
+                data-cuelume-toggle="loading"
                 onClick={() => void continueAfterPayment(paymentService ?? "dti-business-name")}
                 disabled={busy}
               >
@@ -1499,6 +1587,7 @@ export function BusinessChatScreen({
               {busy ? (
                 <button
                   className="chat-stop"
+                  data-cuelume-toggle="droplet"
                   type="button"
                   onClick={() => void stop()}
                   aria-label="Stop"

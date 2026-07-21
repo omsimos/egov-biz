@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Baloo_2, Poppins } from "next/font/google";
+import { InteractionSounds } from "@/components/interaction-sounds";
 import "./globals.css";
 
 const poppins = Poppins({
@@ -38,7 +39,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <meta content={clientId} name="egov-client-id" />
         <meta content="handleEgovSsoSuccess" name="egov-sso-onsuccess" />
       </head>
-      <body>{children}</body>
+      <body>
+        <InteractionSounds />
+        {children}
+      </body>
     </html>
   );
 }

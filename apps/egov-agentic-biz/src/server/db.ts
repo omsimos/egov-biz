@@ -5,7 +5,10 @@ import { env } from "@/lib/env";
 
 declare global {
   var __egovBizDatabase: Database.Database | undefined;
+  var __egovBizDatabaseSchemaVersion: number | undefined;
 }
+
+const DATABASE_SCHEMA_VERSION = 2;
 
 function initialize(database: Database.Database) {
   database.pragma("journal_mode = WAL");
@@ -106,10 +109,17 @@ function initialize(database: Database.Database) {
 }
 
 export function getDatabase() {
-  if (globalThis.__egovBizDatabase) return globalThis.__egovBizDatabase;
+  if (globalThis.__egovBizDatabase) {
+    if (globalThis.__egovBizDatabaseSchemaVersion !== DATABASE_SCHEMA_VERSION) {
+      initialize(globalThis.__egovBizDatabase);
+      globalThis.__egovBizDatabaseSchemaVersion = DATABASE_SCHEMA_VERSION;
+    }
+    return globalThis.__egovBizDatabase;
+  }
   fs.mkdirSync(path.dirname(env.databasePath), { recursive: true });
   const database = new Database(env.databasePath);
   initialize(database);
   globalThis.__egovBizDatabase = database;
+  globalThis.__egovBizDatabaseSchemaVersion = DATABASE_SCHEMA_VERSION;
   return database;
 }

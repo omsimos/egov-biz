@@ -95,10 +95,6 @@
   font-weight: 900;
   white-space: nowrap;
 }
-.business-file-card aside i.demo {
-  background: #fff4d7;
-  color: #8c6100;
-}
 .business-file-card aside a,
 .business-file-card aside span {
   color: var(--blue);

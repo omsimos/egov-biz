@@ -6,6 +6,7 @@
   "scripts": {
     "build": "turbo run build",
     "check-types": "turbo run check-types",
+    "demo:reset-businesses": "bun --filter egov-agentic-biz run demo:reset-businesses",
     "dev:sso": "turbo run dev --filter=@repo/egov-sso-sample",
     "format": "turbo run format",
     "format:check": "turbo run format:check",

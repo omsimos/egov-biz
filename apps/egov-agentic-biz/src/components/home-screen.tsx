@@ -267,7 +267,12 @@ function HeroCarousel({ onBusiness }: { onBusiness: () => void }) {
             <circle cx="104" cy="66" fill="rgba(255,255,255,0.3)" r="2.5" />
           </svg>
         </article>
-        <button className="hero-slide slide-business" onClick={onBusiness} type="button">
+        <button
+          className="hero-slide slide-business"
+          data-cuelume-toggle="page"
+          onClick={onBusiness}
+          type="button"
+        >
           <span className="slide-kicker">New · Business one-stop</span>
           <strong>Start &amp; register your business</strong>
           <em>DTI, BIR &amp; LGU permits in one guided flow</em>
@@ -336,6 +341,7 @@ export function HomeScreen({
           </div>
           <button
             className="home-avatar"
+            data-cuelume-toggle="tick"
             onClick={() => {
               if (window.confirm("Sign out of eGovPH?")) onLogout();
             }}
@@ -368,7 +374,12 @@ export function HomeScreen({
 
         <nav aria-label="eGovPH services" className="home-services">
           {services.map(({ badge, business, icon, label }) => (
-            <button key={label} onClick={business ? onBusiness : undefined} type="button">
+            <button
+              key={label}
+              data-cuelume-toggle={business ? "page" : "tick"}
+              onClick={business ? onBusiness : undefined}
+              type="button"
+            >
               <span className="service-bubble">
                 {icon}
                 {badge && <i>{badge}</i>}
@@ -398,7 +409,12 @@ export function HomeScreen({
               <i />
             </span>
           </article>
-          <button className="mini-card egovai-card" onClick={onBusiness} type="button">
+          <button
+            className="mini-card egovai-card"
+            data-cuelume-toggle="page"
+            onClick={onBusiness}
+            type="button"
+          >
             <span className="mini-wordmark">
               <i>e</i>Gov AI
             </span>

@@ -27,6 +27,7 @@
     "@repo/egov": "workspace:*",
     "ai": "^7.0.32",
     "better-sqlite3": "^13.0.1",
+    "cuelume": "^0.1.2",
     "ioredis": "^5.11.1",
     "next": "16.2.10",
     "pdf-lib": "^1.17.1",

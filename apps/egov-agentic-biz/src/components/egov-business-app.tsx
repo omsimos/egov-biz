@@ -98,6 +98,7 @@ export function BusinessDetailScreen({
               {(["overview", "records", "files", "calendar"] as const).map((item) => (
                 <button
                   className={tab === item ? "active" : ""}
+                  data-cuelume-toggle="toggle"
                   key={item}
                   type="button"
                   onClick={() => setTab(item)}
@@ -140,7 +141,12 @@ export function BusinessDetailScreen({
                   <p>{business.businessAddress}</p>
                   <span>{business.businessActivity}</span>
                 </section>
-                <button type="button" className="next-tax-card" onClick={() => setTab("calendar")}>
+                <button
+                  type="button"
+                  className="next-tax-card"
+                  data-cuelume-toggle="page"
+                  onClick={() => setTab("calendar")}
+                >
                   <CalendarDots weight="duotone" />
                   <div>
                     <small>NEXT TAX REMINDER</small>
@@ -188,14 +194,14 @@ export function BusinessDetailScreen({
                         <time>{formatBusinessDate(file.createdAt)}</time>
                       </div>
                       <aside>
-                        <i className={file.status === "Demo only" ? "demo" : ""}>{file.status}</i>
-                        {file.url ? (
-                          <a href={file.url} target="_blank" rel="noreferrer">
-                            Open
-                          </a>
-                        ) : (
-                          <span>Demo record</span>
-                        )}
+                        <i>{file.status}</i>
+                        <a
+                          href={`/api/businesses/${encodeURIComponent(business.id)}/files/${encodeURIComponent(file.id)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Open
+                        </a>
                       </aside>
                     </article>
                   ))
@@ -286,7 +292,12 @@ function Header({
   return (
     <header className="app-header">
       {onBack ? (
-        <button className="icon-button" onClick={onBack} aria-label="Go back">
+        <button
+          className="icon-button"
+          data-cuelume-toggle="page"
+          onClick={onBack}
+          aria-label="Go back"
+        >
           <ArrowLeft />
         </button>
       ) : (
@@ -296,7 +307,11 @@ function Header({
       {profile ? (
         <ProfileAvatar className="header-avatar" profile={profile} />
       ) : (
-        <button className="notification-button" aria-label="Notifications">
+        <button
+          className="notification-button"
+          data-cuelume-toggle="tick"
+          aria-label="Notifications"
+        >
           <BellSimple weight="fill" />
           <i />
         </button>
@@ -368,7 +383,12 @@ export function BusinessLanding({
             aria-label="Describe your business idea"
           />
           <div>
-            <button type="submit" disabled={!prompt.trim()} aria-label="Continue">
+            <button
+              type="submit"
+              data-cuelume-toggle="page"
+              disabled={!prompt.trim()}
+              aria-label="Continue"
+            >
               <ArrowRight weight="bold" />
             </button>
           </div>
@@ -384,7 +404,11 @@ export function BusinessLanding({
             <div>
               {conversations.map((conversation) => (
                 <div className="saved-plan-row" key={conversation.id}>
-                  <button className="saved-plan-open" onClick={() => onResume(conversation.id)}>
+                  <button
+                    className="saved-plan-open"
+                    data-cuelume-toggle="page"
+                    onClick={() => onResume(conversation.id)}
+                  >
                     <span>
                       <strong>{conversation.title}</strong>
                       <small>Updated {new Date(conversation.updatedAt).toLocaleDateString()}</small>
@@ -393,6 +417,7 @@ export function BusinessLanding({
                   </button>
                   <button
                     className="saved-plan-delete"
+                    data-cuelume-toggle="droplet"
                     onClick={() => onDelete(conversation)}
                     aria-label={`Delete ${conversation.title}`}
                   >
@@ -409,6 +434,7 @@ export function BusinessLanding({
             {suggestions.map((suggestion, index) => (
               <button
                 key={suggestion}
+                data-cuelume-toggle="toggle"
                 onClick={() => {
                   setPrompt(suggestion);
                   inputRef.current?.focus();
@@ -429,7 +455,7 @@ export function BusinessLanding({
               <small>LINKED TO YOUR TIN</small>
               <h2>Your businesses</h2>
             </div>
-            <button aria-label="Show business options">
+            <button data-cuelume-toggle="tick" aria-label="Show business options">
               <DotsThree />
             </button>
           </div>
@@ -447,6 +473,7 @@ export function BusinessLanding({
             businesses?.map((business) => (
               <button
                 className="business-record business-record-link"
+                data-cuelume-toggle="page"
                 key={business.id}
                 type="button"
                 onClick={() => onOpenBusiness(business.id)}

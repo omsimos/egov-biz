@@ -133,7 +133,7 @@ const previewBusinessDetail: RegisteredBusinessDetail = {
       title: "DTI Business Name Certificate",
       filename: "kape-diaria-dti-certificate.pdf",
       documentType: "DTI Certificate",
-      status: "Demo only",
+      status: "Available",
       createdAt: "2026-07-22",
       url: null,
       note: "Sample certificate held in the document vault.",
