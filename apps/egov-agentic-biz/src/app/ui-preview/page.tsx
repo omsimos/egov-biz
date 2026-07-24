@@ -46,7 +46,7 @@ const PAYMENT_METHOD_OPTIONS = [
 export default function UIPreviewPage() {
   const [agreed, setAgreed] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("gcash");
-  const [notifications, setNotifications] = useState(true);
+  const [notifications, setNotifications] = useState(false);
 
   return (
     <main className="min-h-screen bg-background p-8">
