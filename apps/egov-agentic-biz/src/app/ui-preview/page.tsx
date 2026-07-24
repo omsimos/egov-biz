@@ -1,8 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { PaperPlaneRight } from "@phosphor-icons/react";
+import {
+  CheckCircleIcon,
+  InfoIcon,
+  PaperPlaneRight,
+  WarningIcon,
+  XCircleIcon,
+} from "@phosphor-icons/react";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +22,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { FieldHint, FieldLabel } from "@/components/ui/field";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +45,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
 const BUTTON_VARIANTS = [
@@ -69,6 +87,8 @@ export default function UIPreviewPage() {
   const [agreed, setAgreed] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("gcash");
   const [notifications, setNotifications] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("overview");
 
   return (
     <main className="min-h-screen bg-background p-8">
@@ -331,8 +351,109 @@ export default function UIPreviewPage() {
 
         <section className="mb-12">
           <h2 className="text-2xl font-semibold mb-4">Alert / Dialog / Tabs</h2>
-          <div className="p-6 border border-border rounded-lg bg-muted/50">
-            {/* Primitive examples will be added here */}
+          <div className="p-6 border border-border rounded-lg bg-muted/50 flex flex-col gap-8">
+            <div className="flex flex-col gap-3">
+              <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                Alert
+              </h3>
+              <div className="flex flex-col gap-3">
+                <Alert variant="info">
+                  <InfoIcon weight="fill" />
+                  <AlertTitle>Application under review</AlertTitle>
+                  <AlertDescription>
+                    We&apos;re verifying your submitted documents. This
+                    usually takes 2-3 business days.
+                  </AlertDescription>
+                </Alert>
+                <Alert variant="success">
+                  <CheckCircleIcon weight="fill" />
+                  <AlertTitle>Registration approved</AlertTitle>
+                  <AlertDescription>
+                    Your DTI Business Name Certificate is ready to download.
+                  </AlertDescription>
+                </Alert>
+                <Alert variant="warning">
+                  <WarningIcon weight="fill" />
+                  <AlertTitle>Renewal due soon</AlertTitle>
+                  <AlertDescription>
+                    Your business permit expires in 15 days. Renew now to
+                    avoid penalties.
+                  </AlertDescription>
+                </Alert>
+                <Alert variant="destructive">
+                  <XCircleIcon weight="fill" />
+                  <AlertTitle>Submission failed</AlertTitle>
+                  <AlertDescription>
+                    We couldn&apos;t process your payment. Please check your
+                    details and try again.
+                  </AlertDescription>
+                </Alert>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                Dialog (bottom sheet)
+              </h3>
+              <div>
+                <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                  <DialogTrigger
+                    render={<Button variant="primary">Submit application</Button>}
+                  />
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Submit application?</DialogTitle>
+                      <DialogDescription>
+                        Your business registration will be sent for review.
+                        You won&apos;t be able to edit it once submitted.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                      <DialogClose
+                        render={<Button variant="outline">Cancel</Button>}
+                      />
+                      <Button
+                        variant="primary"
+                        onClick={() => setDialogOpen(false)}
+                      >
+                        Confirm submit
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                Tabs
+              </h3>
+              <Tabs value={activeTab} onValueChange={setActiveTab}>
+                <TabsList>
+                  <TabsTrigger value="overview">Overview</TabsTrigger>
+                  <TabsTrigger value="documents">Documents</TabsTrigger>
+                  <TabsTrigger value="tax">Tax calendar</TabsTrigger>
+                </TabsList>
+                <TabsContent value="overview">
+                  <p className="text-foreground">
+                    Juan Dela Cruz Trading - Sole Proprietorship, registered
+                    with DTI on Jan 12, 2026.
+                  </p>
+                </TabsContent>
+                <TabsContent value="documents">
+                  <p className="text-foreground">
+                    3 documents on file: DTI certificate, Barangay clearance,
+                    Mayor&apos;s permit.
+                  </p>
+                </TabsContent>
+                <TabsContent value="tax">
+                  <p className="text-foreground">
+                    Next due: Quarterly percentage tax, filing deadline Jul
+                    25, 2026.
+                  </p>
+                </TabsContent>
+              </Tabs>
+            </div>
           </div>
         </section>
       </div>
