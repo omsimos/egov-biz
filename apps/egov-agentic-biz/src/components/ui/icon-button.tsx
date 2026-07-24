@@ -10,7 +10,7 @@ const iconButtonVariants = cva(
       variant: {
         plain: "bg-transparent hover:bg-muted",
         soft: "bg-[var(--egov-blue-soft)] text-primary",
-        primary: "bg-primary text-white shadow-[var(--shadow-primary)]",
+        primary: "bg-primary text-primary-foreground shadow-primary",
       },
     },
     defaultVariants: {
