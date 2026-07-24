@@ -1,20 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Baloo_2, Poppins } from "next/font/google";
+import { Nunito_Sans } from "next/font/google";
 import { InteractionSounds } from "@/components/interaction-sounds";
 import "./globals.css";
 
-const poppins = Poppins({
+const nunito = Nunito_Sans({
   display: "swap",
   subsets: ["latin"],
   variable: "--font-ui",
-  weight: ["400", "500", "600", "700", "800"],
-});
-
-const baloo = Baloo_2({
-  display: "swap",
-  subsets: ["latin"],
-  variable: "--font-logo",
-  weight: ["700", "800"],
+  weight: ["400", "600", "700", "800", "900"],
 });
 
 export const metadata: Metadata = {
@@ -33,7 +26,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   const clientId = process.env.EGOVSSO_PARTNER_CODE?.trim() ?? "";
 
   return (
-    <html className={`${poppins.variable} ${baloo.variable}`} lang="en">
+    <html className={nunito.variable} lang="en">
       <head>
         <meta content="STAGING" name="egov-environment" />
         <meta content={clientId} name="egov-client-id" />

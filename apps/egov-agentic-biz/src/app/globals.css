@@ -591,14 +591,9 @@ body {
   background: var(--canvas);
   font-family:
     var(--font-ui),
-    "Avenir Next",
-    Avenir,
     "Nunito Sans",
     ui-rounded,
     system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
     sans-serif;
   -webkit-font-smoothing: antialiased;
 }
@@ -804,7 +799,7 @@ a:focus-visible {
   display: inline-flex;
   align-items: center;
   color: var(--logo-blue);
-  font-family: var(--font-logo), "Avenir Next", ui-rounded, system-ui, sans-serif;
+  font-family: var(--font-ui), "Avenir Next", ui-rounded, system-ui, sans-serif;
   font-weight: 800;
   letter-spacing: -0.045em;
   line-height: 1;
