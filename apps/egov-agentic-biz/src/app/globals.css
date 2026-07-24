@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "../styles/tokens.css";
 @import "streamdown/styles.css";
 
 @source "../../node_modules/streamdown/dist/*.js";
@@ -16,12 +17,37 @@
   --color-input: var(--input);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-ring: var(--ring);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 5px);
+  --radius-md: calc(var(--radius) - 1px);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-xl: calc(var(--radius) + 5px);
+  --radius-2xl: calc(var(--radius) + 13px);
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-primary: var(--shadow-primary);
+  --shadow-sheet: var(--shadow-sheet);
+  --font-sans: var(--font-sans);
+  --text-2xs: var(--text-2xs);
+  --text-xs: var(--text-xs);
+  --text-sm: var(--text-sm);
+  --text-base: var(--text-base);
+  --text-md: var(--text-md);
+  --text-lg: var(--text-lg);
+  --text-xl: var(--text-xl);
+  --text-2xl: var(--text-2xl);
+  --text-display: var(--text-display);
 }
 .business-files-list > header small {
   color: var(--blue);
@@ -531,33 +557,25 @@
   text-decoration: underline;
 }
 
+/* App-only bespoke aliases. --background, --foreground, --card,
+   --card-foreground, --muted, --muted-foreground, --border, --input,
+   --primary, --primary-foreground, --radius, --ink, --line, --surface,
+   --canvas, --success now come solely from styles/tokens.css. The
+   aliases below have no brand-token twin (--logo-blue, --amber,
+   --sidebar*, --ease-out) or are repointed at the equivalent brand
+   token so bespoke CSS keeps reading its familiar name while there is
+   a single source of truth for the value. */
 :root {
-  --blue: #0755e9;
-  --blue-dark: #073caa;
+  --blue: var(--primary);
+  --blue-dark: var(--egov-blue-dark);
   --logo-blue: #0a3fd6;
   --amber: #f6a723;
-  --blue-soft: #edf3ff;
-  --orange: #f5a400;
-  --red: #e84343;
-  --ink: #17233b;
-  --text-muted: #6c768a;
-  --line: #e4e9f2;
-  --surface: #ffffff;
-  --canvas: #f2f5fb;
-  --success: #15875d;
-  --background: #ffffff;
-  --foreground: #17233b;
-  --card: #ffffff;
-  --card-foreground: #17233b;
-  --muted: #f0f3f8;
-  --muted-foreground: #6c768a;
-  --border: #dfe5ef;
-  --input: #cfd7e4;
-  --primary: #0755e9;
-  --primary-foreground: #ffffff;
+  --blue-soft: var(--egov-blue-soft);
+  --orange: var(--egov-orange);
+  --red: var(--egov-red);
+  --text-muted: var(--muted-foreground);
   --sidebar: #f7f9fc;
   --sidebar-foreground: #17233b;
-  --radius: 0.75rem;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
