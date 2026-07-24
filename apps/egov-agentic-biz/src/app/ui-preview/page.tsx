@@ -3,7 +3,17 @@
 import { PaperPlaneRight } from "@phosphor-icons/react";
 
 import { Button } from "@/components/ui/button";
+import { FieldHint, FieldLabel } from "@/components/ui/field";
 import { IconButton } from "@/components/ui/icon-button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
 const BUTTON_VARIANTS = [
   "primary",
@@ -16,6 +26,12 @@ const BUTTON_VARIANTS = [
 const BUTTON_SIZES = ["sm", "md", "lg"] as const;
 
 const ICON_BUTTON_VARIANTS = ["plain", "soft", "primary"] as const;
+
+const BUSINESS_TYPE_OPTIONS = [
+  { value: "sole-proprietorship", label: "Sole Proprietorship" },
+  { value: "partnership", label: "Partnership" },
+  { value: "corporation", label: "Corporation" },
+];
 
 export default function UIPreviewPage() {
   return (
@@ -73,8 +89,69 @@ export default function UIPreviewPage() {
 
         <section className="mb-12">
           <h2 className="text-2xl font-semibold mb-4">Form fields</h2>
-          <div className="p-6 border border-border rounded-lg bg-muted/50">
-            {/* Primitive examples will be added here */}
+          <div className="p-6 border border-border rounded-lg bg-muted/50 grid gap-6 sm:grid-cols-2">
+            <div>
+              <FieldLabel htmlFor="preview-input">Business name</FieldLabel>
+              <Input id="preview-input" placeholder="Juan Dela Cruz Trading" />
+              <FieldHint>Enter your registered business name.</FieldHint>
+            </div>
+
+            <div>
+              <FieldLabel htmlFor="preview-input-error">
+                Email address
+              </FieldLabel>
+              <Input
+                id="preview-input-error"
+                defaultValue="not-an-email"
+                aria-invalid
+              />
+              <FieldHint error>Enter a valid email address.</FieldHint>
+            </div>
+
+            <div>
+              <FieldLabel htmlFor="preview-input-disabled">
+                Reference number
+              </FieldLabel>
+              <Input
+                id="preview-input-disabled"
+                defaultValue="REF-2026-00019"
+                disabled
+              />
+              <FieldHint>Auto-generated, cannot be edited.</FieldHint>
+            </div>
+
+            <div>
+              <FieldLabel htmlFor="preview-select">Business type</FieldLabel>
+              <Select
+                items={BUSINESS_TYPE_OPTIONS}
+                defaultValue="sole-proprietorship"
+              >
+                <SelectTrigger id="preview-select">
+                  <SelectValue placeholder="Select a business type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {BUSINESS_TYPE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FieldHint>
+                Choose the legal structure of your business.
+              </FieldHint>
+            </div>
+
+            <div className="sm:col-span-2">
+              <FieldLabel htmlFor="preview-textarea">
+                Business address
+              </FieldLabel>
+              <Textarea
+                id="preview-textarea"
+                placeholder="Unit / Floor, Building, Street, Barangay, City"
+              />
+              <FieldHint>Provide the complete registered address.</FieldHint>
+            </div>
           </div>
         </section>
 
