@@ -1,11 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import { PaperPlaneRight } from "@phosphor-icons/react";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { FieldHint, FieldLabel } from "@/components/ui/field";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -13,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
 const BUTTON_VARIANTS = [
@@ -33,7 +37,17 @@ const BUSINESS_TYPE_OPTIONS = [
   { value: "corporation", label: "Corporation" },
 ];
 
+const PAYMENT_METHOD_OPTIONS = [
+  { value: "gcash", label: "GCash" },
+  { value: "bank-transfer", label: "Bank transfer" },
+  { value: "over-the-counter", label: "Over the counter" },
+];
+
 export default function UIPreviewPage() {
+  const [agreed, setAgreed] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState("gcash");
+  const [notifications, setNotifications] = useState(true);
+
   return (
     <main className="min-h-screen bg-background p-8">
       <div className="max-w-4xl mx-auto">
@@ -157,8 +171,61 @@ export default function UIPreviewPage() {
 
         <section className="mb-12">
           <h2 className="text-2xl font-semibold mb-4">Choice controls</h2>
-          <div className="p-6 border border-border rounded-lg bg-muted/50">
-            {/* Primitive examples will be added here */}
+          <div className="p-6 border border-border rounded-lg bg-muted/50 grid gap-8 sm:grid-cols-2">
+            <div className="flex flex-col gap-3">
+              <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                Checkbox
+              </h3>
+              <label className="flex items-center gap-2 text-[15px] text-foreground">
+                <Checkbox
+                  checked={agreed}
+                  onCheckedChange={(checked) => setAgreed(checked)}
+                />
+                Unchecked / checked (click to toggle)
+              </label>
+              <label className="flex items-center gap-2 text-[15px] text-foreground">
+                <Checkbox defaultChecked />
+                Checked by default
+              </label>
+              <label className="flex items-center gap-2 text-[15px] text-muted-foreground">
+                <Checkbox defaultChecked disabled />
+                Disabled
+              </label>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                Radio group
+              </h3>
+              <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod}>
+                {PAYMENT_METHOD_OPTIONS.map((option) => (
+                  <label
+                    key={option.value}
+                    className="flex items-center gap-2 text-[15px] text-foreground"
+                  >
+                    <RadioGroupItem value={option.value} />
+                    {option.label}
+                  </label>
+                ))}
+              </RadioGroup>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                Switch
+              </h3>
+              <label className="flex items-center gap-2 text-[15px] text-foreground">
+                <Switch
+                  checked={notifications}
+                  onCheckedChange={(checked) => setNotifications(checked)}
+                />
+                On / off (click to toggle)
+              </label>
+              <label className="flex items-center gap-2 text-[15px] text-muted-foreground">
+                <Switch defaultChecked disabled />
+                Disabled
+              </label>
+            </div>
           </div>
         </section>
 
