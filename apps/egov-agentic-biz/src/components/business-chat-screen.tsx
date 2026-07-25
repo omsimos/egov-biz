@@ -4,38 +4,51 @@ import { useChat } from "@ai-sdk/react";
 import {
   ArrowLeft,
   ArrowRight,
+  ArrowRightIcon,
   ArrowSquareOut,
   Check,
   CheckCircle,
+  CheckCircleIcon,
+  CheckIcon,
   CircleNotch,
+  CircleNotchIcon,
   Buildings,
   CalendarDots,
   Certificate,
   DownloadSimple,
   FilePdf,
   FileText,
-  FlagCheckered,
-  GlobeHemisphereWest,
+  FlagCheckeredIcon,
+  GlobeHemisphereWestIcon,
   Headset,
-  Info,
+  InfoIcon,
   ListChecks,
-  MagnifyingGlass,
-  Minus,
+  ListChecksIcon,
+  MagnifyingGlassIcon,
+  MinusIcon,
   PaperPlaneRight,
   PencilSimple,
+  PencilSimpleIcon,
   ShieldCheck,
+  SparkleIcon,
   Storefront,
   StopCircle,
   Plus,
   CaretDown,
+  CaretDownIcon,
   Trash,
   X,
+  XIcon,
 } from "@phosphor-icons/react";
 import { DefaultChatTransport, getToolName, isToolUIPart } from "ai";
 import { play } from "cuelume";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 import { StatusBar } from "@/components/phone-chrome";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import type { BirFormArtifact } from "@/lib/bir-form/artifact";
 import {
   uniqueMessagesById,
@@ -378,70 +391,126 @@ function PlanDock({ plan, active }: { plan: RegistrationPlan; active: boolean })
     : (current?.label ?? "Preparing your registration plan");
 
   return (
-    <section
-      className={`registration-plan-dock ${expanded ? "expanded" : "collapsed"} ${active ? "active" : ""}`}
+    <Card
+      role="region"
       aria-label="Registration plan"
+      className={cn("min-w-0 shadow-xs", active ? "border-[#b9caec]" : "border-[#d5deeb]")}
     >
       <button
-        className="registration-plan-toggle"
+        className="grid min-h-[54px] w-full grid-cols-[32px_minmax(0,1fr)_auto_20px] items-center gap-2 bg-white px-2.5 py-2 text-left hover:bg-[#f8faff]"
         data-cuelume-toggle={expanded ? "droplet" : "bloom"}
         type="button"
         aria-expanded={expanded}
         aria-controls="registration-plan-items"
         onClick={() => setExpanded((open) => !open)}
       >
-        <span className={`registration-plan-status ${current?.status ?? "pending"}`}>
+        <span
+          className={cn(
+            "grid size-8 place-items-center rounded-[9px]",
+            allResolved || current?.status === "completed"
+              ? "bg-success text-white"
+              : current?.status === "in_progress"
+                ? "bg-secondary text-primary"
+                : "bg-muted text-muted-foreground",
+          )}
+        >
           {allResolved || current?.status === "completed" ? (
-            <Check weight="bold" />
+            <CheckIcon className="size-4" weight="bold" />
           ) : current?.status === "in_progress" ? (
-            <ArrowRight weight="bold" />
+            <CircleNotchIcon className="size-4 animate-spin" weight="bold" />
           ) : (
-            <ListChecks weight="duotone" />
+            <ListChecksIcon className="size-4" weight="duotone" />
           )}
         </span>
-        <span className="registration-plan-summary">
-          <small>{expanded ? "REGISTRATION PLAN" : "CURRENT TASK"}</small>
-          <strong>{expanded ? plan.title : currentLabel}</strong>
+        <span className="grid min-w-0 gap-0.5">
+          <small className="text-2xs font-black tracking-[0.06em] text-muted-foreground">
+            {expanded ? "REGISTRATION PLAN" : "CURRENT TASK"}
+          </small>
+          <strong className="truncate text-xs leading-[1.35]">
+            {expanded ? plan.title : currentLabel}
+          </strong>
         </span>
         <span
-          className="registration-plan-count"
+          className="rounded-[7px] bg-muted px-[7px] py-1 text-2xs font-extrabold tabular-nums text-muted-foreground"
           aria-label={`${completed} of ${plan.steps.length} tasks completed`}
         >
           {completed}/{plan.steps.length}
         </span>
-        <CaretDown className="registration-plan-caret" weight="bold" />
+        <CaretDownIcon
+          className={cn(
+            "size-[15px] text-muted-foreground transition-transform duration-200",
+            expanded && "rotate-180",
+          )}
+          weight="bold"
+        />
       </button>
       <div
-        className="registration-plan-reveal"
+        className={cn(
+          "grid transition-[grid-template-rows] duration-300 ease-out",
+          expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+        )}
         id="registration-plan-items"
         aria-hidden={!expanded}
       >
-        <div className="registration-plan-items">
-          <ol>
+        <div className="min-h-0 overflow-hidden">
+          <ol className="m-0 max-h-[min(28dvh,260px)] list-none overflow-y-auto border-t border-[#e5eaf2] px-2.5 pt-[5px] pb-2">
             {plan.steps.map((step, index) => {
               const finishLine = index === plan.steps.length - 1;
               return (
                 <li
-                  className={`${step.status}${finishLine ? " finish-line" : ""}`}
+                  className={cn(
+                    "grid min-h-9 grid-cols-[22px_minmax(0,1fr)] items-start gap-2 py-1.5 text-xs leading-[1.4]",
+                    step.status === "in_progress"
+                      ? "font-extrabold text-foreground"
+                      : step.status === "completed"
+                        ? "text-[#59677d]"
+                        : step.status === "skipped"
+                          ? "text-[#939dac]"
+                          : "text-[#718095]",
+                  )}
                   key={step.id}
                   aria-current={step.status === "in_progress" ? "step" : undefined}
                   aria-label={step.status === "skipped" ? `${step.label} — skipped` : undefined}
                 >
-                  <i aria-hidden="true">
+                  <span
+                    className={cn(
+                      "grid size-[18px] place-items-center rounded-[5px] border-[1.5px]",
+                      finishLine
+                        ? "border-0 bg-transparent"
+                        : step.status === "completed"
+                          ? "border-success bg-success text-white"
+                          : step.status === "in_progress"
+                            ? "border-[#a9bde9] bg-secondary text-primary"
+                            : step.status === "skipped"
+                              ? "border-[#d2d8e2] bg-[#f1f3f6] text-[#8b96a8]"
+                              : "border-[#c4ccda] bg-white text-white",
+                    )}
+                    aria-hidden="true"
+                  >
                     {step.status === "skipped" ? (
-                      <Minus weight="bold" />
+                      <MinusIcon className="size-[11px]" weight="bold" />
                     ) : finishLine ? (
-                      <FlagCheckered weight={step.status === "completed" ? "fill" : "duotone"} />
+                      <FlagCheckeredIcon
+                        className={cn(
+                          "size-[17px]",
+                          step.status === "completed"
+                            ? "text-success"
+                            : step.status === "in_progress"
+                              ? "text-primary"
+                              : "text-[#8793a6]",
+                        )}
+                        weight={step.status === "completed" ? "fill" : "duotone"}
+                      />
                     ) : step.status === "completed" ? (
-                      <Check weight="bold" />
+                      <CheckIcon className="size-[11px]" weight="bold" />
                     ) : step.status === "in_progress" ? (
-                      <ArrowRight weight="bold" />
+                      <CircleNotchIcon className="size-[11px] animate-spin" weight="bold" />
                     ) : null}
-                  </i>
+                  </span>
                   <span>
                     {step.label}
                     {step.status === "skipped" && (
-                      <small className="registration-plan-skipped-label"> (skipped)</small>
+                      <small className="italic text-[#9aa3b1]"> (skipped)</small>
                     )}
                   </span>
                 </li>
@@ -450,7 +519,7 @@ function PlanDock({ plan, active }: { plan: RegistrationPlan; active: boolean })
           </ol>
         </div>
       </div>
-    </section>
+    </Card>
   );
 }
 
@@ -648,6 +717,17 @@ function QuestionComposer({
   );
 }
 
+function AgentDot() {
+  return (
+    <span
+      className="mt-px grid size-7 flex-none place-items-center rounded-full bg-primary text-white"
+      aria-hidden="true"
+    >
+      <SparkleIcon className="size-[13px]" weight="fill" />
+    </span>
+  );
+}
+
 function SearchTool({
   part,
 }: {
@@ -656,10 +736,16 @@ function SearchTool({
   const complete = part.state === "output-available";
   const failed = part.state === "output-error";
   return (
-    <div className={`chat-tool-row ${complete ? "complete" : failed ? "error" : "active"}`}>
-      {complete ? <CheckCircle weight="fill" /> : failed ? <X /> : <MagnifyingGlass />}
-      <div>
-        <small>
+    <div className="grid w-full grid-cols-[22px_1fr_16px] items-center gap-2 rounded-lg border border-border bg-card px-[11px] py-2.5 text-xs text-muted-foreground">
+      {complete ? (
+        <CheckCircleIcon className="size-4 text-success" weight="fill" />
+      ) : failed ? (
+        <XIcon className="size-4 text-destructive" />
+      ) : (
+        <MagnifyingGlassIcon className="size-4 text-primary" />
+      )}
+      <div className="grid min-w-0 gap-0.5">
+        <small className="text-2xs font-extrabold uppercase tracking-[0.04em] text-muted-foreground">
           {complete
             ? "Searched official sources"
             : failed
@@ -667,10 +753,12 @@ function SearchTool({
               : "Searching official sources"}
         </small>
         {"input" in part && part.input && (
-          <span className={!complete && !failed ? "chat-shimmer" : ""}>{part.input.query}</span>
+          <span className={cn("truncate", !complete && !failed && "chat-shimmer")}>
+            {part.input.query}
+          </span>
         )}
       </div>
-      <GlobeHemisphereWest />
+      <GlobeHemisphereWestIcon className="size-4 text-primary" />
     </div>
   );
 }
@@ -698,54 +786,77 @@ export function DtiFormCard({
   ];
   if (form.missingFields.length || rows.some(([, value]) => !value)) return null;
   return (
-    <article className={`dti-form-card ${paid ? "paid" : ""}`}>
-      <header>
-        <span className="dti-seal">DTI</span>
-        <div>
-          <small>BUSINESS NAME REGISTRATION</small>
-          <strong>Application draft</strong>
+    <Card className="w-full">
+      <div className="grid grid-cols-[39px_1fr_auto] items-center gap-[9px] border-b border-[#e9edf4] p-[13px]">
+        <span className="grid size-[39px] place-items-center rounded-full bg-[#183f8f] text-xs font-black text-white">
+          DTI
+        </span>
+        <div className="grid gap-0.5">
+          <small className="text-2xs font-extrabold tracking-[0.05em] text-muted-foreground">
+            BUSINESS NAME REGISTRATION
+          </small>
+          <strong className="text-base">Application draft</strong>
         </div>
-        <i className={paid ? "paid" : "ready"}>{paid ? "Paid" : "Ready"}</i>
-      </header>
+        <Badge variant="success">{paid ? "Paid" : "Ready"}</Badge>
+      </div>
       {note && (
-        <p className="dti-note">
-          <PencilSimple /> {note}
+        <p className="m-0 flex gap-1.5 bg-secondary px-[13px] py-[9px] text-xs text-[#486078]">
+          <PencilSimpleIcon className="size-[13px] flex-none" /> {note}
         </p>
       )}
-      <div className="dti-fields">
-        {rows.map(([label, value]) => (
-          <div key={label}>
-            <span>{label}</span>
-            <strong>{value}</strong>
+      <div className="px-[13px] py-0.5">
+        {rows.map(([label, value], index) => (
+          <div
+            key={label}
+            className={cn(
+              "grid gap-[3px] py-2.5",
+              index < rows.length - 1 && "border-b border-[#edf0f5]",
+            )}
+          >
+            <span className="text-2xs font-bold text-muted-foreground">{label}</span>
+            <strong className="text-xs leading-[1.35]">{value}</strong>
           </div>
         ))}
       </div>
-      <div className="dti-help">
-        <Info weight="fill" />
+      <div
+        className={cn(
+          "mx-[13px] mt-[5px] mb-3 flex gap-[7px] rounded-[10px] p-[9px] text-xs leading-[1.4]",
+          paid ? "bg-[#edf8f2] text-[#236348]" : "bg-muted text-[#4f5d74]",
+        )}
+      >
+        <InfoIcon className="size-[13px] flex-none text-primary" weight="fill" />
         <span>
           {paid
             ? "Payment recorded. This application checkpoint is complete."
             : "To change anything, type it below. For example: “Use the name Reyes Coffee Club.”"}
         </span>
       </div>
-      <footer>
-        <div>
-          <small>PAYMENT</small>
-          <strong>{form.feeLabel}</strong>
+      <div className="grid gap-[9px] border-t border-[#e9edf4] px-[13px] pt-[11px] pb-[13px]">
+        <div className="flex items-center justify-between gap-2.5">
+          <small className="text-2xs font-extrabold text-muted-foreground">PAYMENT</small>
+          <strong className="text-xs tabular-nums">{form.feeLabel}</strong>
         </div>
-        <button data-cuelume-toggle="bloom" onClick={onSubmitPay} disabled={paid}>
+        <Button
+          block
+          data-cuelume-toggle="bloom"
+          onClick={onSubmitPay}
+          disabled={paid}
+          className={cn(
+            paid && "bg-[var(--success-soft)] text-success shadow-none disabled:opacity-100",
+          )}
+        >
           {paid ? (
             <>
-              <CheckCircle weight="fill" /> Paid
+              <CheckCircleIcon weight="fill" /> Paid
             </>
           ) : (
             <>
-              Submit and pay <ArrowRight weight="bold" />
+              Submit and pay <ArrowRightIcon weight="bold" />
             </>
           )}
-        </button>
-      </footer>
-    </article>
+        </Button>
+      </div>
+    </Card>
   );
 }
 
@@ -1509,6 +1620,7 @@ export function BusinessChatScreen({
           const streaming = busy && message.id === visibleMessages.at(-1)?.id;
           return (
             <article className={`chat-message ${user ? "user" : "assistant"}`} key={message.id}>
+              {!user && <AgentDot />}
               <div className="message-content">
                 {text &&
                   (user ? (
@@ -1537,6 +1649,7 @@ export function BusinessChatScreen({
         })}
         {busy && (
           <div className="chat-working" role="status" aria-live="polite">
+            <AgentDot />
             <div className="chat-working-shimmer">Preparing your next registration step…</div>
           </div>
         )}
