@@ -22,11 +22,10 @@ import {
   GlobeHemisphereWestIcon,
   Headset,
   InfoIcon,
-  ListChecks,
   ListChecksIcon,
   MagnifyingGlassIcon,
   MinusIcon,
-  PaperPlaneRight,
+  PaperPlaneRightIcon,
   PencilSimple,
   PencilSimpleIcon,
   ShieldCheck,
@@ -48,6 +47,17 @@ import { StatusBar } from "@/components/phone-chrome";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { FieldHint, FieldLabel } from "@/components/ui/field";
+import { IconButton } from "@/components/ui/icon-button";
+import { Input } from "@/components/ui/input";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
 import type { BirFormArtifact } from "@/lib/bir-form/artifact";
 import {
@@ -587,15 +597,24 @@ function QuestionComposer({
   };
 
   return (
-    <form className="hitl-composer" onSubmit={submit}>
-      <div className="hitl-batch-intro">
-        <ListChecks weight="bold" />
-        <span>
-          <strong>Complete this checkpoint</strong>
-          <small>
-            Question {questionIndex + 1} of {pending.questions.length}
-          </small>
+    <form className="grid min-h-0 gap-3 overflow-y-auto pt-1 pr-1" onSubmit={submit}>
+      <div className="flex items-start gap-2">
+        <span className="grid size-[26px] flex-none place-items-center rounded-lg bg-secondary text-primary">
+          <SparkleIcon className="size-[13px]" weight="fill" />
         </span>
+        <div className="grid gap-0.5">
+          {pending.questions.length > 1 && (
+            <small className="text-2xs font-black uppercase tracking-[0.06em] text-muted-foreground">
+              Question {questionIndex + 1} of {pending.questions.length}
+            </small>
+          )}
+          <strong className="text-sm leading-[1.3]">{question.title}</strong>
+          {question.helpText && (
+            <small className="text-xs leading-[1.35] text-muted-foreground">
+              {question.helpText}
+            </small>
+          )}
+        </div>
       </div>
       {(() => {
         const value = values[question.id];
@@ -612,57 +631,48 @@ function QuestionComposer({
                 },
               ]
             : (question.options ?? []);
+        const optionCard = (checked: boolean) =>
+          cn(
+            "flex cursor-pointer items-center gap-2.5 rounded-md border-[1.5px] p-2.5 transition-colors",
+            checked
+              ? "border-primary bg-secondary"
+              : "border-input bg-white hover:border-primary/40",
+          );
+        const optionCopy = (label: string, description?: string) => (
+          <span className="grid gap-0.5">
+            <strong className="text-xs leading-[1.3]">{label}</strong>
+            {description && (
+              <small className="text-2xs leading-[1.25] text-muted-foreground">{description}</small>
+            )}
+          </span>
+        );
         return (
-          <section className="hitl-question" key={question.id}>
-            <div className="hitl-copy">
-              <b>{questionIndex + 1}</b>
-              <div>
-                <strong>{question.title}</strong>
-                <small>{question.helpText}</small>
-              </div>
-            </div>
-            {question.type === "single" || question.type === "multi" ? (
+          <section className="grid gap-3" key={question.id}>
+            {question.type === "single" ? (
               <>
-                <fieldset className="hitl-options">
-                  <legend>
-                    {question.type === "multi" ? "Choose all that apply" : "Choose one"}
-                  </legend>
-                  {options.map((option, index) => {
-                    const checked = selected.includes(option.id);
-                    return (
-                      <label key={option.id} className={checked ? "selected" : ""}>
-                        <input
-                          data-cuelume-toggle="toggle"
-                          type={question.type === "multi" ? "checkbox" : "radio"}
-                          name={question.id}
-                          value={option.id}
-                          checked={checked}
-                          onChange={() =>
-                            setValues((current) => ({
-                              ...current,
-                              [question.id]:
-                                question.type === "multi"
-                                  ? checked
-                                    ? selected.filter((id) => id !== option.id)
-                                    : [...selected, option.id]
-                                  : option.id,
-                            }))
-                          }
-                        />
-                        <i>{checked && <Check weight="bold" />}</i>
-                        <span>
-                          <b>{String.fromCharCode(65 + index)}</b>
-                          <strong>{option.label}</strong>
-                          {option.description && <small>{option.description}</small>}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </fieldset>
-                {question.type === "single" && value === "__other__" && (
-                  <label className="hitl-input custom">
-                    <span>Your answer</span>
-                    <input
+                <RadioGroup
+                  className="gap-1.5"
+                  aria-label={question.title}
+                  value={typeof value === "string" ? value : ""}
+                  onValueChange={(next) =>
+                    setValues((current) => ({ ...current, [question.id]: String(next) }))
+                  }
+                >
+                  {options.map((option) => (
+                    <label
+                      key={option.id}
+                      className={optionCard(value === option.id)}
+                      data-cuelume-toggle="toggle"
+                    >
+                      <RadioGroupItem value={option.id} />
+                      {optionCopy(option.label, option.description)}
+                    </label>
+                  ))}
+                </RadioGroup>
+                {value === "__other__" && (
+                  <div className="grid gap-1.5">
+                    <FieldLabel className="mb-0">Your answer</FieldLabel>
+                    <Input
                       value={custom[question.id] ?? ""}
                       onChange={(event) =>
                         setCustom((current) => ({ ...current, [question.id]: event.target.value }))
@@ -670,13 +680,39 @@ function QuestionComposer({
                       placeholder="Type your answer"
                       autoFocus
                     />
-                  </label>
+                  </div>
                 )}
               </>
+            ) : question.type === "multi" ? (
+              <div className="grid gap-1.5" role="group" aria-label={question.title}>
+                {options.map((option) => {
+                  const checked = selected.includes(option.id);
+                  return (
+                    <label
+                      key={option.id}
+                      className={optionCard(checked)}
+                      data-cuelume-toggle="toggle"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={() =>
+                          setValues((current) => ({
+                            ...current,
+                            [question.id]: checked
+                              ? selected.filter((id) => id !== option.id)
+                              : [...selected, option.id],
+                          }))
+                        }
+                      />
+                      {optionCopy(option.label, option.description)}
+                    </label>
+                  );
+                })}
+              </div>
             ) : (
-              <label className="hitl-input">
-                <span>Your answer</span>
-                <input
+              <div className="grid gap-1.5">
+                <FieldLabel className="mb-0">Your answer</FieldLabel>
+                <Input
                   type={question.type === "number" ? "number" : "text"}
                   min={question.minimum}
                   max={question.maximum}
@@ -685,33 +721,35 @@ function QuestionComposer({
                   onChange={(event) =>
                     setValues((current) => ({ ...current, [question.id]: event.target.value }))
                   }
+                  error={Boolean(enteredText && !complete(question))}
                   autoFocus
                 />
                 {enteredText && !complete(question) && (
-                  <small role="alert">
+                  <FieldHint error role="alert" className="mt-0">
                     {question.id === "business-address"
                       ? "Enter the full street, building, or unit and barangay."
                       : "Enter the complete proposed business name."}
-                  </small>
+                  </FieldHint>
                 )}
-              </label>
+              </div>
             )}
           </section>
         );
       })()}
-      <div className="hitl-navigation">
+      <div className="flex items-center gap-2">
         {questionIndex > 0 && (
-          <button
+          <Button
             type="button"
+            variant="outline"
             onClick={() => setQuestionIndex((current) => current - 1)}
             disabled={disabled}
           >
             <ArrowLeft /> Back
-          </button>
+          </Button>
         )}
-        <button className="chat-submit-answer" type="submit" disabled={!canContinue || disabled}>
-          {lastQuestion ? "Complete details" : "Next question"} <ArrowRight weight="bold" />
-        </button>
+        <Button block type="submit" disabled={!canContinue || disabled}>
+          {lastQuestion ? "Continue" : "Next question"} <ArrowRightIcon weight="bold" />
+        </Button>
       </div>
     </form>
   );
@@ -1169,17 +1207,8 @@ export function PaymentDialog({
   conversationId: string;
   onClose: () => void;
 }) {
-  const dialogRef = useRef<HTMLDivElement>(null);
   const [opening, setOpening] = useState(false);
   const [paymentError, setPaymentError] = useState("");
-  useEffect(() => {
-    dialogRef.current?.focus();
-    const close = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", close);
-    return () => window.removeEventListener("keydown", close);
-  }, [onClose]);
   const openCheckout = async () => {
     play("loading");
     setOpening(true);
@@ -1212,60 +1241,44 @@ export function PaymentDialog({
   };
 
   return (
-    <div className="chat-dialog-layer">
-      <button
-        className="chat-dialog-scrim"
-        data-cuelume-toggle="droplet"
-        onClick={onClose}
-        aria-label="Close payment"
-      />
-      <section
-        className="chat-payment-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="payment-title"
-        tabIndex={-1}
-        ref={dialogRef}
-      >
-        <button
-          className="chat-dialog-close"
-          data-cuelume-toggle="droplet"
-          onClick={onClose}
-          aria-label="Close"
-        >
-          <X />
-        </button>
-        <div className="payment-service">
-          <span>
-            <ShieldCheck weight="duotone" />
+    <Dialog open onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogContent>
+        <div className="flex flex-col items-center text-center">
+          <span className="mb-2 grid size-12 place-items-center rounded-xl bg-secondary text-primary">
+            <ShieldCheck className="size-[26px]" weight="duotone" />
           </span>
-          <small>eGovPay</small>
-          <h2 id="payment-title">Continue to secure payment</h2>
-          <p>
+          <span className="text-2xs font-black uppercase tracking-[0.08em] text-primary">
+            eGovPay
+          </span>
+          <DialogTitle className="mt-1 mb-1">Continue to secure payment</DialogTitle>
+          <DialogDescription>
             You’ll continue to eGovPay in this tab. This demo will mark the fee paid while webhook
             support is being completed.
-          </p>
+          </DialogDescription>
         </div>
-        <div className="payment-summary">
-          <span>
-            <small>{payment.serviceLabel}</small>
-            <strong>{payment.proposedName}</strong>
+        <div className="my-4 flex items-center justify-between gap-3 border-y border-border py-3">
+          <span className="grid text-left">
+            <small className="text-2xs text-muted-foreground">{payment.serviceLabel}</small>
+            <strong className="text-xs">{payment.proposedName}</strong>
           </span>
-          <strong>{payment.feeLabel}</strong>
+          <strong className="text-xs tabular-nums">{payment.feeLabel}</strong>
         </div>
         {paymentError && (
-          <p className="payment-inline-error" role="alert">
+          <p
+            className="mb-4 rounded-md bg-destructive/10 px-2.5 py-2 text-xs leading-[1.4] text-destructive"
+            role="alert"
+          >
             {paymentError}
           </p>
         )}
-        <button className="payment-confirm" onClick={openCheckout} disabled={opening}>
+        <Button block size="lg" onClick={openCheckout} disabled={opening}>
           <ShieldCheck weight="fill" /> {opening ? "Preparing checkout…" : "Continue to eGovPay"}
-        </button>
-        <p className="payment-disclaimer">
+        </Button>
+        <p className="mt-2 text-center text-2xs text-muted-foreground">
           Use “Back to merchant” after checkout to return to this saved chat.
         </p>
-      </section>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1679,8 +1692,12 @@ export function BusinessChatScreen({
             onAnswer={answer}
           />
         ) : (
-          <form className="chat-composer" onSubmit={submit}>
+          <form
+            className="overflow-hidden rounded-xl border border-input bg-white shadow-xs transition-colors focus-within:border-primary"
+            onSubmit={submit}
+          >
             <textarea
+              className="max-h-[100px] min-h-[44px] w-full resize-none border-0 bg-transparent px-[13px] pt-3 pb-1 text-base leading-normal text-foreground outline-none placeholder:text-[#9aa4b5]"
               rows={1}
               value={input}
               onChange={(event) => setInput(event.target.value)}
@@ -1693,24 +1710,31 @@ export function BusinessChatScreen({
               placeholder="Ask or correct your application…"
               aria-label="Message"
             />
-            <div>
-              <span>
-                <ShieldCheck weight="fill" /> Saved automatically
+            <div className="flex items-center justify-between gap-2 py-1.5 pr-1.5 pl-3">
+              <span className="flex items-center gap-1 text-2xs text-muted-foreground">
+                <ShieldCheck className="size-[11px] text-success" weight="fill" /> You can correct
+                any field here
               </span>
               {busy ? (
-                <button
-                  className="chat-stop"
+                <IconButton
+                  className="size-9 bg-destructive text-white hover:bg-[#d93b3b]"
                   data-cuelume-toggle="droplet"
                   type="button"
                   onClick={() => void stop()}
                   aria-label="Stop"
                 >
-                  <StopCircle weight="fill" />
-                </button>
+                  <StopCircle className="size-[18px]" weight="fill" />
+                </IconButton>
               ) : (
-                <button type="submit" disabled={!input.trim()} aria-label="Send">
-                  <PaperPlaneRight weight="fill" />
-                </button>
+                <IconButton
+                  variant="primary"
+                  className="size-9"
+                  type="submit"
+                  disabled={!input.trim()}
+                  aria-label="Send"
+                >
+                  <PaperPlaneRightIcon className="size-[18px]" weight="fill" />
+                </IconButton>
               )}
             </div>
           </form>
