@@ -144,11 +144,12 @@ export function HomeScreen({
         </header>
 
         <div className="mx-5 mt-0.5 mb-3 flex min-h-[42px] items-center gap-2 rounded-xl bg-[var(--warning-soft)] px-3.5">
-          <SunIcon aria-hidden className="size-5 shrink-0 text-[var(--egov-orange)]" weight="duotone" />
-          <span
-            className="text-[13px] font-semibold text-muted-foreground"
-            suppressHydrationWarning
-          >
+          <SunIcon
+            aria-hidden
+            className="size-5 shrink-0 text-[var(--egov-orange)]"
+            weight="duotone"
+          />
+          <span className="text-sm font-semibold text-muted-foreground" suppressHydrationWarning>
             {today ?? formatToday()}
           </span>
         </div>
@@ -159,7 +160,7 @@ export function HomeScreen({
               className={cn(
                 "group flex flex-col items-center gap-2 text-[12.5px] font-medium text-foreground",
                 FOCUS_RING,
-                "rounded-2xl"
+                "rounded-2xl",
               )}
               data-cuelume-toggle={business ? "page" : "tick"}
               key={label}
@@ -171,7 +172,7 @@ export function HomeScreen({
                   "relative grid size-[62px] place-items-center rounded-full transition-transform group-active:scale-[.93]",
                   business
                     ? "bg-primary text-primary-foreground shadow-primary"
-                    : "bg-secondary text-primary"
+                    : "bg-secondary text-primary",
                 )}
               >
                 <Icon className="size-8" weight="duotone" />
@@ -189,7 +190,7 @@ export function HomeScreen({
         <button
           className={cn(
             "relative mx-5 mb-6 block overflow-hidden rounded-xl bg-primary px-5 py-6 text-left text-primary-foreground shadow-primary",
-            FOCUS_RING
+            FOCUS_RING,
           )}
           data-cuelume-toggle="page"
           onClick={onBusiness}
@@ -205,7 +206,7 @@ export function HomeScreen({
             weight="duotone"
           />
           <div className="relative z-10 flex max-w-[230px] flex-col gap-1.5">
-            <strong className="text-[17px] font-extrabold leading-snug -tracking-[.3px]">
+            <strong className="text-md font-extrabold leading-snug -tracking-[.3px]">
               Start and grow your business
             </strong>
             <span className="text-xs font-medium opacity-[.85]">
@@ -218,7 +219,7 @@ export function HomeScreen({
         </button>
 
         <section aria-label="Featured for you" className="px-5">
-          <h2 className="mb-3 text-[15px] font-extrabold -tracking-[.2px]">Featured for you</h2>
+          <h2 className="mb-3 text-base font-extrabold -tracking-[.2px]">Featured for you</h2>
           <div className="grid grid-cols-2 gap-3">
             <Card className="border-0 bg-muted shadow-none">
               <CardContent className="flex h-full flex-col justify-end gap-1 p-4">
@@ -236,7 +237,7 @@ export function HomeScreen({
             >
               <Card className="relative h-full overflow-hidden border-0 bg-[#e3f4dd] shadow-none">
                 <CardContent className="relative z-10 flex h-full flex-col justify-between p-4">
-                  <span className="text-[15px] font-extrabold -tracking-[.3px] text-[#1c3050]">
+                  <span className="text-base font-extrabold -tracking-[.3px] text-[#1c3050]">
                     <span className="text-primary">e</span>Gov AI
                   </span>
                 </CardContent>

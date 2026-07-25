@@ -572,12 +572,7 @@ body {
   margin: 0;
   color: var(--ink);
   background: var(--canvas);
-  font-family:
-    var(--font-ui),
-    "Nunito Sans",
-    ui-rounded,
-    system-ui,
-    sans-serif;
+  font-family: var(--font-ui), "Nunito Sans", ui-rounded, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 button,

@@ -16,18 +16,12 @@ const iconButtonVariants = cva(
     defaultVariants: {
       variant: "plain",
     },
-  }
+  },
 );
 
-interface IconButtonProps
-  extends ButtonPrimitive.Props,
-    VariantProps<typeof iconButtonVariants> {}
+interface IconButtonProps extends ButtonPrimitive.Props, VariantProps<typeof iconButtonVariants> {}
 
-function IconButton({
-  className,
-  variant = "plain",
-  ...props
-}: IconButtonProps) {
+function IconButton({ className, variant = "plain", ...props }: IconButtonProps) {
   return (
     <ButtonPrimitive
       data-slot="icon-button"

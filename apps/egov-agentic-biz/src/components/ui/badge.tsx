@@ -20,7 +20,7 @@ const badgeVariants = cva(
     defaultVariants: {
       variant: "primary",
     },
-  }
+  },
 );
 
 function Badge({
@@ -35,7 +35,7 @@ function Badge({
       {
         className: cn(badgeVariants({ variant }), className),
       },
-      props
+      props,
     ),
     render,
     state: {

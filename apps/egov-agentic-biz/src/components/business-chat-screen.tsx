@@ -48,12 +48,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { FieldHint, FieldLabel } from "@/components/ui/field";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
@@ -441,7 +436,7 @@ function PlanDock({ plan, active }: { plan: RegistrationPlan; active: boolean })
           </strong>
         </span>
         <span
-          className="rounded-[7px] bg-muted px-[7px] py-1 text-2xs font-extrabold tabular-nums text-muted-foreground"
+          className="rounded-sm bg-muted px-[7px] py-1 text-2xs font-extrabold tabular-nums text-muted-foreground"
           aria-label={`${completed} of ${plan.steps.length} tasks completed`}
         >
           {completed}/{plan.steps.length}

@@ -12,18 +12,16 @@ const avatarVariants = cva(
       size: {
         sm: "size-8 text-xs",
         md: "size-10 text-sm",
-        lg: "size-14 text-[17px]",
+        lg: "size-14 text-md",
       },
     },
     defaultVariants: {
       size: "md",
     },
-  }
+  },
 );
 
-interface AvatarProps
-  extends AvatarPrimitive.Root.Props,
-    VariantProps<typeof avatarVariants> {}
+interface AvatarProps extends AvatarPrimitive.Root.Props, VariantProps<typeof avatarVariants> {}
 
 function Avatar({ className, size = "md", ...props }: AvatarProps) {
   return (
@@ -45,10 +43,7 @@ function AvatarImage({ className, ...props }: AvatarPrimitive.Image.Props) {
   );
 }
 
-function AvatarFallback({
-  className,
-  ...props
-}: AvatarPrimitive.Fallback.Props) {
+function AvatarFallback({ className, ...props }: AvatarPrimitive.Fallback.Props) {
   return (
     <AvatarPrimitive.Fallback
       data-slot="avatar-fallback"

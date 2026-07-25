@@ -367,7 +367,7 @@ export function BusinessLanding({
       <StatusBar />
       <header className="grid h-[58px] grid-cols-[40px_1fr_40px] items-center gap-2.5 px-5 pt-1.5 pb-2">
         <IconButton aria-label="Go back" onClick={onBack} variant="plain">
-          <ArrowLeftIcon className="size-[22px]" />
+          <ArrowLeftIcon />
         </IconButton>
         <h1 className="text-center text-md -tracking-[.3px]">Business</h1>
         {profile ? (
@@ -457,14 +457,14 @@ export function BusinessLanding({
                   <button
                     className={cn(
                       "grid min-h-[58px] min-w-0 grid-cols-[minmax(0,1fr)_18px] items-center gap-2.5 px-3 py-2.5 text-left",
-                      FOCUS_RING
+                      FOCUS_RING,
                     )}
                     data-cuelume-toggle="page"
                     onClick={() => onResume(conversation.id)}
                     type="button"
                   >
                     <span className="grid min-w-0 gap-[3px]">
-                      <strong className="truncate text-[13px]">{conversation.title}</strong>
+                      <strong className="truncate text-sm">{conversation.title}</strong>
                       <small className="text-2xs text-muted-foreground">
                         Updated {new Date(conversation.updatedAt).toLocaleDateString()}
                       </small>
@@ -475,7 +475,7 @@ export function BusinessLanding({
                     aria-label={`Delete ${conversation.title}`}
                     className={cn(
                       "grid place-items-center border-l border-border text-[#9a493e] hover:bg-[#fff1ef]",
-                      FOCUS_RING
+                      FOCUS_RING,
                     )}
                     data-cuelume-toggle="droplet"
                     onClick={() => onDelete(conversation)}
@@ -497,7 +497,7 @@ export function BusinessLanding({
               <button
                 className={cn(
                   "grid min-h-[62px] w-full grid-cols-[38px_1fr_18px] items-center gap-2.5 rounded-[14px] border border-border bg-white px-3 py-2.5 text-left text-[14px] leading-[1.4] text-foreground",
-                  FOCUS_RING
+                  FOCUS_RING,
                 )}
                 data-cuelume-toggle="toggle"
                 key={text}
@@ -507,7 +507,7 @@ export function BusinessLanding({
                 }}
                 type="button"
               >
-                <span className="grid size-[34px] place-items-center rounded-[11px] bg-secondary text-primary">
+                <span className="grid size-[34px] place-items-center rounded-md bg-secondary text-primary">
                   <Icon className="size-[17px]" />
                 </span>
                 {text}
@@ -524,9 +524,9 @@ export function BusinessLanding({
             <h2 className="text-lg -tracking-[.5px]">Your businesses</h2>
           </div>
           {businessesLoading ? (
-            <div className="skeleton-card h-[82px] rounded-[17px]" />
+            <div className="skeleton-card h-[82px] rounded-xl" />
           ) : businesses?.length === 0 ? (
-            <div className="flex min-h-[82px] items-center gap-3 rounded-[17px] border border-dashed border-[#cfd8e8] bg-white p-3.5 text-muted-foreground">
+            <div className="flex min-h-[82px] items-center gap-3 rounded-xl border border-dashed border-[#cfd8e8] bg-white p-3.5 text-muted-foreground">
               <BriefcaseIcon className="size-[30px] shrink-0 text-primary" weight="duotone" />
               <div className="flex flex-col gap-[3px]">
                 <strong className="text-[14px] text-foreground">No linked businesses yet</strong>
