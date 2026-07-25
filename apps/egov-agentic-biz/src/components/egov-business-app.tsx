@@ -2,21 +2,24 @@
 
 import {
   ArrowLeft,
-  ArrowRight,
+  ArrowLeftIcon,
+  ArrowRightIcon,
   BellSimple,
   Briefcase,
+  BriefcaseIcon,
   CalendarDots,
   CaretRight,
   CheckCircle,
-  Coffee,
-  DotsThree,
+  CoffeeIcon,
   FileText,
   FolderOpen,
-  Laptop,
+  LaptopIcon,
   ShieldCheck,
-  ShoppingBagOpen,
+  ShieldCheckIcon,
+  ShoppingBagOpenIcon,
+  SparkleIcon,
   Storefront,
-  Trash,
+  TrashIcon,
 } from "@phosphor-icons/react";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { BusinessChatScreen } from "@/components/business-chat-screen";
@@ -25,6 +28,12 @@ import { HomeScreen } from "@/components/home-screen";
 import { LoginScreen } from "@/components/login-screen";
 import { BottomNav, StatusBar } from "@/components/phone-chrome";
 import { ProfileAvatar } from "@/components/profile-avatar";
+import { Alert } from "@/components/ui/alert";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { IconButton } from "@/components/ui/icon-button";
+import { Textarea } from "@/components/ui/textarea";
 import type {
   BusinessConversation,
   ConversationSummary,
@@ -34,13 +43,17 @@ import type { CitizenProfile, RegisteredBusiness } from "@/lib/citizen-profile";
 import type { RegisteredBusiness as RegisteredBusinessDetail } from "@/lib/registered-business";
 import { useApi } from "@/lib/use-api";
 import { useAuthSession } from "@/lib/use-auth-session";
+import { cn } from "@/lib/utils";
 
 type Screen = "restoring" | "home" | "business" | "business-detail" | "chat";
 
+const FOCUS_RING =
+  "outline-none focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-offset-2";
+
 const suggestions = [
-  "I want to start a coffee subscription business in Makati",
-  "I’m a freelancer and want to register with BIR",
-  "Help me open a small online shop",
+  { icon: CoffeeIcon, text: "I want to start a coffee subscription business in Makati" },
+  { icon: LaptopIcon, text: "I’m a freelancer and want to register with BIR" },
+  { icon: ShoppingBagOpenIcon, text: "Help me open a small online shop" },
 ];
 
 function formatBusinessDate(value: string) {
@@ -350,27 +363,55 @@ export function BusinessLanding({
     if (prompt.trim()) onSubmit(prompt.trim());
   };
   return (
-    <div className="screen business-screen">
+    <div className="screen bg-[#fafbfe]">
       <StatusBar />
-      <Header title="Business" onBack={onBack} profile={profile} />
-      <div className="business-scroll" id="app-content">
-        <section className="business-intro">
-          <div className="assistant-orbit">
-            <Storefront weight="fill" />
+      <header className="grid h-[58px] grid-cols-[40px_1fr_40px] items-center gap-2.5 px-5 pt-1.5 pb-2">
+        <IconButton aria-label="Go back" onClick={onBack} variant="plain">
+          <ArrowLeftIcon className="size-[22px]" />
+        </IconButton>
+        <h1 className="text-center text-md -tracking-[.3px]">Business</h1>
+        {profile ? (
+          <Avatar
+            className="justify-self-end border-2 border-white shadow-[0_0_0_1px_var(--line)]"
+            size="md"
+          >
+            {profile.avatarUrl && (
+              <AvatarImage alt={`${profile.fullName} profile`} src={profile.avatarUrl} />
+            )}
+            <AvatarFallback>{profile.firstName.slice(0, 1).toUpperCase()}</AvatarFallback>
+          </Avatar>
+        ) : (
+          <IconButton aria-label="Notifications" className="justify-self-end" variant="soft">
+            <BellSimple weight="fill" />
+          </IconButton>
+        )}
+      </header>
+      <div
+        className="h-[calc(100%-36px-58px)] overflow-y-auto overscroll-contain px-5 pb-[112px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        id="app-content"
+      >
+        <section className="flex flex-col items-center px-2.5 pt-[26px] pb-5 text-center">
+          <div className="relative grid size-[62px] rotate-[-4deg] place-items-center rounded-[22px] bg-primary text-white shadow-[0_12px_28px_rgba(7,85,233,0.24)]">
+            <SparkleIcon className="size-[29px]" weight="fill" />
+            <span className="absolute -top-1 right-[7px] size-2.5 rounded-full border-2 border-white bg-[var(--egov-orange)]" />
           </div>
-          <span className="secure-label">
-            <ShieldCheck weight="fill" /> eGovPH
+          <span className="mt-[17px] inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-[1.2px] text-primary">
+            <ShieldCheckIcon className="size-[13px]" weight="fill" /> eGOVPH
           </span>
-          <h2>Plan your business registration</h2>
-          <p>
-            Tell us about your business, and we’ll guide you through the requirements, steps, and
-            details needed to register.
+          <h2 className="mt-2.5 mb-2 text-2xl leading-[1.03] tracking-[-1.5px] text-balance">
+            Describe your business
+          </h2>
+          <p className="max-w-[330px] text-base leading-[1.55] text-muted-foreground">
+            Tell us what you want to sell or do.
           </p>
         </section>
-        <form className="prompt-box" onSubmit={submit}>
-          <textarea
-            ref={inputRef}
-            value={prompt}
+        <form
+          className="rounded-[20px] border-[1.5px] border-[#cfd9ec] bg-white p-[15px] shadow-md transition-[border-color,box-shadow] focus-within:border-primary focus-within:shadow-[0_12px_32px_rgba(7,85,233,0.11)]"
+          onSubmit={submit}
+        >
+          <Textarea
+            aria-label="Describe your business idea"
+            className="min-h-0 resize-none border-0 bg-transparent p-0 text-base leading-[1.45] shadow-none focus:border-transparent focus:ring-0"
             onChange={(event) => setPrompt(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -379,123 +420,154 @@ export function BusinessLanding({
               }
             }}
             placeholder="Describe your business idea…"
+            ref={inputRef}
             rows={3}
-            aria-label="Describe your business idea"
+            value={prompt}
           />
-          <div>
-            <button
-              type="submit"
+          <div className="mt-2.5 flex items-center justify-between">
+            <span className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-[.7px] text-primary">
+              <ShieldCheckIcon className="size-[13px]" weight="fill" />
+              Your details stay private
+            </span>
+            <IconButton
+              aria-label="Continue"
               data-cuelume-toggle="page"
               disabled={!prompt.trim()}
-              aria-label="Continue"
+              type="submit"
+              variant="primary"
             >
-              <ArrowRight weight="bold" />
-            </button>
+              <ArrowRightIcon weight="bold" />
+            </IconButton>
           </div>
         </form>
         {conversations.length > 0 && (
-          <section className="saved-plans">
-            <div className="section-heading">
-              <div>
-                <small>SAVED SESSIONS</small>
-                <h2>Registration plans</h2>
-              </div>
+          <section className="mt-6 mb-7">
+            <div className="mb-3">
+              <small className="mb-0.5 block text-2xs font-extrabold tracking-[1.3px] text-primary">
+                SAVED SESSIONS
+              </small>
+              <h2 className="text-lg -tracking-[.5px]">Registration plans</h2>
             </div>
-            <div>
+            <div className="flex flex-col gap-2">
               {conversations.map((conversation) => (
-                <div className="saved-plan-row" key={conversation.id}>
+                <div
+                  className="grid grid-cols-[minmax(0,1fr)_42px] overflow-hidden rounded-[14px] border border-border bg-white"
+                  key={conversation.id}
+                >
                   <button
-                    className="saved-plan-open"
+                    className={cn(
+                      "grid min-h-[58px] min-w-0 grid-cols-[minmax(0,1fr)_18px] items-center gap-2.5 px-3 py-2.5 text-left",
+                      FOCUS_RING
+                    )}
                     data-cuelume-toggle="page"
                     onClick={() => onResume(conversation.id)}
+                    type="button"
                   >
-                    <span>
-                      <strong>{conversation.title}</strong>
-                      <small>Updated {new Date(conversation.updatedAt).toLocaleDateString()}</small>
+                    <span className="grid min-w-0 gap-[3px]">
+                      <strong className="truncate text-[13px]">{conversation.title}</strong>
+                      <small className="text-2xs text-muted-foreground">
+                        Updated {new Date(conversation.updatedAt).toLocaleDateString()}
+                      </small>
                     </span>
-                    <ArrowRight />
+                    <ArrowRightIcon className="size-4 text-primary" />
                   </button>
                   <button
-                    className="saved-plan-delete"
+                    aria-label={`Delete ${conversation.title}`}
+                    className={cn(
+                      "grid place-items-center border-l border-border text-[#9a493e] hover:bg-[#fff1ef]",
+                      FOCUS_RING
+                    )}
                     data-cuelume-toggle="droplet"
                     onClick={() => onDelete(conversation)}
-                    aria-label={`Delete ${conversation.title}`}
+                    type="button"
                   >
-                    <Trash />
+                    <TrashIcon className="size-[15px]" />
                   </button>
                 </div>
               ))}
             </div>
           </section>
         )}
-        <section className="suggestions-section">
-          <h3>Try asking</h3>
-          <div className="suggestion-list">
-            {suggestions.map((suggestion, index) => (
+        <section className="mt-6 mb-[30px]">
+          <h3 className="mb-2.5 text-[12px] uppercase tracking-[1.1px] text-muted-foreground">
+            Try asking
+          </h3>
+          <div className="flex flex-col gap-2">
+            {suggestions.map(({ icon: Icon, text }) => (
               <button
-                key={suggestion}
+                className={cn(
+                  "grid min-h-[62px] w-full grid-cols-[38px_1fr_18px] items-center gap-2.5 rounded-[14px] border border-border bg-white px-3 py-2.5 text-left text-[14px] leading-[1.4] text-foreground",
+                  FOCUS_RING
+                )}
                 data-cuelume-toggle="toggle"
+                key={text}
                 onClick={() => {
-                  setPrompt(suggestion);
+                  setPrompt(text);
                   inputRef.current?.focus();
                 }}
+                type="button"
               >
-                <span>
-                  {index === 0 ? <Coffee /> : index === 1 ? <Laptop /> : <ShoppingBagOpen />}
+                <span className="grid size-[34px] place-items-center rounded-[11px] bg-secondary text-primary">
+                  <Icon className="size-[17px]" />
                 </span>
-                {suggestion}
-                <ArrowRight />
+                {text}
+                <ArrowRightIcon className="size-4 text-[#8a94a7]" />
               </button>
             ))}
           </div>
         </section>
-        <section className="linked-businesses">
-          <div className="section-heading">
-            <div>
-              <small>LINKED TO YOUR TIN</small>
-              <h2>Your businesses</h2>
-            </div>
-            <button data-cuelume-toggle="tick" aria-label="Show business options">
-              <DotsThree />
-            </button>
+        <section>
+          <div className="mb-[13px]">
+            <small className="mb-0.5 block text-2xs font-extrabold tracking-[1.3px] text-primary">
+              LINKED TO YOUR TIN
+            </small>
+            <h2 className="text-lg -tracking-[.5px]">Your businesses</h2>
           </div>
           {businessesLoading ? (
-            <div className="business-record skeleton-card" />
+            <div className="skeleton-card h-[82px] rounded-[17px]" />
           ) : businesses?.length === 0 ? (
-            <div className="business-empty">
-              <Briefcase weight="duotone" />
-              <div>
-                <strong>No linked businesses yet</strong>
-                <span>Complete a registration plan to save its records and tax calendar here.</span>
+            <div className="flex min-h-[82px] items-center gap-3 rounded-[17px] border border-dashed border-[#cfd8e8] bg-white p-3.5 text-muted-foreground">
+              <BriefcaseIcon className="size-[30px] shrink-0 text-primary" weight="duotone" />
+              <div className="flex flex-col gap-[3px]">
+                <strong className="text-[14px] text-foreground">No linked businesses yet</strong>
+                <span className="text-[12px] leading-[1.4]">
+                  Complete a registration plan to save its records and tax calendar here.
+                </span>
               </div>
             </div>
           ) : (
-            businesses?.map((business) => (
-              <button
-                className="business-record business-record-link"
-                data-cuelume-toggle="page"
-                key={business.id}
-                type="button"
-                onClick={() => onOpenBusiness(business.id)}
-              >
-                <span className="record-icon">
-                  <Briefcase weight="duotone" />
-                </span>
-                <div>
-                  <strong>{business.name}</strong>
-                  <span>{business.type}</span>
-                  <small>{business.registrationNumber}</small>
-                </div>
-                <span className="business-record-end">
-                  <i>{business.status}</i>
-                  <CaretRight weight="bold" />
-                </span>
-              </button>
-            ))
+            <div className="flex flex-col gap-2.5">
+              {businesses?.map((business) => (
+                <button
+                  className={cn("block w-full rounded-xl text-left", FOCUS_RING)}
+                  data-cuelume-toggle="page"
+                  key={business.id}
+                  onClick={() => onOpenBusiness(business.id)}
+                  type="button"
+                >
+                  <Card>
+                    <CardContent className="grid grid-cols-[44px_1fr_auto] items-center gap-[11px]">
+                      <span className="grid size-11 place-items-center rounded-[14px] bg-secondary text-primary">
+                        <BriefcaseIcon className="size-[23px]" weight="duotone" />
+                      </span>
+                      <div className="flex min-w-0 flex-col">
+                        <strong className="truncate text-[14px]">{business.name}</strong>
+                        <span className="text-[12px] text-muted-foreground">{business.type}</span>
+                        <small className="text-[12px] text-muted-foreground">
+                          {business.registrationNumber}
+                        </small>
+                      </div>
+                      <Badge variant="success">{business.status}</Badge>
+                    </CardContent>
+                  </Card>
+                </button>
+              ))}
+            </div>
           )}
-          <p>
-            <ShieldCheck weight="fill" /> Matched to your eGovPH account.
-          </p>
+          <Alert className="mt-2.5" variant="success">
+            <ShieldCheckIcon weight="fill" />
+            Matched to your eGovPH account.
+          </Alert>
         </section>
       </div>
       <BottomNav active="none" />
