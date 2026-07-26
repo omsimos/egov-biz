@@ -47,6 +47,7 @@ function AvatarFallback({ className, ...props }: AvatarPrimitive.Fallback.Props)
   return (
     <AvatarPrimitive.Fallback
       data-slot="avatar-fallback"
+      aria-hidden="true"
       className={cn("select-none", className)}
       {...props}
     />
