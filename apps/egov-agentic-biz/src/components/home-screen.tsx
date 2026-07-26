@@ -22,10 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { IconButton } from "@/components/ui/icon-button";
 import type { CitizenProfile } from "@/lib/citizen-profile";
-import { cn } from "@/lib/utils";
-
-const FOCUS_RING =
-  "outline-none focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-offset-2";
+import { cn, FOCUS_RING } from "@/lib/utils";
 
 type ServiceTile = {
   Icon: PhosphorIcon;

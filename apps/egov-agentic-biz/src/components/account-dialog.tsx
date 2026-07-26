@@ -12,10 +12,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import type { CitizenProfile } from "@/lib/citizen-profile";
-import { cn } from "@/lib/utils";
-
-const FOCUS_RING =
-  "outline-none focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-offset-2";
+import { cn, FOCUS_RING } from "@/lib/utils";
 
 // The avatar used to sign you out on a single tap, warned only by a title
 // tooltip. An irreversible action must not sit on the most-tapped affordance
