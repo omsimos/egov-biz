@@ -23,7 +23,6 @@ const LITERAL_EXCEPTIONS = new Set(["app/layout.tsx"]);
 const PENDING = new Set([
   "components/business-chat-screen.tsx",
   "components/egov-business-app.tsx",
-  "components/home-screen.tsx",
 ]);
 
 // Screens still using a native confirm(). Shrinks to empty in Task 4.
