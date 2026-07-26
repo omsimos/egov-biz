@@ -399,10 +399,13 @@ function PlanDock({ plan, active }: { plan: RegistrationPlan; active: boolean })
     <Card
       role="region"
       aria-label="Registration plan"
-      className={cn("min-w-0 shadow-xs", active ? "border-[#b9caec]" : "border-[#d5deeb]")}
+      className={cn(
+        "min-w-0 shadow-xs",
+        active ? "border-primary-border-strong" : "border-gray-300",
+      )}
     >
       <button
-        className="grid min-h-[54px] w-full grid-cols-[32px_minmax(0,1fr)_auto_20px] items-center gap-2 bg-white px-2.5 py-2 text-left hover:bg-[#f8faff]"
+        className="grid min-h-[54px] w-full grid-cols-[32px_minmax(0,1fr)_auto_20px] items-center gap-2 bg-white px-2.5 py-2 text-left hover:bg-gray-50"
         data-cuelume-toggle={expanded ? "droplet" : "bloom"}
         type="button"
         aria-expanded={expanded}
@@ -411,7 +414,7 @@ function PlanDock({ plan, active }: { plan: RegistrationPlan; active: boolean })
       >
         <span
           className={cn(
-            "grid size-8 place-items-center rounded-[9px]",
+            "grid size-8 place-items-center rounded-md",
             allResolved || current?.status === "completed"
               ? "bg-success text-white"
               : current?.status === "in_progress"
@@ -458,7 +461,7 @@ function PlanDock({ plan, active }: { plan: RegistrationPlan; active: boolean })
         aria-hidden={!expanded}
       >
         <div className="min-h-0 overflow-hidden">
-          <ol className="m-0 max-h-[min(28dvh,260px)] list-none overflow-y-auto border-t border-[#e5eaf2] px-2.5 pt-[5px] pb-2">
+          <ol className="m-0 max-h-[min(28dvh,260px)] list-none overflow-y-auto border-t border-gray-200 px-2.5 pt-[5px] pb-2">
             {plan.steps.map((step, index) => {
               const finishLine = index === plan.steps.length - 1;
               return (
@@ -468,10 +471,10 @@ function PlanDock({ plan, active }: { plan: RegistrationPlan; active: boolean })
                     step.status === "in_progress"
                       ? "font-extrabold text-foreground"
                       : step.status === "completed"
-                        ? "text-[#59677d]"
+                        ? "text-gray-800"
                         : step.status === "skipped"
-                          ? "text-[#939dac]"
-                          : "text-[#718095]",
+                          ? "text-gray-500"
+                          : "text-gray-700",
                   )}
                   key={step.id}
                   aria-current={step.status === "in_progress" ? "step" : undefined}
@@ -479,16 +482,16 @@ function PlanDock({ plan, active }: { plan: RegistrationPlan; active: boolean })
                 >
                   <span
                     className={cn(
-                      "grid size-[18px] place-items-center rounded-[5px] border-[1.5px]",
+                      "grid size-[18px] place-items-center rounded-sm border-[1.5px]",
                       finishLine
                         ? "border-0 bg-transparent"
                         : step.status === "completed"
                           ? "border-success bg-success text-white"
                           : step.status === "in_progress"
-                            ? "border-[#a9bde9] bg-secondary text-primary"
+                            ? "border-primary-border-strong bg-secondary text-primary"
                             : step.status === "skipped"
-                              ? "border-[#d2d8e2] bg-[#f1f3f6] text-[#8b96a8]"
-                              : "border-[#c4ccda] bg-white text-white",
+                              ? "border-gray-300 bg-gray-100 text-gray-600"
+                              : "border-gray-400 bg-white text-white",
                     )}
                     aria-hidden="true"
                   >
@@ -502,7 +505,7 @@ function PlanDock({ plan, active }: { plan: RegistrationPlan; active: boolean })
                             ? "text-success"
                             : step.status === "in_progress"
                               ? "text-primary"
-                              : "text-[#8793a6]",
+                              : "text-gray-600",
                         )}
                         weight={step.status === "completed" ? "fill" : "duotone"}
                       />
@@ -515,7 +518,7 @@ function PlanDock({ plan, active }: { plan: RegistrationPlan; active: boolean })
                   <span>
                     {step.label}
                     {step.status === "skipped" && (
-                      <small className="italic text-[#9aa3b1]"> (skipped)</small>
+                      <small className="italic text-gray-500"> (skipped)</small>
                     )}
                   </span>
                 </li>
@@ -820,8 +823,8 @@ export function DtiFormCard({
   if (form.missingFields.length || rows.some(([, value]) => !value)) return null;
   return (
     <Card className="w-full">
-      <div className="grid grid-cols-[39px_1fr_auto] items-center gap-[9px] border-b border-[#e9edf4] p-[13px]">
-        <span className="grid size-[39px] place-items-center rounded-full bg-[#183f8f] text-xs font-black text-white">
+      <div className="grid grid-cols-[39px_1fr_auto] items-center gap-[9px] border-b border-gray-200 p-[13px]">
+        <span className="grid size-[39px] place-items-center rounded-full bg-primary-ink text-xs font-black text-white">
           DTI
         </span>
         <div className="grid gap-0.5">
@@ -833,7 +836,7 @@ export function DtiFormCard({
         <Badge variant="success">{paid ? "Paid" : "Ready"}</Badge>
       </div>
       {note && (
-        <p className="m-0 flex gap-1.5 bg-secondary px-[13px] py-[9px] text-xs text-[#486078]">
+        <p className="m-0 flex gap-1.5 bg-secondary px-[13px] py-[9px] text-xs text-gray-800">
           <PencilSimpleIcon className="size-[13px] flex-none" /> {note}
         </p>
       )}
@@ -843,7 +846,7 @@ export function DtiFormCard({
             key={label}
             className={cn(
               "grid gap-[3px] py-2.5",
-              index < rows.length - 1 && "border-b border-[#edf0f5]",
+              index < rows.length - 1 && "border-b border-line-soft",
             )}
           >
             <span className="text-2xs font-bold text-muted-foreground">{label}</span>
@@ -853,8 +856,8 @@ export function DtiFormCard({
       </div>
       <div
         className={cn(
-          "mx-[13px] mt-[5px] mb-3 flex gap-[7px] rounded-[10px] p-[9px] text-xs leading-[1.4]",
-          paid ? "bg-[#edf8f2] text-[#236348]" : "bg-muted text-[#4f5d74]",
+          "mx-[13px] mt-[5px] mb-3 flex gap-[7px] rounded-md p-[9px] text-xs leading-[1.4]",
+          paid ? "bg-success-soft text-success-ink" : "bg-muted text-gray-800",
         )}
       >
         <InfoIcon className="size-[13px] flex-none text-primary" weight="fill" />
@@ -864,7 +867,7 @@ export function DtiFormCard({
             : "To change anything, type it below. For example: “Use the name Reyes Coffee Club.”"}
         </span>
       </div>
-      <div className="grid gap-[9px] border-t border-[#e9edf4] px-[13px] pt-[11px] pb-[13px]">
+      <div className="grid gap-[9px] border-t border-gray-200 px-[13px] pt-[11px] pb-[13px]">
         <div className="flex items-center justify-between gap-2.5">
           <small className="text-2xs font-extrabold text-muted-foreground">PAYMENT</small>
           <strong className="text-xs tabular-nums">{form.feeLabel}</strong>
@@ -1692,7 +1695,7 @@ export function BusinessChatScreen({
             onSubmit={submit}
           >
             <textarea
-              className="max-h-[100px] min-h-[44px] w-full resize-none border-0 bg-transparent px-[13px] pt-3 pb-1 text-base leading-normal text-foreground outline-none placeholder:text-[#9aa4b5]"
+              className="max-h-[100px] min-h-[44px] w-full resize-none border-0 bg-transparent px-[13px] pt-3 pb-1 text-base leading-normal text-foreground outline-none placeholder:text-gray-500"
               rows={1}
               value={input}
               onChange={(event) => setInput(event.target.value)}
@@ -1712,7 +1715,7 @@ export function BusinessChatScreen({
               </span>
               {busy ? (
                 <IconButton
-                  className="size-9 bg-destructive text-white hover:bg-[#d93b3b]"
+                  className="size-9 bg-destructive text-white hover:bg-destructive-hover"
                   data-cuelume-toggle="droplet"
                   type="button"
                   onClick={() => void stop()}

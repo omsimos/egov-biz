@@ -20,7 +20,7 @@ const LITERAL_EXCEPTIONS = new Set(["app/layout.tsx"]);
 // login-screen.tsx is deliberately absent: it carries no inline hex at all —
 // all of its colour lives in bespoke CSS classes in globals.css, so Task 5's
 // migration is not visible to this guard.
-const PENDING = new Set(["components/business-chat-screen.tsx"]);
+const PENDING = new Set<string>([]);
 
 // Screens still using a native confirm(). Emptied in Task 4.
 const PENDING_CONFIRM = new Set<string>([]);
