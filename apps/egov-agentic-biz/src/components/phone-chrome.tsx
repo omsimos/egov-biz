@@ -44,40 +44,40 @@ export function StatusBar() {
   );
 }
 
-export function BottomNav({ active = "home" }: { active?: "home" | "business" | "none" }) {
+export function BottomNav({ active = "home" }: { active?: "home" | "business" }) {
+  // Only Home ever lights up — there is no dedicated Business tab, and the
+  // other four items are a placeholder nav shell with nothing behind them
+  // yet, so a <button> that does nothing reads as broken and makes screen
+  // readers announce five dead controls (mirrors HomeScreen's service tiles).
+  const homeActive = active === "home" || active === "business";
   return (
     <nav className="bottom-nav" aria-label="Primary navigation">
-      <button
-        className={active === "home" || active === "business" ? "active" : ""}
+      <div
+        aria-current={homeActive ? "page" : undefined}
+        className={homeActive ? "active" : ""}
         data-cuelume-toggle="tick"
-        type="button"
       >
-        <House weight={active === "home" || active === "business" ? "fill" : "regular"} />
+        <House weight={homeActive ? "fill" : "regular"} />
         <span>Home</span>
-      </button>
-      <button data-cuelume-toggle="tick" type="button">
+      </div>
+      <div data-cuelume-toggle="tick">
         <Scan />
         <span>Scan</span>
-      </button>
-      <button
-        aria-label="Digital ID"
-        className="id-button"
-        data-cuelume-toggle="page"
-        type="button"
-      >
+      </div>
+      <div className="id-button" data-cuelume-toggle="page">
         <span className="id-orb">
           <IdentificationCard weight="fill" />
         </span>
         <span>Digital ID</span>
-      </button>
-      <button data-cuelume-toggle="tick" type="button">
+      </div>
+      <div data-cuelume-toggle="tick">
         <FileText />
         <span>History</span>
-      </button>
-      <button data-cuelume-toggle="tick" type="button">
+      </div>
+      <div data-cuelume-toggle="tick">
         <SquaresFour />
         <span>Account</span>
-      </button>
+      </div>
     </nav>
   );
 }
