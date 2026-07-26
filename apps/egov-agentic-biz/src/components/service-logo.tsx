@@ -25,14 +25,18 @@ export function ServiceLogo({
   height?: number;
   service: keyof typeof SOURCES;
 }) {
-  const [failed, setFailed] = useState(false);
+  // Keyed to the service, not a bare boolean: a mounted ServiceLogo can be
+  // re-rendered with a different `service` prop without remounting, and a
+  // prior failure must not stick to a service that never errored.
+  const [erroredFor, setErroredFor] = useState<string | null>(null);
+  const failed = erroredFor === service;
   if (failed) return <>{fallback}</>;
   return (
     <Image
       alt=""
       className={className}
       height={height}
-      onError={() => setFailed(true)}
+      onError={() => setErroredFor(service)}
       src={SOURCES[service]}
       style={{ height, width: "auto" }}
       unoptimized
