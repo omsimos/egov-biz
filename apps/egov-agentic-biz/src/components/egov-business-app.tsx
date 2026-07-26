@@ -24,7 +24,6 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { BrandLogo } from "@/components/brand-logo";
 import { BusinessChatScreen } from "@/components/business-chat-screen";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { EGovLogo } from "@/components/egov-logo";
 import { HomeScreen } from "@/components/home-screen";
 import { LoginScreen } from "@/components/login-screen";
 import { BottomNav, StatusBar } from "@/components/phone-chrome";
@@ -831,45 +830,63 @@ export function EgaphBusinessApp({
   };
   return (
     <div className="prototype-stage">
-      <div className="context-panel" aria-hidden="true">
-        <EGovLogo size={36} />
-        <p>Business</p>
-        <h2>
+      <div
+        aria-hidden="true"
+        className="hidden min-[760px]:flex min-[760px]:w-[min(410px,100%)] min-[760px]:flex-col min-[760px]:justify-self-end"
+      >
+        <BrandLogo height={30} />
+        <p className="mt-5 mb-[5px] text-xs font-extrabold tracking-[1.5px] text-primary uppercase">
+          Business
+        </p>
+        <h2 className="m-0 text-[clamp(40px,4vw,60px)] leading-[0.98] tracking-[-2.5px]">
           Start your business,
           <br />
           step by step.
         </h2>
-        <span>One clear path through government services.</span>
-        <div className="context-foot">
-          <ShieldCheck weight="fill" />
+        <span className="mt-5 max-w-[360px] text-base leading-[1.55] text-muted-foreground">
+          One clear path through government services.
+        </span>
+        <div className="mt-[55px] flex items-center gap-2 text-xs text-muted-foreground">
+          <ShieldCheck className="size-[15px] shrink-0 text-success" weight="fill" />
           <span>Live eGov SSO</span>
         </div>
       </div>
       <div className="phone-shell">
         {status === "loading" ? (
-          <div className="screen auth-loading">
-            <div className="auth-loading-mark">
-              <ShieldCheck weight="duotone" />
+          <div
+            aria-live="polite"
+            className="screen grid place-content-center justify-items-center gap-4 bg-gray-50 text-muted-foreground"
+            role="status"
+          >
+            <div className="grid size-[58px] animate-[auth-pulse_1.2s_ease-in-out_infinite_alternate] place-items-center rounded-[19px] bg-primary text-white motion-reduce:animate-none!">
+              <ShieldCheck className="size-[30px]" weight="duotone" />
             </div>
-            <p>Restoring your secure session…</p>
+            <p className="m-0 text-sm font-bold">Restoring your secure session…</p>
           </div>
         ) : !profile ? (
           <LoginScreen initialError={authError} />
         ) : (
           <>
             {screen === "restoring" && (
-              <div className="screen restoring-chat-screen">
+              <div className="screen bg-gray-100">
                 <StatusBar />
-                <div className="loading-agent" role="status">
-                  <div className="assistant-orbit">
-                    <FolderOpen weight="fill" />
+                <div
+                  className="flex h-[calc(100%-26px)] flex-col items-center justify-center px-[38px] text-center"
+                  role="status"
+                >
+                  <div className="relative grid size-[62px] animate-[soft-pulse_1.8s_infinite] rotate-[-4deg] place-items-center rounded-[22px] bg-primary text-white shadow-[0_12px_28px_rgba(7,85,233,0.24)] motion-reduce:animate-none!">
+                    <FolderOpen className="size-[29px]" weight="fill" />
                   </div>
-                  <h1>Opening your saved plan</h1>
-                  <p>Restoring the conversation…</p>
-                  <div className="loading-bars" aria-hidden="true">
-                    <span />
-                    <span />
-                    <span />
+                  <h1 className="mt-7 mb-2 text-[25px] leading-[1.15] tracking-[-0.8px]">
+                    Opening your saved plan
+                  </h1>
+                  <p className="m-0 text-[14px] text-muted-foreground">
+                    Restoring the conversation…
+                  </p>
+                  <div aria-hidden="true" className="mt-6 flex gap-[5px]">
+                    <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary motion-reduce:animate-none!" />
+                    <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary [animation-delay:0.2s] motion-reduce:animate-none!" />
+                    <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary [animation-delay:0.4s] motion-reduce:animate-none!" />
                   </div>
                 </div>
               </div>
