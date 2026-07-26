@@ -44,7 +44,7 @@ function SelectTrigger({
       data-slot="select-trigger"
       aria-invalid={ariaInvalid ?? error}
       className={cn(
-        "relative flex h-11 w-full items-center rounded-md border border-input bg-white pl-[13px] pr-[38px] text-base text-foreground whitespace-nowrap outline-none transition-[color,box-shadow] focus:border-primary focus:ring-3 focus:ring-ring disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-70 aria-invalid:border-destructive data-placeholder:text-[#9aa4b5] *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-1.5",
+        "relative flex h-11 w-full items-center rounded-md border border-input bg-white pl-[13px] pr-[38px] text-base text-foreground whitespace-nowrap outline-none transition-[color,box-shadow] focus:border-primary focus:ring-3 focus:ring-ring disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-70 aria-invalid:border-destructive data-placeholder:text-gray-500 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-1.5",
         className,
       )}
       {...props}

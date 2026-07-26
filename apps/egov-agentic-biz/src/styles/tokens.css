@@ -56,6 +56,50 @@
   --ring: rgba(7, 85, 233, 0.4);
 }
 
+/* ============================================================
+   DERIVED EXTENSION — not from the design handoff.
+   The brand defines only six flat neutrals (Ink, Slate, Soft Blue,
+   Canvas, Line, Success) and no ramp, so screens invented ~15
+   one-off greys. This ramp interpolates between the brand's own
+   anchors; the four anchor steps are marked. Do not treat the
+   unmarked steps as brand-approved values.
+   ============================================================ */
+:root {
+  --gray-50: #f8faff;
+  --gray-100: #f1f3f6;
+  --gray-200: #e4e9f2; /* anchor — brand Line */
+  --gray-300: #d5deeb;
+  --gray-400: #c4ccda;
+  --gray-500: #9aa4b5;
+  --gray-600: #8a94a7;
+  --gray-700: #6c768a; /* anchor — brand Slate */
+  --gray-800: #4f5d74;
+  --gray-900: #17233b; /* anchor — brand Ink */
+
+  /* Tint families: 2 surface steps + border + ink, per semantic colour. */
+  --primary-tint: #edf3ff; /* anchor — brand Soft Blue */
+  --primary-tint-strong: #e2ecff;
+  --primary-border: #cfe0ff;
+  --primary-border-strong: #a9bde9;
+  --primary-ink: #183f8f;
+
+  --success-border: #bfe4d6;
+  --success-ink: #236348;
+
+  --warning-border: #ead99c;
+  --warning-ink: #866000;
+
+  --destructive-soft: #fff1ef;
+  --destructive-border: #f1cfca;
+  --destructive-ink: #8d392c;
+  --destructive-hover: #d93b3b; /* 4.5pts darker than --destructive, matching --primary-hover's delta */
+
+  /* Handoff values that were used on screen but never named. */
+  --canvas-alt: #fafbfe; /* Business landing page background */
+  --input-strong: #cfd9ec; /* emphasised input / outline-button border */
+  --line-soft: #edf0f5; /* border on blurred and nav surfaces (lighter than Line) */
+}
+
 /* ---- typography.css (variables only; NO @import) ---- */
 :root {
   --font-sans: "Nunito Sans", ui-rounded, system-ui, -apple-system, "Segoe UI", sans-serif;

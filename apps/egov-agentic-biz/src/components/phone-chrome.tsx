@@ -32,11 +32,11 @@ export function StatusBar() {
         <svg className="status-wifi" fill="none" viewBox="0 0 16 12">
           <path
             d="M1.5 4.2a10 10 0 0 1 13 0M3.8 6.8a6.6 6.6 0 0 1 8.4 0M6.1 9.3a3.2 3.2 0 0 1 3.8 0"
-            stroke="#111"
+            stroke="currentColor"
             strokeLinecap="round"
             strokeWidth="1.7"
           />
-          <circle cx="8" cy="11" fill="#111" r="1.1" />
+          <circle cx="8" cy="11" fill="currentColor" r="1.1" />
         </svg>
         <span className="battery-pill">72</span>
       </div>
