@@ -7,6 +7,9 @@
 
 @import "./chat.css";
 
+/* --font-sans, --text-*, --shadow-* below look self-referential (var(--x)
+   inside --x), but tokens.css's unlayered :root wins the cascade over this
+   @layer theme copy, so it's shadowed, not cyclic — breaks only if that :root were wrapped in @layer. */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -2622,41 +2625,7 @@ a:focus-visible {
   }
 }
 
-/* Narrow phones: keep all six service bubbles inside the viewport. */
-@media (max-width: 374px) {
-  .home-services {
-    gap: 0;
-    padding-left: 8px;
-    padding-right: 8px;
-  }
-  .home-services button {
-    font-size: 12px;
-  }
-  .service-bubble {
-    width: 50px;
-    height: 50px;
-  }
-  .service-bubble svg {
-    width: 28px;
-    height: 28px;
-  }
-  .service-bubble i {
-    right: -4px;
-  }
-}
-
 @media (max-width: 350px) {
-  .service-bubble {
-    width: 47px;
-    height: 47px;
-  }
-  .service-bubble svg {
-    width: 26px;
-    height: 26px;
-  }
-  .home-services button {
-    font-size: 11px;
-  }
   .question-copy h1 {
     font-size: 25px;
   }

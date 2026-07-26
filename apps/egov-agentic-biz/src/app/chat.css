@@ -304,8 +304,7 @@
 .chat-header > button svg {
   width: 20px;
 }
-.chat-agent-avatar,
-.message-avatar {
+.chat-agent-avatar {
   display: grid;
   place-items: center;
   flex: none;
@@ -372,14 +371,6 @@
 .chat-message.assistant {
   padding-right: 0;
   align-items: flex-start;
-}
-.message-avatar {
-  width: 28px;
-  height: 28px;
-  margin-top: 1px;
-}
-.message-avatar svg {
-  width: 13px;
 }
 .message-content {
   min-width: 0;
@@ -483,9 +474,6 @@
   display: flex;
   align-items: center;
   gap: 7px;
-}
-.chat-working .message-avatar {
-  margin: 0;
 }
 .chat-working-shimmer {
   padding: 2px 1px;
@@ -851,8 +839,7 @@
 .chat-header > button svg {
   width: 20px;
 }
-.chat-agent-avatar,
-.message-avatar {
+.chat-agent-avatar {
   display: grid;
   place-items: center;
   flex: none;
@@ -920,14 +907,6 @@
   padding-right: 0;
   align-items: flex-start;
   width: 100%;
-}
-.message-avatar {
-  width: 28px;
-  height: 28px;
-  margin-top: 1px;
-}
-.message-avatar svg {
-  width: 13px;
 }
 .message-content {
   min-width: 0;
