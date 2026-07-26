@@ -11,14 +11,13 @@ const nunito = Nunito_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "eGovPH",
+  title: "eGOVbusiness — eGovPH",
   description: "One app for Philippine government services.",
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
   themeColor: "#ffffff",
 };
 
