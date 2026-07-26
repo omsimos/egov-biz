@@ -363,20 +363,6 @@ a:focus-visible {
   align-self: flex-end;
   transform: translateY(0.04em);
 }
-.icon-button {
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  cursor: pointer;
-}
-.icon-button svg {
-  width: 22px;
-  height: 22px;
-}
 .chat-header > .profile-avatar-fallback {
   width: 36px;
   height: 36px;
@@ -461,10 +447,6 @@ a:focus-visible {
 }
 
 /* Authentication */
-.login-screen {
-  color: #272727;
-  background: #fff;
-}
 #egov-sso-widget-button {
   width: 100%;
   min-height: 50px;
@@ -496,39 +478,6 @@ a:focus-visible {
     opacity: 0.25;
     transform: translateY(-4px);
   }
-}
-
-/* Plan and agent action UI */
-.requirements {
-  background: #f7f9fd;
-  border-radius: 15px;
-  padding: 13px;
-}
-.requirements h3 {
-  margin: 0 0 10px;
-  font-size: 15px;
-}
-.requirements > div {
-  min-height: 27px;
-  display: grid;
-  grid-template-columns: 18px 1fr auto;
-  align-items: center;
-  gap: 5px;
-}
-.requirements svg {
-  width: 16px;
-  color: var(--success);
-}
-.requirements span {
-  font-size: 14px;
-  line-height: 1.4;
-}
-.requirements small {
-  font-size: 10px;
-  color: var(--success);
-  background: #e5f5ef;
-  padding: 4px 6px;
-  border-radius: 99px;
 }
 
 @media (min-width: 760px) {
