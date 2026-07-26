@@ -1,10 +1,22 @@
 "use client";
 
-import { ArrowRight, ShieldCheck, UserFocus } from "@phosphor-icons/react";
+import {
+  ArrowRightIcon,
+  ShieldCheckIcon,
+  UserFocusIcon,
+  WarningCircleIcon,
+} from "@phosphor-icons/react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { EGovLogo } from "@/components/egov-logo";
 import { BagongPilipinasMark, CityscapeArt, DictSeal, NpcSeal } from "@/components/gov-seals";
 import { StatusBar } from "@/components/phone-chrome";
+import { ServiceLogo } from "@/components/service-logo";
+import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { FieldLabel } from "@/components/ui/field";
+import { IconButton } from "@/components/ui/icon-button";
+import { Input } from "@/components/ui/input";
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import { LastAccount, readLastAccount } from "@/lib/last-account";
 
@@ -103,31 +115,42 @@ export function LoginScreen({ initialError }: { initialError?: string }) {
   };
 
   return (
-    <div className="screen login-screen">
+    <div className="screen bg-white text-foreground">
       <StatusBar />
-      <main className="login-content" id="app-content">
-        <div className="login-government-marks" aria-hidden="true">
-          <BagongPilipinasMark className="seal-bp" />
-          <DictSeal className="seal-dict" />
-          <NpcSeal className="seal-npc" />
+      <main
+        className="relative flex h-[calc(100%-36px)] min-h-[604px] flex-col overflow-x-hidden overflow-y-auto px-[22px] pt-[34px] [scrollbar-width:none] [@media(max-height:720px)]:pt-[25px] [&::-webkit-scrollbar]:hidden [&>*]:flex-none"
+        id="app-content"
+      >
+        <div aria-hidden="true" className="flex h-12 items-center justify-center gap-[9px]">
+          <BagongPilipinasMark className="size-[46px]" />
+          <DictSeal className="size-[42px]" />
+          <NpcSeal className="h-12 w-[38px]" />
         </div>
 
-        <div className="login-logo-row">
+        <div className="mt-[13px] flex justify-center">
           <EGovLogo size={46} />
         </div>
 
-        <header className="login-welcome">
-          <h1>
+        <header className="mt-[26px] text-center [@media(max-height:720px)]:mt-[22px]">
+          <h1 className="text-xl leading-[1.15] -tracking-[.4px] text-foreground">
             Welcome back
             {lastAccount ? `, ${lastAccount.firstName.toUpperCase()}` : ""}
           </h1>
-          <p>Enter your eGov exchange code</p>
+          <p className="mt-2.5 text-base font-medium text-muted-foreground">
+            Enter your eGov exchange code
+          </p>
         </header>
 
-        <form className="test-code-form" onSubmit={submit}>
-          <div className="test-code-label">
-            <label htmlFor="exchange-code">Exchange code</label>
+        <form
+          className="relative z-[2] mt-7 grid gap-[9px] [@media(max-height:720px)]:mt-[23px]"
+          onSubmit={submit}
+        >
+          <div className="flex items-center justify-between">
+            <FieldLabel className="mb-0" htmlFor="exchange-code">
+              Exchange code
+            </FieldLabel>
             <button
+              className="text-xs font-extrabold text-muted-foreground transition hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
               data-cuelume-toggle="droplet"
               disabled={!exchangeCode || loading}
               onClick={() => setExchangeCode("")}
@@ -136,9 +159,12 @@ export function LoginScreen({ initialError }: { initialError?: string }) {
               Clear
             </button>
           </div>
-          <div className="test-code-field">
-            <input
+          <div className="relative">
+            <Input
+              aria-describedby={error ? "exchange-code-error" : undefined}
+              aria-invalid={error ? true : undefined}
               autoComplete="off"
+              className="h-[58px] pr-14 tracking-[0.5px]"
               id="exchange-code"
               onChange={(event) => setExchangeCode(event.target.value)}
               placeholder="Paste a fresh one-time code"
@@ -146,24 +172,27 @@ export function LoginScreen({ initialError }: { initialError?: string }) {
               type="password"
               value={exchangeCode}
             />
-            <button
+            <IconButton
               aria-label="Continue with exchange code"
+              className="absolute top-1/2 right-2 -translate-y-1/2"
               data-cuelume-toggle="loading"
               disabled={!exchangeCode.trim() || !intentReady || loading}
               type="submit"
+              variant="primary"
             >
-              <ArrowRight weight="bold" />
-            </button>
+              <ArrowRightIcon weight="bold" />
+            </IconButton>
           </div>
           {error ? (
-            <p className="login-error" role="alert">
+            <Alert className="mt-2.5" id="exchange-code-error" variant="destructive">
+              <WarningCircleIcon weight="fill" />
               {error}
-            </p>
+            </Alert>
           ) : null}
         </form>
 
         <a
-          className="login-code-help"
+          className="mx-auto mt-4 block w-fit text-sm font-bold text-primary no-underline"
           href="https://platforms.e.gov.ph/dashboard/api-catalogs/egov-sso"
           rel="noreferrer"
           target="_blank"
@@ -171,33 +200,55 @@ export function LoginScreen({ initialError }: { initialError?: string }) {
           Forgot your code? Generate one
         </a>
 
-        <button className="faceid-pill" data-cuelume-toggle="page" type="button">
-          <UserFocus weight="regular" /> Login with Face ID
-        </button>
+        <Button
+          className="mx-auto mt-3 w-fit"
+          data-cuelume-toggle="page"
+          disabled
+          variant="outline"
+        >
+          <UserFocusIcon weight="regular" /> Login with Face ID
+          <Badge variant="warning">Soon</Badge>
+        </Button>
 
-        <section className="official-login" aria-label="eGovPH sign in">
-          <span>or</span>
+        <section
+          aria-label="eGovPH sign in"
+          className="relative z-[2] mt-[17px] grid justify-items-center"
+        >
+          <span className="text-xs font-bold text-gray-500 uppercase">or</span>
           <div id="egov-sso-widget-button" />
-          <p>
-            <ShieldCheck weight="fill" /> Secure eGovPH authentication
+          <p className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
+            <ServiceLogo
+              fallback={<ShieldCheckIcon className="size-4 text-success" weight="fill" />}
+              height={16}
+              service="egov-sso"
+            />
+            Secure eGovPH authentication
           </p>
         </section>
 
-        <div className="login-account-switch">
+        <div className="relative z-[2] mt-[clamp(30px,5.5vh,56px)] mb-6 text-center [@media(max-height:720px)]:mt-[34px]">
           {lastAccount?.maskedMobile ? (
-            <small className="masked-chip">{lastAccount.maskedMobile}</small>
+            <Badge variant="neutral">{lastAccount.maskedMobile}</Badge>
           ) : (
-            <small>Staging environment</small>
+            <Badge variant="primary">Staging environment</Badge>
           )}
-          <p>
+          <p className="mt-2.5 text-base font-medium text-foreground">
             Not you?{" "}
-            <a href="https://platforms.e.gov.ph/dashboard/api-catalogs/egov-sso">Switch Account</a>
+            <a
+              className="ml-1 font-bold text-primary no-underline"
+              href="https://platforms.e.gov.ph/dashboard/api-catalogs/egov-sso"
+            >
+              Switch Account
+            </a>
           </p>
         </div>
 
-        <div className="login-cityscape" aria-hidden="true">
-          <BagongPilipinasMark className="cityscape-bp" />
-          <CityscapeArt className="cityscape-art" />
+        <div
+          aria-hidden="true"
+          className="relative mt-auto -mx-[22px] h-[212px] overflow-hidden pointer-events-none"
+        >
+          <BagongPilipinasMark className="absolute top-0 left-1/2 z-[1] size-[152px] -translate-x-1/2 drop-shadow-[0_3px_8px_rgba(20,40,90,.16)]" />
+          <CityscapeArt className="absolute inset-x-0 bottom-0 z-[2] h-[150px] w-full" />
         </div>
       </main>
     </div>
