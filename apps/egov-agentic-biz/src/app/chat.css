@@ -273,15 +273,6 @@
   font-size: 10px;
   line-height: 1.4;
 }
-.chat-status-bar {
-  padding: 5px 18px 0;
-  display: flex;
-  justify-content: space-between;
-  color: #111b31;
-  font-size: 12px;
-  font-weight: 800;
-  background: rgba(255, 255, 255, 0.96);
-}
 .chat-header {
   display: grid;
   grid-template-columns: 34px 38px 1fr 34px;
@@ -609,8 +600,7 @@
   background: rgba(248, 250, 253, 0.97);
   box-shadow: 0 -7px 20px rgba(42, 57, 87, 0.05);
 }
-.chat-error,
-.payment-success {
+.chat-error {
   margin: 8px 0;
   padding: 10px 11px;
   border-radius: 12px;
@@ -619,22 +609,6 @@
 .chat-error {
   color: #8d392c;
   background: #fff0ed;
-}
-.payment-success {
-  display: flex;
-  gap: 8px;
-  color: #145f43;
-  background: #eaf7f1;
-}
-.payment-success svg {
-  width: 18px;
-  flex: none;
-}
-.payment-success span {
-  display: grid;
-}
-.payment-success small {
-  font-size: 10px;
 }
 .chat-dialog-layer {
   position: absolute;
@@ -807,15 +781,6 @@
   display: grid;
   grid-template-rows: 36px 62px minmax(0, 1fr) auto;
   background: #f4f6fa;
-}
-.chat-status-bar {
-  padding: 5px 18px 0;
-  display: flex;
-  justify-content: space-between;
-  color: #111b31;
-  font-size: 12px;
-  font-weight: 800;
-  background: rgba(255, 255, 255, 0.96);
 }
 .chat-header {
   display: grid;
@@ -1085,8 +1050,7 @@
   background: rgba(248, 250, 253, 0.97);
   box-shadow: 0 -7px 20px rgba(42, 57, 87, 0.05);
 }
-.chat-error,
-.payment-success {
+.chat-error {
   margin: 8px 0;
   padding: 10px 11px;
   border-radius: 12px;
@@ -1110,22 +1074,6 @@
 .chat-error button:disabled {
   opacity: 0.55;
   cursor: wait;
-}
-.payment-success {
-  display: flex;
-  gap: 8px;
-  color: #145f43;
-  background: #eaf7f1;
-}
-.payment-success svg {
-  width: 18px;
-  flex: none;
-}
-.payment-success span {
-  display: grid;
-}
-.payment-success small {
-  font-size: 10px;
 }
 .chat-dialog-layer {
   position: absolute;
