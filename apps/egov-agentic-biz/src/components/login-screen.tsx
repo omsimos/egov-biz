@@ -115,7 +115,7 @@ export function LoginScreen({ initialError }: { initialError?: string }) {
   };
 
   return (
-    <div className="screen bg-white text-foreground">
+    <div className="screen text-foreground">
       <StatusBar />
       <main
         className="relative flex h-[calc(100%-36px)] min-h-[604px] flex-col overflow-x-hidden overflow-y-auto px-[22px] pt-[34px] [scrollbar-width:none] [@media(max-height:720px)]:pt-[25px] [&::-webkit-scrollbar]:hidden [&>*]:flex-none"

@@ -11,9 +11,8 @@ import {
   CheckCircleIcon,
   CoffeeIcon,
   FileTextIcon,
-  FolderOpen,
+  FolderOpenIcon,
   LaptopIcon,
-  ShieldCheck,
   ShieldCheckIcon,
   ShoppingBagOpenIcon,
   SparkleIcon,
@@ -468,7 +467,7 @@ export function BusinessLanding({
     if (prompt.trim()) onSubmit(prompt.trim());
   };
   return (
-    <div className="screen bg-canvas-alt">
+    <div className="screen bg-canvas-alt!">
       <StatusBar />
       <header className="grid h-[58px] grid-cols-[40px_1fr_40px] items-center gap-2.5 px-5 pt-1.5 pb-2">
         <IconButton aria-label="Go back" onClick={onBack} variant="plain">
@@ -847,7 +846,7 @@ export function EgaphBusinessApp({
           One clear path through government services.
         </span>
         <div className="mt-[55px] flex items-center gap-2 text-xs text-muted-foreground">
-          <ShieldCheck className="size-[15px] shrink-0 text-success" weight="fill" />
+          <ShieldCheckIcon className="size-[15px] shrink-0 text-success" weight="fill" />
           <span>Live eGov SSO</span>
         </div>
       </div>
@@ -855,11 +854,11 @@ export function EgaphBusinessApp({
         {status === "loading" ? (
           <div
             aria-live="polite"
-            className="screen grid place-content-center justify-items-center gap-4 bg-gray-50 text-muted-foreground"
+            className="screen grid place-content-center justify-items-center gap-4 bg-gray-50! text-muted-foreground"
             role="status"
           >
             <div className="grid size-[58px] animate-[auth-pulse_1.2s_ease-in-out_infinite_alternate] place-items-center rounded-[19px] bg-primary text-white motion-reduce:animate-none!">
-              <ShieldCheck className="size-[30px]" weight="duotone" />
+              <ShieldCheckIcon className="size-[30px]" weight="duotone" />
             </div>
             <p className="m-0 text-sm font-bold">Restoring your secure session…</p>
           </div>
@@ -868,14 +867,14 @@ export function EgaphBusinessApp({
         ) : (
           <>
             {screen === "restoring" && (
-              <div className="screen bg-gray-100">
+              <div className="screen bg-gray-100!">
                 <StatusBar />
                 <div
                   className="flex h-[calc(100%-26px)] flex-col items-center justify-center px-[38px] text-center"
                   role="status"
                 >
                   <div className="relative grid size-[62px] animate-[soft-pulse_1.8s_infinite] rotate-[-4deg] place-items-center rounded-[22px] bg-primary text-white shadow-[0_12px_28px_rgba(7,85,233,0.24)] motion-reduce:animate-none!">
-                    <FolderOpen className="size-[29px]" weight="fill" />
+                    <FolderOpenIcon className="size-[29px]" weight="fill" />
                   </div>
                   <h1 className="mt-7 mb-2 text-[25px] leading-[1.15] tracking-[-0.8px]">
                     Opening your saved plan

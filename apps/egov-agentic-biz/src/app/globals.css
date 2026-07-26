@@ -705,6 +705,11 @@ a:focus-visible {
   position: relative;
   overflow: hidden;
 }
+/* Unlayered, so its `background` always beats a Tailwind utility class
+   (Tailwind utilities live in `@layer utilities`, and cascade layers make an
+   unlayered normal declaration win over a layered one regardless of
+   specificity or source order). A `className="screen bg-…"` needs the `!`
+   important modifier (e.g. `bg-gray-50!`) to actually take effect. */
 .screen {
   width: 100%;
   height: 100svh;
