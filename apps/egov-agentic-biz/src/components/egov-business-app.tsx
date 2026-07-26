@@ -23,6 +23,7 @@ import {
 } from "@phosphor-icons/react";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { BusinessChatScreen } from "@/components/business-chat-screen";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EGovLogo } from "@/components/egov-logo";
 import { HomeScreen } from "@/components/home-screen";
 import { LoginScreen } from "@/components/login-screen";
@@ -289,7 +290,7 @@ export function BusinessDetailScreen({
           </>
         )}
       </div>
-      <BottomNav active="none" />
+      <BottomNav active="business" />
     </div>
   );
 }
@@ -570,7 +571,7 @@ export function BusinessLanding({
           </Alert>
         </section>
       </div>
-      <BottomNav active="none" />
+      <BottomNav active="business" />
     </div>
   );
 }
@@ -594,6 +595,7 @@ export function EgaphBusinessApp({
   const [paymentService, setPaymentService] = useState<PaymentServiceType | null>(null);
   const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(null);
   const [businessRevision, setBusinessRevision] = useState(0);
+  const [pendingDelete, setPendingDelete] = useState<ConversationSummary | null>(null);
   const { error: authError, logout, profile, status } = useAuthSession();
   const { data: businesses, loading: businessesLoading } = useApi<RegisteredBusiness[]>(
     `/api/businesses?revision=${businessRevision}`,
@@ -711,12 +713,6 @@ export function EgaphBusinessApp({
     window.history.pushState({}, "", window.location.pathname);
   };
   const deleteSession = async (item: ConversationSummary) => {
-    if (
-      !window.confirm(
-        `Delete “${item.title}”? This will permanently remove its messages and payment history.`,
-      )
-    )
-      return;
     const response = await fetch(`/api/conversations/${encodeURIComponent(item.id)}`, {
       method: "DELETE",
     });
@@ -790,7 +786,7 @@ export function EgaphBusinessApp({
                 onBack={() => setScreen("home")}
                 onSubmit={startChat}
                 onResume={(id) => void openConversation(id)}
-                onDelete={(item) => void deleteSession(item)}
+                onDelete={setPendingDelete}
                 onOpenBusiness={openBusiness}
               />
             )}
@@ -814,13 +810,29 @@ export function EgaphBusinessApp({
                 onBack={leaveChat}
                 onNewConversation={leaveChat}
                 onSelectConversation={(id) => void openConversation(id)}
-                onDeleteConversation={(item) => void deleteSession(item)}
+                onDeleteConversation={setPendingDelete}
               />
             )}
           </>
         )}
       </div>
       <div id="egov-sso-widget-portal" />
+      <ConfirmDialog
+        confirmLabel="Delete plan"
+        description={
+          pendingDelete
+            ? `“${pendingDelete.title}” and its messages and payment history will be permanently removed. This cannot be undone.`
+            : ""
+        }
+        onConfirm={() => {
+          if (pendingDelete) void deleteSession(pendingDelete);
+        }}
+        onOpenChange={(next) => {
+          if (!next) setPendingDelete(null);
+        }}
+        open={pendingDelete !== null}
+        title="Delete this registration plan?"
+      />
     </div>
   );
 }

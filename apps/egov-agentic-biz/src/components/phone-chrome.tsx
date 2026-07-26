@@ -44,15 +44,15 @@ export function StatusBar() {
   );
 }
 
-export function BottomNav({ active = "home" }: { active?: "home" | "none" }) {
+export function BottomNav({ active = "home" }: { active?: "home" | "business" | "none" }) {
   return (
     <nav className="bottom-nav" aria-label="Primary navigation">
       <button
-        className={active === "home" ? "active" : ""}
+        className={active === "home" || active === "business" ? "active" : ""}
         data-cuelume-toggle="tick"
         type="button"
       >
-        <House weight={active === "home" ? "fill" : "regular"} />
+        <House weight={active === "home" || active === "business" ? "fill" : "regular"} />
         <span>Home</span>
       </button>
       <button data-cuelume-toggle="tick" type="button">

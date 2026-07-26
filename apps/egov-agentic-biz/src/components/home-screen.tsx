@@ -14,10 +14,10 @@ import {
   MegaphoneIcon,
   StorefrontIcon,
 } from "@phosphor-icons/react";
+import { AccountDialog } from "@/components/account-dialog";
 import { BrandLogo } from "@/components/brand-logo";
 import { FlagSunrise } from "@/components/flag-sunrise";
 import { BottomNav, StatusBar } from "@/components/phone-chrome";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { IconButton } from "@/components/ui/icon-button";
@@ -71,24 +71,7 @@ export function HomeScreen({
 
         <section className="flex items-center justify-between px-5 py-2">
           <div className="flex items-center gap-3">
-            {/* Sign-out stays on the avatar for this task only; Task 4 replaces
-                the whole button with <AccountDialog />. See the note below. */}
-            <button
-              className={cn("shrink-0 rounded-full", FOCUS_RING)}
-              data-cuelume-toggle="tick"
-              onClick={() => {
-                if (window.confirm("Sign out of eGovPH?")) onLogout();
-              }}
-              title="Sign out"
-              type="button"
-            >
-              <Avatar size="lg">
-                {profile.avatarUrl && (
-                  <AvatarImage alt={`${profile.fullName} profile`} src={profile.avatarUrl} />
-                )}
-                <AvatarFallback>{profile.firstName.slice(0, 1).toUpperCase()}</AvatarFallback>
-              </Avatar>
-            </button>
+            <AccountDialog onLogout={onLogout} profile={profile} />
             <div className="flex flex-col gap-0.5">
               <strong className="text-lg -tracking-[.4px] text-primary">
                 Hi, {profile.firstName}

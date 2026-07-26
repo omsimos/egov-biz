@@ -25,8 +25,8 @@ const PENDING = new Set([
   "components/egov-business-app.tsx",
 ]);
 
-// Screens still using a native confirm(). Shrinks to empty in Task 4.
-const PENDING_CONFIRM = new Set(["components/egov-business-app.tsx", "components/home-screen.tsx"]);
+// Screens still using a native confirm(). Emptied in Task 4.
+const PENDING_CONFIRM = new Set<string>([]);
 
 // Non-global on purpose: a /g/ regex carries `lastIndex` between .test() calls
 // and would silently skip every other file. The range is {3,8}, not {6}: hex
