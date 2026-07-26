@@ -22,7 +22,7 @@ const LITERAL_EXCEPTIONS = new Set(["app/layout.tsx"]);
 // migration is not visible to this guard.
 const PENDING = new Set<string>([]);
 
-// Screens still using a native confirm(). Emptied in Task 4.
+// Screens still using a native confirm(), alert(), or prompt(). Emptied in Task 4.
 const PENDING_CONFIRM = new Set<string>([]);
 
 // Non-global on purpose: a /g/ regex carries `lastIndex` between .test() calls
@@ -30,6 +30,14 @@ const PENDING_CONFIRM = new Set<string>([]);
 // colours are also written as 3-, 4-, and 8-digit (#fff, #f00, #aabbccdd), and
 // a fixed {6} plus \b lets those slip through undetected.
 const hasHex = (source: string) => /#[0-9a-fA-F]{3,8}\b/.test(source);
+
+// Matches bare `confirm(`/`alert(`/`prompt(` as well as `window.`- or
+// `globalThis.`-qualified calls — not just the `window.` form, which is rarer
+// in practice than the unqualified one. The leading `(?:^|[^.\w$])` requires
+// a non-identifier boundary before the keyword so property/variable names
+// like `prompt.trim()`, `initialPrompt`, or `onConfirm` don't false-positive.
+const hasNativeDialog = (source: string) =>
+  /(?:^|[^.\w$])(?:window\.|globalThis\.)?(?:confirm|alert|prompt)\s*\(/.test(source);
 
 function tsxFiles(): string[] {
   return readdirSync(SRC, { recursive: true })
@@ -71,17 +79,17 @@ describe("design system drift guards", () => {
     expect(stale).toEqual([]);
   });
 
-  test("no native confirm or alert dialogs", () => {
+  test("no native confirm, alert, or prompt dialogs", () => {
     const offenders = tsxFiles()
       .filter((file) => !PENDING_CONFIRM.has(file))
-      .filter((file) => /window\.(confirm|alert)\s*\(/.test(read(file)));
+      .filter((file) => hasNativeDialog(read(file)));
     expect(offenders).toEqual([]);
   });
 
   test("every PENDING_CONFIRM entry still actually uses a native dialog", () => {
     const stale = [...PENDING_CONFIRM].filter((file) => {
       const source = readIfExists(file);
-      return source === null || !/window\.(confirm|alert)\s*\(/.test(source);
+      return source === null || !hasNativeDialog(source);
     });
     expect(stale).toEqual([]);
   });
