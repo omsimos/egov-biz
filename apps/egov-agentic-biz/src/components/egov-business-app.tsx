@@ -3,8 +3,6 @@
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
-  BellSimple,
-  BellSimpleIcon,
   BriefcaseIcon,
   CalendarDotsIcon,
   CaretRightIcon,
@@ -43,12 +41,9 @@ import type { CitizenProfile, RegisteredBusiness } from "@/lib/citizen-profile";
 import type { RegisteredBusiness as RegisteredBusinessDetail } from "@/lib/registered-business";
 import { useApi } from "@/lib/use-api";
 import { useAuthSession } from "@/lib/use-auth-session";
-import { cn } from "@/lib/utils";
+import { cn, FOCUS_RING } from "@/lib/utils";
 
 type Screen = "restoring" | "home" | "business" | "business-detail" | "chat";
-
-const FOCUS_RING =
-  "outline-none focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-offset-2";
 
 const suggestions = [
   { icon: CoffeeIcon, text: "I want to start a coffee subscription business in Makati" },
@@ -393,46 +388,28 @@ export function BusinessDetailScreen({
     </div>
   );
 }
+// onBack and profile are always provided by this module-private component's
+// single caller (BusinessDetailScreen, whose own props require both), so
+// there is no "no back button" / "no profile" fallback to render here.
 function Header({
   title,
   onBack,
   profile,
 }: {
   title?: string;
-  onBack?: () => void;
-  profile?: CitizenProfile | null;
+  onBack: () => void;
+  profile: CitizenProfile;
 }) {
   return (
     <header className="grid h-[58px] grid-cols-[40px_1fr_40px] items-center gap-2.5 px-5 pt-1.5 pb-2">
-      {onBack ? (
-        <IconButton
-          aria-label="Go back"
-          data-cuelume-toggle="page"
-          onClick={onBack}
-          variant="plain"
-        >
-          <ArrowLeftIcon />
-        </IconButton>
-      ) : (
-        <BrandLogo height={22} />
-      )}
+      <IconButton aria-label="Go back" data-cuelume-toggle="page" onClick={onBack} variant="plain">
+        <ArrowLeftIcon />
+      </IconButton>
       {title ? <h1 className="text-center text-md -tracking-[.3px]">{title}</h1> : <span />}
-      {profile ? (
-        <ProfileAvatar
-          className="size-9 justify-self-end rounded-full border-2 border-white object-cover shadow-[0_0_0_1px_var(--line)]"
-          profile={profile}
-        />
-      ) : (
-        <IconButton
-          aria-label="Notifications"
-          className="relative justify-self-end"
-          data-cuelume-toggle="tick"
-          variant="soft"
-        >
-          <BellSimpleIcon weight="fill" />
-          <span className="absolute top-[6px] right-[7px] size-2 rounded-full border-2 border-white bg-destructive" />
-        </IconButton>
-      )}
+      <ProfileAvatar
+        className="size-9 justify-self-end rounded-full border-2 border-white object-cover shadow-[0_0_0_1px_var(--line)]"
+        profile={profile}
+      />
     </header>
   );
 }
@@ -474,7 +451,7 @@ export function BusinessLanding({
           <ArrowLeftIcon />
         </IconButton>
         <h1 className="text-center text-md -tracking-[.3px]">Business</h1>
-        {profile ? (
+        {profile && (
           <Avatar
             className="justify-self-end border-2 border-white shadow-[0_0_0_1px_var(--line)]"
             size="md"
@@ -484,10 +461,6 @@ export function BusinessLanding({
             )}
             <AvatarFallback>{profile.firstName.slice(0, 1).toUpperCase()}</AvatarFallback>
           </Avatar>
-        ) : (
-          <IconButton aria-label="Notifications" className="justify-self-end" variant="soft">
-            <BellSimple weight="fill" />
-          </IconButton>
         )}
       </header>
       <div
@@ -870,7 +843,7 @@ export function EgaphBusinessApp({
               <div className="screen bg-gray-100!">
                 <StatusBar />
                 <div
-                  className="flex h-[calc(100%-26px)] flex-col items-center justify-center px-[38px] text-center"
+                  className="flex h-[calc(100%-36px)] flex-col items-center justify-center px-[38px] text-center"
                   role="status"
                 >
                   <div className="relative grid size-[62px] animate-[soft-pulse_1.8s_infinite] rotate-[-4deg] place-items-center rounded-[22px] bg-primary text-white shadow-[0_12px_28px_rgba(7,85,233,0.24)] motion-reduce:animate-none!">
