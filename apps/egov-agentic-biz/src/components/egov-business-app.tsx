@@ -1,27 +1,27 @@
 "use client";
 
 import {
-  ArrowLeft,
   ArrowLeftIcon,
   ArrowRightIcon,
   BellSimple,
-  Briefcase,
+  BellSimpleIcon,
   BriefcaseIcon,
-  CalendarDots,
-  CaretRight,
-  CheckCircle,
+  CalendarDotsIcon,
+  CaretRightIcon,
+  CheckCircleIcon,
   CoffeeIcon,
-  FileText,
+  FileTextIcon,
   FolderOpen,
   LaptopIcon,
   ShieldCheck,
   ShieldCheckIcon,
   ShoppingBagOpenIcon,
   SparkleIcon,
-  Storefront,
+  StorefrontIcon,
   TrashIcon,
 } from "@phosphor-icons/react";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { BrandLogo } from "@/components/brand-logo";
 import { BusinessChatScreen } from "@/components/business-chat-screen";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EGovLogo } from "@/components/egov-logo";
@@ -29,11 +29,12 @@ import { HomeScreen } from "@/components/home-screen";
 import { LoginScreen } from "@/components/login-screen";
 import { BottomNav, StatusBar } from "@/components/phone-chrome";
 import { ProfileAvatar } from "@/components/profile-avatar";
-import { Alert } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { IconButton } from "@/components/ui/icon-button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type {
   BusinessConversation,
@@ -84,209 +85,309 @@ export function BusinessDetailScreen({
       <Header title="Business record" onBack={onBack} profile={profile} />
       <div className="business-detail-scroll" id="app-content">
         {loading ? (
-          <div className="business-detail-loading skeleton-card" />
-        ) : error || !business ? (
-          <div className="business-detail-error">
-            <Briefcase weight="duotone" />
-            <strong>Business record unavailable</strong>
-            <span>{error ?? "This linked record could not be found."}</span>
+          <div aria-hidden="true" className="flex flex-col gap-3">
+            <div className="skeleton-card h-[124px] rounded-2xl" />
+            <div className="skeleton-card h-11 rounded-lg" />
+            <div className="flex flex-col gap-2.5">
+              <div className="skeleton-card h-20 rounded-xl" />
+              <div className="skeleton-card h-20 rounded-xl" />
+              <div className="skeleton-card h-20 rounded-xl" />
+            </div>
           </div>
+        ) : error || !business ? (
+          <Alert variant="destructive">
+            <BriefcaseIcon weight="duotone" />
+            <AlertTitle>Business record unavailable</AlertTitle>
+            <AlertDescription>{error ?? "This linked record could not be found."}</AlertDescription>
+          </Alert>
         ) : (
           <>
-            <section className="business-identity-card">
-              <span>
-                <Storefront weight="duotone" />
-              </span>
-              <div>
-                <small>LINKED TO {business.tinMasked || "YOUR EGOV ACCOUNT"}</small>
-                <h1>{business.name}</h1>
-                <p>
-                  {business.type} in {business.city}
-                </p>
-              </div>
-              <i>
-                <CheckCircle weight="fill" /> {business.status}
-              </i>
-            </section>
-            <nav className="business-detail-tabs" aria-label="Business record sections">
-              {(["overview", "records", "files", "calendar"] as const).map((item) => (
-                <button
-                  className={tab === item ? "active" : ""}
+            <Card className="border-transparent bg-[var(--egov-blue-dark)] text-white">
+              <CardContent className="grid grid-cols-[48px_1fr] gap-3">
+                <span className="grid size-12 place-items-center rounded-lg bg-white/10">
+                  <StorefrontIcon className="size-[26px]" weight="duotone" />
+                </span>
+                <div className="min-w-0">
+                  <span className="mb-1 block text-2xs font-extrabold tracking-[0.06em] text-white/70">
+                    LINKED TO {business.tinMasked || "YOUR EGOV ACCOUNT"}
+                  </span>
+                  <h1 className="text-lg leading-tight">{business.name}</h1>
+                  <p className="mt-1 text-xs text-white/85">
+                    {business.type} in {business.city}
+                  </p>
+                </div>
+                <Badge className="col-span-2 mt-0.5 w-fit" variant="success">
+                  <CheckCircleIcon weight="fill" /> {business.status}
+                </Badge>
+              </CardContent>
+            </Card>
+            <Tabs
+              className="mt-3"
+              onValueChange={(value) =>
+                setTab(value as "overview" | "records" | "files" | "calendar")
+              }
+              value={tab}
+            >
+              <TabsList
+                aria-label="Business record sections"
+                className="sticky -top-3.5 z-10 grid w-full grid-cols-4 gap-1"
+              >
+                <TabsTrigger
+                  className="px-1 text-center text-xs"
                   data-cuelume-toggle="toggle"
-                  key={item}
-                  type="button"
-                  onClick={() => setTab(item)}
+                  value="overview"
                 >
-                  {item === "overview"
-                    ? "Overview"
-                    : item === "records"
-                      ? "Records"
-                      : item === "files"
-                        ? "Files"
-                        : "Tax calendar"}
-                </button>
-              ))}
-            </nav>
-            {tab === "overview" && (
-              <div className="business-overview">
-                <section>
-                  <h2>Registration</h2>
-                  <dl>
-                    <div>
-                      <dt>Registration number</dt>
-                      <dd>{business.registrationNumber}</dd>
-                    </div>
-                    <div>
-                      <dt>Owner</dt>
-                      <dd>{business.ownerName}</dd>
-                    </div>
-                    <div>
-                      <dt>RDO</dt>
-                      <dd>{business.rdo || "Needs confirmation"}</dd>
-                    </div>
-                    <div>
-                      <dt>Completed</dt>
-                      <dd>{formatBusinessDate(business.finalizedAt)}</dd>
-                    </div>
-                  </dl>
-                </section>
-                <section>
-                  <h2>Business address</h2>
-                  <p>{business.businessAddress}</p>
-                  <span>{business.businessActivity}</span>
-                </section>
+                  Overview
+                </TabsTrigger>
+                <TabsTrigger
+                  className="px-1 text-center text-xs"
+                  data-cuelume-toggle="toggle"
+                  value="records"
+                >
+                  Records
+                </TabsTrigger>
+                <TabsTrigger
+                  className="px-1 text-center text-xs"
+                  data-cuelume-toggle="toggle"
+                  value="files"
+                >
+                  Files
+                </TabsTrigger>
+                <TabsTrigger
+                  className="px-1 text-center text-xs"
+                  data-cuelume-toggle="toggle"
+                  value="calendar"
+                >
+                  Tax calendar
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent className="flex flex-col gap-3" value="overview">
+                <Card>
+                  <CardContent className="flex flex-col gap-2">
+                    <h2 className="text-md font-extrabold -tracking-[.2px]">Registration</h2>
+                    <dl className="flex flex-col">
+                      <div className="grid grid-cols-[100px_1fr] items-center gap-2.5 py-1.5">
+                        <dt className="text-xs text-muted-foreground">Registration number</dt>
+                        <dd className="m-0 text-right text-xs font-bold break-words">
+                          {business.registrationNumber}
+                        </dd>
+                      </div>
+                      <div className="grid grid-cols-[100px_1fr] items-center gap-2.5 py-1.5">
+                        <dt className="text-xs text-muted-foreground">Owner</dt>
+                        <dd className="m-0 text-right text-xs font-bold break-words">
+                          {business.ownerName}
+                        </dd>
+                      </div>
+                      <div className="grid grid-cols-[100px_1fr] items-center gap-2.5 py-1.5">
+                        <dt className="text-xs text-muted-foreground">RDO</dt>
+                        <dd className="m-0 text-right text-xs font-bold break-words">
+                          {business.rdo || "Needs confirmation"}
+                        </dd>
+                      </div>
+                      <div className="grid grid-cols-[100px_1fr] items-center gap-2.5 py-1.5">
+                        <dt className="text-xs text-muted-foreground">Completed</dt>
+                        <dd className="m-0 text-right text-xs font-bold break-words">
+                          {formatBusinessDate(business.finalizedAt)}
+                        </dd>
+                      </div>
+                    </dl>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="flex flex-col gap-1.5">
+                    <h2 className="text-md font-extrabold -tracking-[.2px]">Business address</h2>
+                    <p className="m-0 text-sm leading-normal">{business.businessAddress}</p>
+                    <span className="text-xs text-muted-foreground">
+                      {business.businessActivity}
+                    </span>
+                  </CardContent>
+                </Card>
                 <button
-                  type="button"
-                  className="next-tax-card"
+                  className={cn(
+                    "grid grid-cols-[40px_1fr_16px] items-center gap-2.5 rounded-xl border border-primary-border bg-secondary p-4 text-left shadow-xs transition",
+                    FOCUS_RING,
+                  )}
                   data-cuelume-toggle="page"
                   onClick={() => setTab("calendar")}
+                  type="button"
                 >
-                  <CalendarDots weight="duotone" />
-                  <div>
-                    <small>NEXT TAX REMINDER</small>
-                    <strong>{business.taxObligations[0]?.title ?? "No reminders scheduled"}</strong>
-                    <span>
+                  <CalendarDotsIcon className="size-[30px] text-primary" weight="duotone" />
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-2xs font-black tracking-[0.06em] text-primary">
+                      NEXT TAX REMINDER
+                    </span>
+                    <strong className="text-xs">
+                      {business.taxObligations[0]?.title ?? "No reminders scheduled"}
+                    </strong>
+                    <span className="text-2xs text-muted-foreground">
                       {business.taxObligations[0]
                         ? formatBusinessDate(business.taxObligations[0].dueDate)
                         : ""}
                     </span>
                   </div>
-                  <CaretRight weight="bold" />
+                  <CaretRightIcon className="text-primary" weight="bold" />
                 </button>
-                <p className="demo-record-note">
-                  <ShieldCheck weight="fill" /> Demo records only. They are not official agency
-                  documents.
-                </p>
-              </div>
-            )}
-            {tab === "files" && (
-              <section className="business-files-list">
-                <header>
+                <Alert variant="info">
+                  <ShieldCheckIcon weight="fill" />
+                  Demo records only. They are not official agency documents.
+                </Alert>
+              </TabsContent>
+              <TabsContent className="flex flex-col gap-2.5" value="files">
+                <header className="flex items-center justify-between">
                   <div>
-                    <small>DOCUMENT VAULT</small>
-                    <h2>Business files</h2>
+                    <span className="mb-0.5 block text-2xs font-extrabold tracking-[0.05em] text-primary">
+                      DOCUMENT VAULT
+                    </span>
+                    <h2 className="text-md font-extrabold -tracking-[.2px]">Business files</h2>
                   </div>
-                  <span>{business.files.length} files</span>
+                  <span className="text-xs text-muted-foreground">
+                    {business.files.length} files
+                  </span>
                 </header>
                 {business.files.length === 0 ? (
-                  <div className="business-file-empty">
-                    <FileText weight="duotone" />
-                    <strong>No files saved yet</strong>
-                    <p>Generated registration and tax setup files will appear here.</p>
+                  <div className="flex flex-col items-center rounded-xl border border-dashed border-border p-6 text-center text-muted-foreground">
+                    <FileTextIcon className="mb-2 size-[34px] text-primary" weight="duotone" />
+                    <strong className="text-xs text-foreground">No files saved yet</strong>
+                    <p className="mt-1 text-2xs">
+                      Generated registration and tax setup files will appear here.
+                    </p>
                   </div>
                 ) : (
                   business.files.map((file) => (
-                    <article className="business-file-card" key={file.id}>
-                      <span className="business-file-icon">
-                        <FileText weight="duotone" />
-                      </span>
-                      <div>
-                        <small>{file.documentType}</small>
-                        <strong>{file.title}</strong>
-                        <code>{file.filename}</code>
-                        <p>{file.note}</p>
-                        <time>{formatBusinessDate(file.createdAt)}</time>
-                      </div>
-                      <aside>
-                        <i>{file.status}</i>
-                        <a
-                          href={`/api/businesses/${encodeURIComponent(business.id)}/files/${encodeURIComponent(file.id)}`}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Open
-                        </a>
-                      </aside>
-                    </article>
+                    <Card key={file.id}>
+                      <CardContent className="grid grid-cols-[40px_1fr_auto] items-start gap-2.5">
+                        <span className="grid size-10 place-items-center rounded-lg bg-destructive-soft text-destructive-ink">
+                          <FileTextIcon weight="duotone" />
+                        </span>
+                        <div className="flex min-w-0 flex-col gap-0.5">
+                          <span className="text-2xs font-black tracking-[0.05em] text-primary uppercase">
+                            {file.documentType}
+                          </span>
+                          <strong className="text-xs">{file.title}</strong>
+                          <code className="text-2xs break-words text-muted-foreground">
+                            {file.filename}
+                          </code>
+                          <p className="m-0 text-2xs break-words text-muted-foreground">
+                            {file.note}
+                          </p>
+                          <time
+                            className="text-2xs text-muted-foreground"
+                            dateTime={file.createdAt}
+                          >
+                            {formatBusinessDate(file.createdAt)}
+                          </time>
+                        </div>
+                        <div className="flex flex-col items-end gap-2">
+                          <Badge variant="success">{file.status}</Badge>
+                          <a
+                            className="text-xs font-extrabold text-primary"
+                            href={`/api/businesses/${encodeURIComponent(business.id)}/files/${encodeURIComponent(file.id)}`}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            Open
+                          </a>
+                        </div>
+                      </CardContent>
+                    </Card>
                   ))
                 )}
-              </section>
-            )}
-            {tab === "records" && (
-              <section className="business-records-list">
-                <header>
-                  <h2>Registrations and permits</h2>
-                  <span>{business.records.length} records</span>
+              </TabsContent>
+              <TabsContent className="flex flex-col gap-2.5" value="records">
+                <header className="flex items-center justify-between">
+                  <h2 className="text-md font-extrabold -tracking-[.2px]">
+                    Registrations and permits
+                  </h2>
+                  <span className="text-xs text-muted-foreground">
+                    {business.records.length} records
+                  </span>
                 </header>
                 {business.records.map((record) => (
-                  <article key={record.id}>
-                    <span>
-                      <FileText weight="duotone" />
-                    </span>
-                    <div>
-                      <strong>{record.title}</strong>
-                      <p>{record.agency}</p>
-                      <small>{record.referenceNumber}</small>
-                      <em>{record.note}</em>
-                    </div>
-                    <i className={record.status === "Not required" ? "muted" : ""}>
-                      {record.status}
-                    </i>
-                  </article>
+                  <Card key={record.id}>
+                    <CardContent className="grid grid-cols-[38px_1fr_auto] items-start gap-2.5">
+                      <span className="grid size-[38px] place-items-center rounded-lg bg-secondary text-primary">
+                        <FileTextIcon weight="duotone" />
+                      </span>
+                      <div className="flex min-w-0 flex-col gap-0.5">
+                        <strong className="text-xs">{record.title}</strong>
+                        <p className="m-0 text-2xs break-words text-muted-foreground">
+                          {record.agency}
+                        </p>
+                        <span className="text-2xs break-words text-muted-foreground">
+                          {record.referenceNumber}
+                        </span>
+                        <span className="mt-0.5 text-2xs break-words text-muted-foreground">
+                          {record.note}
+                        </span>
+                      </div>
+                      <Badge
+                        variant={
+                          record.status === "Not required"
+                            ? "neutral"
+                            : record.status === "Scheduled"
+                              ? "warning"
+                              : "success"
+                        }
+                      >
+                        {record.status}
+                      </Badge>
+                    </CardContent>
+                  </Card>
                 ))}
-              </section>
-            )}
-            {tab === "calendar" && (
-              <section className="tax-calendar-list">
-                <header>
+              </TabsContent>
+              <TabsContent className="flex flex-col gap-2.5" value="calendar">
+                <header className="flex items-center justify-between px-0.5">
                   <div>
-                    <small>TAX CALENDAR</small>
-                    <h2>Upcoming obligations</h2>
+                    <span className="mb-0.5 block text-2xs font-extrabold tracking-[0.05em] text-primary">
+                      TAX CALENDAR
+                    </span>
+                    <h2 className="text-md font-extrabold -tracking-[.2px]">
+                      Upcoming obligations
+                    </h2>
                   </div>
-                  <CalendarDots weight="duotone" />
+                  <CalendarDotsIcon className="size-[30px] text-primary" weight="duotone" />
                 </header>
-                <p>
+                <p className="mx-0.5 mb-1 text-2xs text-muted-foreground">
                   Sample reminders generated from this demo registration. Confirm actual tax types
                   and deadlines with BIR.
                 </p>
                 {business.taxObligations.map((obligation) => {
                   const date = new Date(`${obligation.dueDate}T00:00:00Z`);
                   return (
-                    <article key={obligation.id}>
-                      <time dateTime={obligation.dueDate}>
-                        <strong>
-                          {date.toLocaleDateString("en-PH", { day: "2-digit", timeZone: "UTC" })}
-                        </strong>
-                        <span>
-                          {date
-                            .toLocaleDateString("en-PH", { month: "short", timeZone: "UTC" })
-                            .toUpperCase()}
-                        </span>
-                      </time>
-                      <div>
-                        <small>
-                          {obligation.formCode} · {obligation.frequency}
-                        </small>
-                        <strong>{obligation.title}</strong>
-                        <span>{obligation.periodLabel}</span>
-                        <p>{obligation.note}</p>
-                      </div>
-                      <i>{obligation.status}</i>
-                    </article>
+                    <Card key={obligation.id}>
+                      <CardContent className="grid grid-cols-[47px_1fr_auto] items-start gap-2.5">
+                        <time
+                          className="flex flex-col items-center rounded-lg bg-secondary py-1.5 text-primary"
+                          dateTime={obligation.dueDate}
+                        >
+                          <strong className="text-lg leading-none">
+                            {date.toLocaleDateString("en-PH", { day: "2-digit", timeZone: "UTC" })}
+                          </strong>
+                          <span className="mt-0.5 text-2xs font-black">
+                            {date
+                              .toLocaleDateString("en-PH", { month: "short", timeZone: "UTC" })
+                              .toUpperCase()}
+                          </span>
+                        </time>
+                        <div className="flex min-w-0 flex-col gap-0.5">
+                          <span className="text-2xs font-extrabold text-primary">
+                            {obligation.formCode} · {obligation.frequency}
+                          </span>
+                          <strong className="text-xs">{obligation.title}</strong>
+                          <span className="text-2xs text-muted-foreground">
+                            {obligation.periodLabel}
+                          </span>
+                          <p className="m-0 text-2xs text-muted-foreground">{obligation.note}</p>
+                        </div>
+                        <Badge variant={obligation.status === "Upcoming" ? "warning" : "neutral"}>
+                          {obligation.status}
+                        </Badge>
+                      </CardContent>
+                    </Card>
                   );
                 })}
-              </section>
-            )}
+              </TabsContent>
+            </Tabs>
           </>
         )}
       </div>
@@ -304,31 +405,35 @@ function Header({
   profile?: CitizenProfile | null;
 }) {
   return (
-    <header className="app-header">
+    <header className="grid h-[58px] grid-cols-[40px_1fr_40px] items-center gap-2.5 px-5 pt-1.5 pb-2">
       {onBack ? (
-        <button
-          className="icon-button"
+        <IconButton
+          aria-label="Go back"
           data-cuelume-toggle="page"
           onClick={onBack}
-          aria-label="Go back"
+          variant="plain"
         >
-          <ArrowLeft />
-        </button>
+          <ArrowLeftIcon />
+        </IconButton>
       ) : (
-        <EGovLogo size={22} />
+        <BrandLogo height={22} />
       )}
-      {title ? <h1>{title}</h1> : <span />}
+      {title ? <h1 className="text-center text-md -tracking-[.3px]">{title}</h1> : <span />}
       {profile ? (
-        <ProfileAvatar className="header-avatar" profile={profile} />
+        <ProfileAvatar
+          className="size-9 justify-self-end rounded-full border-2 border-white object-cover shadow-[0_0_0_1px_var(--line)]"
+          profile={profile}
+        />
       ) : (
-        <button
-          className="notification-button"
-          data-cuelume-toggle="tick"
+        <IconButton
           aria-label="Notifications"
+          className="relative justify-self-end"
+          data-cuelume-toggle="tick"
+          variant="soft"
         >
-          <BellSimple weight="fill" />
-          <i />
-        </button>
+          <BellSimpleIcon weight="fill" />
+          <span className="absolute top-[6px] right-[7px] size-2 rounded-full border-2 border-white bg-destructive" />
+        </IconButton>
       )}
     </header>
   );
@@ -364,7 +469,7 @@ export function BusinessLanding({
     if (prompt.trim()) onSubmit(prompt.trim());
   };
   return (
-    <div className="screen bg-[#fafbfe]">
+    <div className="screen bg-canvas-alt">
       <StatusBar />
       <header className="grid h-[58px] grid-cols-[40px_1fr_40px] items-center gap-2.5 px-5 pt-1.5 pb-2">
         <IconButton aria-label="Go back" onClick={onBack} variant="plain">
@@ -392,7 +497,7 @@ export function BusinessLanding({
         id="app-content"
       >
         <section className="flex flex-col items-center px-2.5 pt-[26px] pb-5 text-center">
-          <div className="relative grid size-[62px] rotate-[-4deg] place-items-center rounded-[22px] bg-primary text-white shadow-[0_12px_28px_rgba(7,85,233,0.24)]">
+          <div className="relative grid size-[62px] rotate-[-4deg] place-items-center rounded-2xl bg-primary text-white shadow-[0_12px_28px_rgba(7,85,233,0.24)]">
             <SparkleIcon className="size-[29px]" weight="fill" />
             <span className="absolute -top-1 right-[7px] size-2.5 rounded-full border-2 border-white bg-[var(--egov-orange)]" />
           </div>
@@ -407,7 +512,7 @@ export function BusinessLanding({
           </p>
         </section>
         <form
-          className="rounded-[20px] border-[1.5px] border-[#cfd9ec] bg-white p-[15px] shadow-md transition-[border-color,box-shadow] focus-within:border-primary focus-within:shadow-[0_12px_32px_rgba(7,85,233,0.11)]"
+          className="rounded-2xl border-[1.5px] border-input-strong bg-white p-[15px] shadow-md transition-[border-color,box-shadow] focus-within:border-primary focus-within:shadow-[0_12px_32px_rgba(7,85,233,0.11)]"
           onSubmit={submit}
         >
           <Textarea
@@ -452,7 +557,7 @@ export function BusinessLanding({
             <div className="flex flex-col gap-2">
               {conversations.map((conversation) => (
                 <div
-                  className="grid grid-cols-[minmax(0,1fr)_42px] overflow-hidden rounded-[14px] border border-border bg-white"
+                  className="grid grid-cols-[minmax(0,1fr)_42px] overflow-hidden rounded-lg border border-border bg-white"
                   key={conversation.id}
                 >
                   <button
@@ -475,7 +580,7 @@ export function BusinessLanding({
                   <button
                     aria-label={`Delete ${conversation.title}`}
                     className={cn(
-                      "grid place-items-center border-l border-border text-[#9a493e] hover:bg-[#fff1ef]",
+                      "grid place-items-center border-l border-border text-destructive-ink hover:bg-destructive-soft",
                       FOCUS_RING,
                     )}
                     data-cuelume-toggle="droplet"
@@ -490,14 +595,14 @@ export function BusinessLanding({
           </section>
         )}
         <section className="mt-6 mb-[30px]">
-          <h3 className="mb-2.5 text-[12px] uppercase tracking-[1.1px] text-muted-foreground">
+          <h3 className="mb-2.5 text-sm uppercase tracking-[1.1px] text-muted-foreground">
             Try asking
           </h3>
           <div className="flex flex-col gap-2">
             {suggestions.map(({ icon: Icon, text }) => (
               <button
                 className={cn(
-                  "grid min-h-[62px] w-full grid-cols-[38px_1fr_18px] items-center gap-2.5 rounded-[14px] border border-border bg-white px-3 py-2.5 text-left text-[14px] leading-[1.4] text-foreground",
+                  "grid min-h-[62px] w-full grid-cols-[38px_1fr_18px] items-center gap-2.5 rounded-lg border border-border bg-white px-3 py-2.5 text-left text-base leading-[1.4] text-foreground",
                   FOCUS_RING,
                 )}
                 data-cuelume-toggle="toggle"
@@ -512,7 +617,7 @@ export function BusinessLanding({
                   <Icon className="size-[17px]" />
                 </span>
                 {text}
-                <ArrowRightIcon className="size-4 text-[#8a94a7]" />
+                <ArrowRightIcon className="size-4 text-gray-600" />
               </button>
             ))}
           </div>
@@ -527,11 +632,11 @@ export function BusinessLanding({
           {businessesLoading ? (
             <div className="skeleton-card h-[82px] rounded-xl" />
           ) : businesses?.length === 0 ? (
-            <div className="flex min-h-[82px] items-center gap-3 rounded-xl border border-dashed border-[#cfd8e8] bg-white p-3.5 text-muted-foreground">
+            <div className="flex min-h-[82px] items-center gap-3 rounded-xl border border-dashed border-gray-300 bg-white p-3.5 text-muted-foreground">
               <BriefcaseIcon className="size-[30px] shrink-0 text-primary" weight="duotone" />
               <div className="flex flex-col gap-[3px]">
-                <strong className="text-[14px] text-foreground">No linked businesses yet</strong>
-                <span className="text-[12px] leading-[1.4]">
+                <strong className="text-base text-foreground">No linked businesses yet</strong>
+                <span className="text-sm leading-[1.4]">
                   Complete a registration plan to save its records and tax calendar here.
                 </span>
               </div>
@@ -548,13 +653,13 @@ export function BusinessLanding({
                 >
                   <Card>
                     <CardContent className="grid grid-cols-[44px_1fr_auto] items-center gap-[11px]">
-                      <span className="grid size-11 place-items-center rounded-[14px] bg-secondary text-primary">
+                      <span className="grid size-11 place-items-center rounded-lg bg-secondary text-primary">
                         <BriefcaseIcon className="size-[23px]" weight="duotone" />
                       </span>
                       <div className="flex min-w-0 flex-col">
-                        <strong className="truncate text-[14px]">{business.name}</strong>
-                        <span className="text-[12px] text-muted-foreground">{business.type}</span>
-                        <small className="text-[12px] text-muted-foreground">
+                        <strong className="truncate text-base">{business.name}</strong>
+                        <span className="text-sm text-muted-foreground">{business.type}</span>
+                        <small className="text-sm text-muted-foreground">
                           {business.registrationNumber}
                         </small>
                       </div>
