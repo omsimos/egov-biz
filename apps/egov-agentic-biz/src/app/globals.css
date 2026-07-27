@@ -96,12 +96,13 @@
    actually shipped (both companions rendered `var(--surface)` instead of
    their own colour until this rule moved above them).
 
-   It also means `button:focus-visible` below is load-bearing: any primitive
-   that doesn't carry its own `focus-visible:ring-*` is currently relying on
-   that global rule for a visible focus indicator. The deferred `@layer
-   base` migration of this file must give those primitives their own rings
-   first — moving this file's bespoke CSS into a layer would make this
-   unlayered rule stop winning, deleting their only focus indicator. */
+   The element resets below (`font`, `color`, tap-highlight, `focus-visible`)
+   have since moved into `@layer base`, where they still beat the UA default but
+   no longer outrank utilities. `.screen` and the bespoke screen CSS are what
+   remain unlayered, deliberately. `button:focus-visible` is still load-bearing
+   for any primitive without its own `focus-visible:ring-*`; being in `base`
+   does not remove it, it only lets a component that draws its own ring opt out
+   with `focus-visible:outline-none`. */
 .screen {
   width: 100%;
   height: 100svh;
@@ -194,16 +195,24 @@ body {
     color: inherit;
   }
 }
-button,
-a {
-  -webkit-tap-highlight-color: transparent;
-}
-button:focus-visible,
-textarea:focus-visible,
-input:focus-visible,
-a:focus-visible {
-  outline: 3px solid rgba(7, 85, 233, 0.28);
-  outline-offset: 2px;
+/* The last of the unlayered resets, and the one that caused the most trouble.
+   As a bare rule this outranked @layer utilities, so `focus-visible:outline-none`
+   on a primitive that already draws its own ring did nothing — the Input and
+   Textarea rendered two indicators at once (their own ring plus this outline at
+   2px offset). In @layer base it still beats the UA default and still covers
+   every primitive without its own ring, but a component can now opt out. */
+@layer base {
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:focus-visible,
+  textarea:focus-visible,
+  input:focus-visible,
+  a:focus-visible {
+    outline: 3px solid rgba(7, 85, 233, 0.28);
+    outline-offset: 2px;
+  }
 }
 .skip-link {
   position: fixed;
