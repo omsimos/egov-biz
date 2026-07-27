@@ -6,7 +6,7 @@
    white card and bubble on it. 0-2-0 wins regardless of order. */
 .screen.agent-chat-screen {
   display: grid;
-  grid-template-rows: 36px 62px minmax(0, 1fr) auto;
+  grid-template-rows: 36px 62px minmax(0, 1fr) minmax(0, auto);
   background: var(--canvas);
 }
 .completion-confetti {
@@ -776,11 +776,6 @@
    wins, and chat.css is @imported near the top of globals.css, so a bare
    `.agent-chat-screen` loses and this screen paints white — flattening every
    white card and bubble on it. 0-2-0 wins regardless of order. */
-.screen.agent-chat-screen {
-  display: grid;
-  grid-template-rows: 36px 62px minmax(0, 1fr) auto;
-  background: var(--canvas);
-}
 .chat-header {
   display: grid;
   grid-template-columns: 34px 38px 1fr 34px;
@@ -1286,11 +1281,24 @@
 }
 
 /* Registration plan dock */
+/* Flex, not grid: grid `auto` rows refuse to shrink below their content, so a
+   tall question (five options, help text, an "other" field) pushed past
+   max-height and overflow:hidden clipped the buttons off the bottom. In a flex
+   column the form can shrink and scroll itself, while the plan dock above it
+   holds its height so its own header never clips. */
 .chat-composer-shell {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   max-height: min(76dvh, 680px);
   overflow: hidden;
+}
+.chat-composer-shell > * {
+  flex: 0 0 auto;
+}
+.chat-composer-shell > form {
+  flex: 0 1 auto;
+  min-height: 0;
 }
 .local-permit-processing {
   display: grid;

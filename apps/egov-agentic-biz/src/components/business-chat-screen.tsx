@@ -770,7 +770,11 @@ function QuestionComposer({
             <ArrowLeft /> Back
           </Button>
         )}
-        <Button block type="submit" disabled={!canContinue || disabled}>
+        {/* flex-1 rather than `block`: block is w-full, and Button's base
+            carries shrink-0, so beside the Back button it demanded 100% of the
+            row and ran off the right edge. `shrink` comes last so twMerge drops
+            the shrink-0. */}
+        <Button className="min-w-0 flex-1 shrink" type="submit" disabled={!canContinue || disabled}>
           {lastQuestion ? "Continue" : "Next question"} <ArrowRightIcon weight="bold" />
         </Button>
       </div>
