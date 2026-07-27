@@ -121,7 +121,7 @@ export function ComplianceResultCard({
           <ShieldCheck weight="duotone" />
         </span>
         <div>
-          <small>SETUP RESULT</small>
+          <small>Setup result</small>
           <strong>{title}</strong>
           <p>{subtitle}</p>
         </div>
@@ -177,7 +177,7 @@ export function BarangayClearanceCard({
           <Certificate weight="duotone" />
         </span>
         <div>
-          <small>ELECTRONIC BARANGAY CLEARANCE</small>
+          <small>Electronic barangay clearance</small>
           <strong>
             {clearance.barangay}, {clearance.city}
           </strong>
@@ -212,7 +212,7 @@ export function BarangayClearanceCard({
         ]}
       />
       <section>
-        <small>DOCUMENTS SUBMITTED</small>
+        <small>Documents submitted</small>
         <ul>
           {clearance.supportingDocuments.map((document) => (
             <li key={document}>
@@ -222,7 +222,7 @@ export function BarangayClearanceCard({
         </ul>
       </section>
       <section className="local-permit-use">
-        <small>USED FOR</small>
+        <small>Used for</small>
         <ul>
           {clearance.usedFor.map((use) => (
             <li key={use}>
@@ -234,7 +234,7 @@ export function BarangayClearanceCard({
       {!approved && (
         <footer className="local-permit-payment">
           <div>
-            <small>BARANGAY CLEARANCE FEE</small>
+            <small>Barangay clearance fee</small>
             <strong>{clearance.feeLabel}</strong>
           </div>
           <button
@@ -318,7 +318,7 @@ export function EbplsPermitCard({
         ]}
       />
       <section>
-        <small>ATTACHMENTS SENT</small>
+        <small>Attachments sent</small>
         <ul>
           {receipt.attachments.map((attachment) => (
             <li key={attachment}>
@@ -330,7 +330,7 @@ export function EbplsPermitCard({
       {!issued && (
         <footer className="local-permit-payment">
           <div>
-            <small>ASSESSED LGU FEES</small>
+            <small>Assessed LGU fees</small>
             <strong>{receipt.feeLabel}</strong>
           </div>
           <button
@@ -448,8 +448,8 @@ function PlanDock({
           )}
         </span>
         <span className="grid min-w-0 gap-0.5">
-          <small className="text-2xs font-black tracking-[0.06em] text-muted-foreground">
-            {expanded ? "REGISTRATION PLAN" : "CURRENT TASK"}
+          <small className="text-xs font-bold text-muted-foreground">
+            {expanded ? "Registration plan" : "Current task"}
           </small>
           <strong className="truncate text-xs leading-[1.35]">
             {expanded ? plan.title : currentLabel}
@@ -619,7 +619,7 @@ function QuestionComposer({
         </span>
         <div className="grid gap-1">
           {pending.questions.length > 1 && (
-            <small className="text-2xs font-black uppercase tracking-[0.06em] text-muted-foreground">
+            <small className="text-xs font-bold text-muted-foreground">
               Question {questionIndex + 1} of {pending.questions.length}
             </small>
           )}
@@ -806,7 +806,7 @@ function SearchTool({
         <MagnifyingGlassIcon className="size-4 text-primary" />
       )}
       <div className="grid min-w-0 gap-0.5">
-        <small className="text-2xs font-extrabold uppercase tracking-[0.04em] text-muted-foreground">
+        <small className="text-xs font-bold text-muted-foreground">
           {complete
             ? "Searched official sources"
             : failed
@@ -853,8 +853,8 @@ export function DtiFormCard({
           DTI
         </span>
         <div className="grid gap-0.5">
-          <small className="text-2xs font-extrabold tracking-[0.05em] text-muted-foreground">
-            BUSINESS NAME REGISTRATION
+          <small className="text-xs font-bold text-muted-foreground">
+            Business name registration
           </small>
           <strong className="text-base">Application draft</strong>
         </div>
@@ -894,7 +894,7 @@ export function DtiFormCard({
       </div>
       <div className="grid gap-[9px] border-t border-gray-200 px-[13px] pt-[11px] pb-[13px]">
         <div className="flex items-center justify-between gap-2.5">
-          <small className="text-2xs font-extrabold text-muted-foreground">PAYMENT</small>
+          <small className="text-2xs font-extrabold text-muted-foreground">Payment</small>
           <strong className="text-xs tabular-nums">{form.feeLabel}</strong>
         </div>
         <Button
@@ -939,7 +939,7 @@ function BirFormArtifactCard({
         <FilePdf weight="fill" />
       </span>
       <span className="pdf-artifact-copy">
-        <small>PDF ARTIFACT</small>
+        <small>PDF artifact</small>
         <strong>BIR Form 1901</strong>
         <span>
           {artifact.pageCount} pages · {Math.max(1, Math.round(artifact.size / 1024))} KB
@@ -1052,7 +1052,7 @@ function ToolPart({
             <FileText weight="duotone" />
           </span>
           <div>
-            <small>BIR REGISTRATION CHECKPOINT</small>
+            <small>BIR registration checkpoint</small>
             <strong>{part.output.status}</strong>
           </div>
           <i>Prepared</i>
@@ -1123,7 +1123,7 @@ function ToolPart({
           <Storefront weight="duotone" />
         </span>
         <div>
-          <small>ALL SET UP</small>
+          <small>All set up</small>
           <strong>{part.output.businessName}</strong>
           <p>Open records and tax calendar</p>
         </div>
@@ -1270,9 +1270,7 @@ export function PaymentDialog({
           <span className="mb-2 grid size-12 place-items-center rounded-xl bg-secondary text-primary">
             <ShieldCheck className="size-[26px]" weight="duotone" />
           </span>
-          <span className="text-2xs font-black uppercase tracking-[0.08em] text-primary">
-            eGovPay
-          </span>
+          <span className="text-xs font-bold text-primary">eGovPay</span>
           <DialogTitle className="mt-1 mb-1">Continue to secure payment</DialogTitle>
           <DialogDescription>
             You’ll continue to eGovPay in this tab. This demo will mark the fee paid while webhook
@@ -1343,7 +1341,7 @@ function PdfPreviewDialog({
             <FilePdf weight="fill" />
           </span>
           <div>
-            <small>PDF PREVIEW</small>
+            <small>PDF preview</small>
             <h2 id="pdf-preview-title">BIR Form 1901</h2>
           </div>
           <button

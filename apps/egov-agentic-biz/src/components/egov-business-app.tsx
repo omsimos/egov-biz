@@ -101,8 +101,8 @@ export function BusinessDetailScreen({
                   <StorefrontIcon className="size-[26px]" weight="duotone" />
                 </span>
                 <div className="min-w-0">
-                  <span className="mb-1 block text-2xs font-extrabold tracking-[0.06em] text-white/70">
-                    LINKED TO {business.tinMasked || "YOUR EGOV ACCOUNT"}
+                  <span className="mb-1 block text-xs font-bold text-white/70">
+                    Linked to {business.tinMasked || "your eGov account"}
                   </span>
                   <h1 className="text-lg leading-tight">{business.name}</h1>
                   <p className="mt-1 text-xs text-white/85">
@@ -206,9 +206,7 @@ export function BusinessDetailScreen({
                 >
                   <CalendarDotsIcon className="size-[30px] text-primary" weight="duotone" />
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-2xs font-black tracking-[0.06em] text-primary">
-                      NEXT TAX REMINDER
-                    </span>
+                    <span className="text-xs font-bold text-primary">Next tax reminder</span>
                     <strong className="text-xs">
                       {business.taxObligations[0]?.title ?? "No reminders scheduled"}
                     </strong>
@@ -228,8 +226,8 @@ export function BusinessDetailScreen({
               <TabsContent className="flex flex-col gap-2.5" value="files">
                 <header className="flex items-center justify-between">
                   <div>
-                    <span className="mb-0.5 block text-2xs font-extrabold tracking-[0.05em] text-primary">
-                      DOCUMENT VAULT
+                    <span className="mb-0.5 block text-xs font-bold text-primary">
+                      Document vault
                     </span>
                     <h2 className="text-md font-extrabold -tracking-[.2px]">Business files</h2>
                   </div>
@@ -253,7 +251,7 @@ export function BusinessDetailScreen({
                           <FileTextIcon weight="duotone" />
                         </span>
                         <div className="flex min-w-0 flex-col gap-0.5">
-                          <span className="text-2xs font-black tracking-[0.05em] text-primary uppercase">
+                          <span className="text-xs font-bold text-primary">
                             {file.documentType}
                           </span>
                           <strong className="text-xs">{file.title}</strong>
@@ -331,8 +329,8 @@ export function BusinessDetailScreen({
               <TabsContent className="flex flex-col gap-2.5" value="calendar">
                 <header className="flex items-center justify-between px-0.5">
                   <div>
-                    <span className="mb-0.5 block text-2xs font-extrabold tracking-[0.05em] text-primary">
-                      TAX CALENDAR
+                    <span className="mb-0.5 block text-xs font-bold text-primary">
+                      Tax calendar
                     </span>
                     <h2 className="text-md font-extrabold -tracking-[.2px]">
                       Upcoming obligations
@@ -472,8 +470,8 @@ export function BusinessLanding({
             <SparkleIcon className="size-[29px]" weight="fill" />
             <span className="absolute -top-1 right-[7px] size-2.5 rounded-full border-2 border-white bg-[var(--egov-orange)]" />
           </div>
-          <span className="mt-[17px] inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-[1.2px] text-primary">
-            <ShieldCheckIcon className="size-[13px]" weight="fill" /> eGOVPH
+          <span className="mt-[17px] inline-flex items-center gap-1.5 text-xs font-bold text-primary">
+            <ShieldCheckIcon className="size-[13px]" weight="fill" /> eGovPH
           </span>
           <h2 className="mt-2.5 mb-2 text-2xl leading-[1.03] tracking-[-1.5px] text-balance">
             Describe your business
@@ -502,7 +500,7 @@ export function BusinessLanding({
             value={prompt}
           />
           <div className="mt-2.5 flex items-center justify-between">
-            <span className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-[.7px] text-primary">
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-primary">
               <ShieldCheckIcon className="size-[13px]" weight="fill" />
               Your details stay private
             </span>
@@ -520,9 +518,7 @@ export function BusinessLanding({
         {conversations.length > 0 && (
           <section className="mt-6 mb-7">
             <div className="mb-3">
-              <small className="mb-0.5 block text-2xs font-extrabold tracking-[1.3px] text-primary">
-                SAVED SESSIONS
-              </small>
+              <small className="mb-0.5 block text-xs font-bold text-primary">Saved sessions</small>
               <h2 className="text-lg -tracking-[.5px]">Registration plans</h2>
             </div>
             <div className="flex flex-col gap-2">
@@ -566,9 +562,7 @@ export function BusinessLanding({
           </section>
         )}
         <section className="mt-6 mb-[30px]">
-          <h3 className="mb-2.5 text-sm uppercase tracking-[1.1px] text-muted-foreground">
-            Try asking
-          </h3>
+          <h3 className="mb-2.5 text-sm text-muted-foreground">Try asking</h3>
           <div className="flex flex-col gap-2">
             {suggestions.map(({ icon: Icon, text }) => (
               <button
@@ -595,8 +589,8 @@ export function BusinessLanding({
         </section>
         <section>
           <div className="mb-[13px]">
-            <small className="mb-0.5 block text-2xs font-extrabold tracking-[1.3px] text-primary">
-              LINKED TO YOUR TIN
+            <small className="mb-0.5 block text-xs font-bold text-primary">
+              Linked to your TIN
             </small>
             <h2 className="text-lg -tracking-[.5px]">Your businesses</h2>
           </div>
@@ -807,9 +801,7 @@ export function EgaphBusinessApp({
         className="hidden min-[760px]:flex min-[760px]:w-[min(410px,100%)] min-[760px]:flex-col min-[760px]:justify-self-end"
       >
         <BrandLogo height={30} />
-        <p className="mt-5 mb-[5px] text-xs font-extrabold tracking-[1.5px] text-primary uppercase">
-          Business
-        </p>
+        <p className="mt-5 mb-[5px] text-xs font-bold text-primary">Business</p>
         <h2 className="m-0 text-[clamp(40px,4vw,60px)] leading-[0.98] tracking-[-2.5px]">
           Start your business,
           <br />

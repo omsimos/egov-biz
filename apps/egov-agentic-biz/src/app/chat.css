@@ -149,7 +149,6 @@
   color: var(--blue);
   font-size: 9px;
   font-weight: 900;
-  letter-spacing: 0.08em;
 }
 .compliance-result-card strong,
 .business-finalized-card strong {
@@ -257,7 +256,6 @@
   color: var(--blue);
   font-size: 9px;
   font-weight: 900;
-  letter-spacing: 0.07em;
 }
 .self-employed-setup-card > header strong {
   font-size: 12px;
@@ -515,13 +513,6 @@
   display: grid;
   gap: 2px;
 }
-.chat-tool-row small {
-  color: #7b879b;
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
 .chat-tool-row span {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -579,7 +570,6 @@
   color: #7b879a;
   font-size: 9px;
   font-weight: 900;
-  letter-spacing: 0.06em;
 }
 .pdf-artifact-copy strong {
   font-size: 14px;
@@ -676,7 +666,6 @@
   color: #7a879a;
   font-size: 9px;
   font-weight: 900;
-  letter-spacing: 0.06em;
 }
 .pdf-preview-dialog > header h2 {
   margin: 0;
@@ -1034,8 +1023,6 @@
   color: #7b879b;
   font-size: 10px;
   font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 .chat-tool-row span {
   overflow: hidden;
@@ -1336,8 +1323,6 @@
   color: #62728a;
   font-size: 9px;
   font-weight: 900;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 .local-permit-processing strong {
   font-size: 13px;
@@ -1390,7 +1375,6 @@
   color: #718095;
   font-size: 9px;
   font-weight: 900;
-  letter-spacing: 0.07em;
 }
 .local-permit-card > header strong {
   overflow: hidden;
@@ -1514,7 +1498,6 @@
 .local-permit-card > footer small {
   font-size: 9px;
   font-weight: 900;
-  letter-spacing: 0.07em;
 }
 .local-permit-card > footer strong {
   color: #3c4a61;
@@ -1550,7 +1533,6 @@
   color: #806b42;
   font-size: 9px;
   font-weight: 900;
-  letter-spacing: 0.07em;
 }
 .local-permit-payment > div strong {
   color: #252f43;

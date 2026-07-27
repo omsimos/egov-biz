@@ -116,7 +116,7 @@ export function HomeScreen({
                     : "bg-gray-100 text-gray-500",
                 )}
               >
-                <Icon className="size-[31px]" weight="duotone" />
+                <Icon className="size-[31px]" weight="fill" />
               </span>
             );
             const caption = (
@@ -166,12 +166,10 @@ export function HomeScreen({
             className="pointer-events-none absolute -top-[60px] -right-[58px] size-[100px] rounded-full bg-[var(--egov-orange)]"
           />
           <span className="grid size-12 place-items-center rounded-lg bg-white text-primary">
-            <StorefrontIcon className="size-[29px]" weight="duotone" />
+            <StorefrontIcon className="size-[29px]" weight="fill" />
           </span>
           <span className="relative z-10 flex flex-col">
-            <small className="text-2xs font-extrabold tracking-[1.2px] text-primary-border">
-              NEW IN eGOVPH
-            </small>
+            <small className="text-xs font-bold text-primary-border">New in eGovPH</small>
             <strong className="my-0.5 text-base">Start and grow your business</strong>
             <span className="text-sm text-primary-border">
               One guided path across government services
@@ -183,8 +181,8 @@ export function HomeScreen({
         <section aria-label="Featured for you" className="px-[18px]">
           <div className="mb-[13px] flex items-end justify-between">
             <div>
-              <small className="mb-0.5 block text-2xs font-extrabold tracking-[1.3px] text-primary">
-                CONNECTED SERVICES
+              <small className="mb-0.5 block text-xs font-bold text-primary">
+                Connected services
               </small>
               <h2 className="text-lg -tracking-[.5px]">Featured for you</h2>
             </div>
@@ -215,7 +213,7 @@ export function HomeScreen({
                   aria-hidden="true"
                   className="absolute -right-2.5 -bottom-4 grid h-[93px] w-[105px] place-items-center rounded-[55%_0_0_0] bg-gray-50 text-primary"
                 >
-                  <Icon className="size-[55px]" weight="duotone" />
+                  <Icon className="size-[55px]" weight="fill" />
                 </div>
               </Card>
             ))}

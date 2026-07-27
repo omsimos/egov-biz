@@ -214,7 +214,7 @@ export function LoginScreen({ initialError }: { initialError?: string }) {
           aria-label="eGovPH sign in"
           className="relative z-[2] mt-[17px] grid justify-items-center"
         >
-          <span className="text-xs font-bold text-gray-500 uppercase">or</span>
+          <span className="text-xs font-bold text-gray-500">or</span>
           <div id="egov-sso-widget-button" />
           <p className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
             <ServiceLogo

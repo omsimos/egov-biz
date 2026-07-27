@@ -173,8 +173,15 @@ textarea,
 input {
   font: inherit;
 }
-button {
-  color: inherit;
+/* In @layer base, not unlayered. Unlayered declarations outrank anything in
+   @layer utilities regardless of specificity, so as a bare rule this defeated
+   `text-primary-foreground` on every <button> in the app — the Home CTA
+   rendered its title and arrow in body ink on brand blue. Base sits below
+   utilities, so it still overrides the UA default without eating them. */
+@layer base {
+  button {
+    color: inherit;
+  }
 }
 button,
 a {
