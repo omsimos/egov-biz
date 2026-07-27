@@ -540,9 +540,12 @@ export function BusinessLanding({
   const plansSection = conversations.length > 0 && (
     <section className="mt-7">
       <div className="mb-3">
-        <small className="mb-0.5 block text-xs font-bold text-primary">
-          {returning ? "In progress" : "Saved sessions"}
-        </small>
+        {/* Deliberately not "In progress": ConversationSummary carries only
+            id/title/initialPrompt/activeStreamId/createdAt/updatedAt, so this
+            screen cannot tell a finished plan from an abandoned one. Saying
+            otherwise is a claim the data does not support. Per-plan status wants
+            the summary to carry the latest plan's step counts. */}
+        <small className="mb-0.5 block text-xs font-bold text-primary">Saved sessions</small>
         <h2 className="text-lg -tracking-[.5px]">Registration plans</h2>
       </div>
       <div className="flex flex-col gap-2">
