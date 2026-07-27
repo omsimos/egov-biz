@@ -54,7 +54,7 @@
   --color-destructive-border: var(--destructive-border);
   --color-destructive-ink: var(--destructive-ink);
   --color-destructive-hover: var(--destructive-hover);
-  --color-canvas-alt: var(--canvas-alt);
+  --color-canvas: var(--canvas);
   --color-input-strong: var(--input-strong);
   --color-line-soft: var(--line-soft);
   --radius-sm: calc(var(--radius) - 5px);
@@ -84,7 +84,7 @@
    (Tailwind utilities live in `@layer utilities`, and cascade layers make an
    unlayered normal declaration win over a layered one regardless of
    specificity or source order). A `className="screen bg-…"` needs the `!`
-   important modifier (e.g. `bg-gray-50!`) to actually take effect.
+   important modifier (e.g. `bg-canvas!`) to actually take effect.
 
    The same equal-specificity rule (0,1,0) also defeats companion classes
    declared *above* this one in this file — `.business-detail-screen` and
@@ -113,7 +113,7 @@
 
 /* Linked business record */
 .business-detail-screen {
-  background: #f7f9fc;
+  background: var(--canvas);
 }
 .business-detail-scroll {
   height: calc(100% - 36px - 58px - 76px);
@@ -234,7 +234,7 @@ a:focus-visible {
   color: var(--ink);
 }
 .preview-cards-screen {
-  background: #f4f6fa;
+  background: var(--canvas);
 }
 .preview-cards-scroll {
   height: calc(100% - 36px);

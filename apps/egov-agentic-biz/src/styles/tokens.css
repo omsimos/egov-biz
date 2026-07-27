@@ -101,7 +101,6 @@
   --destructive-hover: #d93b3b; /* 4.5pts darker than --destructive, matching --primary-hover's delta */
 
   /* Handoff values that were used on screen but never named. */
-  --canvas-alt: #fafbfe; /* Business landing page background */
   --input-strong: #cfd9ec; /* emphasised input / outline-button border */
   --line-soft: #edf0f5; /* border on blurred and nav surfaces (lighter than Line) */
 }

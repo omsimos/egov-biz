@@ -444,7 +444,7 @@ export function BusinessLanding({
     if (prompt.trim()) onSubmit(prompt.trim());
   };
   return (
-    <div className="screen bg-canvas-alt!">
+    <div className="screen">
       <StatusBar />
       <header className="grid h-[58px] grid-cols-[40px_1fr_40px] items-center gap-2.5 px-5 pt-1.5 pb-2">
         <IconButton aria-label="Go back" onClick={onBack} variant="plain">
@@ -827,7 +827,7 @@ export function EgaphBusinessApp({
         {status === "loading" ? (
           <div
             aria-live="polite"
-            className="screen grid place-content-center justify-items-center gap-4 bg-gray-50! text-muted-foreground"
+            className="screen grid place-content-center justify-items-center gap-4 bg-canvas! text-muted-foreground"
             role="status"
           >
             <div className="grid size-[58px] animate-[auth-pulse_1.2s_ease-in-out_infinite_alternate] place-items-center rounded-[19px] bg-primary text-white motion-reduce:animate-none!">
@@ -840,7 +840,7 @@ export function EgaphBusinessApp({
         ) : (
           <>
             {screen === "restoring" && (
-              <div className="screen bg-gray-100!">
+              <div className="screen bg-canvas!">
                 <StatusBar />
                 <div
                   className="flex h-[calc(100%-36px)] flex-col items-center justify-center px-[38px] text-center"
