@@ -168,10 +168,16 @@ body {
   font-family: var(--font-ui), "Nunito Sans", ui-rounded, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
-button,
-textarea,
-input {
-  font: inherit;
+/* In @layer base for the same reason as the color reset below: unlayered, this
+   outranked @layer utilities and so ate `text-sm` and `font-extrabold` on every
+   <button> in the app — primary buttons rendered at the body's 15px/400 rather
+   than the 13px/800 their variant asks for. */
+@layer base {
+  button,
+  textarea,
+  input {
+    font: inherit;
+  }
 }
 /* In @layer base, not unlayered. Unlayered declarations outrank anything in
    @layer utilities regardless of specificity, so as a bare rule this defeated
@@ -470,6 +476,47 @@ a:focus-visible {
   animation: shimmer 1.4s infinite;
   border: 0;
 }
+/* Current-step marker in the registration plan. Sized by the caller; the two
+   layers fill it proportionally so one component covers 11px and 16px alike. */
+.pulse-dot {
+  display: inline-grid;
+  place-items: center;
+}
+.pulse-dot i {
+  grid-area: 1 / 1;
+  border-radius: 50%;
+  background: currentColor;
+}
+.pulse-dot-core {
+  width: 42%;
+  height: 42%;
+}
+.pulse-dot-ring {
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  animation: pulse-dot 1.6s cubic-bezier(0.3, 0, 0.5, 1) infinite;
+}
+@keyframes pulse-dot {
+  0% {
+    transform: scale(0.42);
+    opacity: 0.5;
+  }
+  70%,
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+/* Still reads as "here" without the motion — the halo just holds still. */
+@media (prefers-reduced-motion: reduce) {
+  .pulse-dot-ring {
+    animation: none;
+    opacity: 0.22;
+    transform: scale(0.8);
+  }
+}
+
 @keyframes shimmer {
   to {
     background-position: -200% 0;

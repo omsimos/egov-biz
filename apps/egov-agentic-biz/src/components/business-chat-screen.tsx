@@ -11,7 +11,6 @@ import {
   CheckCircleIcon,
   CheckIcon,
   CircleNotch,
-  CircleNotchIcon,
   Buildings,
   CalendarDots,
   Certificate,
@@ -52,6 +51,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { FieldHint, FieldLabel } from "@/components/ui/field";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
+import { PulseDot } from "@/components/ui/pulse-dot";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
 import type { BirFormArtifact } from "@/lib/bir-form/artifact";
@@ -442,7 +442,7 @@ function PlanDock({
           {allResolved || current?.status === "completed" ? (
             <CheckIcon className="size-4" weight="bold" />
           ) : current?.status === "in_progress" ? (
-            <CircleNotchIcon className="size-4 animate-spin" weight="bold" />
+            <PulseDot className="size-4" />
           ) : (
             <ListChecksIcon className="size-4" weight="duotone" />
           )}
@@ -529,7 +529,7 @@ function PlanDock({
                     ) : step.status === "completed" ? (
                       <CheckIcon className="size-[11px]" weight="bold" />
                     ) : step.status === "in_progress" ? (
-                      <CircleNotchIcon className="size-[11px] animate-spin" weight="bold" />
+                      <PulseDot className="size-[11px]" />
                     ) : null}
                   </span>
                   <span>

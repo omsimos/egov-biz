@@ -822,7 +822,7 @@ export function EgaphBusinessApp({
         {/* The "Business" eyebrow that sat here said the same word the lockup
             says, 5px below it. No hard <br> either: it was set for one width
             and fought the wrap the 410px column already forces at every other. */}
-        <h2 className="m-0 text-[clamp(40px,4vw,60px)] leading-[0.98] -tracking-[0.032em] text-balance">
+        <h2 className="m-0 text-[clamp(40px,4vw,60px)] leading-[0.98] -tracking-[0.032em] text-balance font-bold">
           Start your business, step by step.
         </h2>
         <p className="m-0 max-w-[380px] text-md leading-[1.5] text-muted-foreground">
