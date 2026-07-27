@@ -576,7 +576,7 @@ export function BusinessLanding({
             {suggestions.map(({ icon: Icon, text }) => (
               <button
                 className={cn(
-                  "grid min-h-[62px] w-full grid-cols-[38px_1fr_18px] items-center gap-2.5 rounded-lg border border-border bg-white px-3 py-2.5 text-left text-base leading-[1.4] text-foreground",
+                  "grid min-h-[62px] w-full grid-cols-[38px_1fr_18px] items-center gap-2.5 rounded-lg border border-border bg-white px-3 py-2.5 text-left text-base leading-[1.4] font-semibold text-foreground",
                   FOCUS_RING,
                 )}
                 data-cuelume-toggle="toggle"

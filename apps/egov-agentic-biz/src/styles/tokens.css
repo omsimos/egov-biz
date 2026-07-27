@@ -121,6 +121,7 @@
   --text-display: 2.875rem; /* 46px */
 
   --fw-regular: 400;
+  --fw-medium: 500; /* DEPTH-adjacent addition — the app's base UI weight, see body in globals.css */
   --fw-semibold: 600;
   --fw-bold: 700;
   --fw-heavy: 800;

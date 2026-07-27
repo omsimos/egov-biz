@@ -120,7 +120,7 @@ export function HomeScreen({
               </span>
             );
             const caption = (
-              <span className={business ? "font-black" : "font-normal text-gray-600"}>{label}</span>
+              <span className={business ? "font-black" : "text-gray-600"}>{label}</span>
             );
             // Only Business is wired to anything. The rest are a service
             // directory, so they render as plain content — a <button> that

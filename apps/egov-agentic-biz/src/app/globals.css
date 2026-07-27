@@ -166,6 +166,11 @@ body {
   color: var(--ink);
   background: var(--canvas);
   font-family: var(--font-ui), "Nunito Sans", ui-rounded, system-ui, sans-serif;
+  /* 500, not the handoff's 400. Nunito Sans is a humanist face with open
+     counters and thin terminals; at 400 on white it reads underweight at UI
+     sizes, which is fine for long prose and wrong for labels and list rows.
+     Only reachable because the font is loaded as a variable axis above. */
+  font-weight: 500;
   -webkit-font-smoothing: antialiased;
 }
 /* In @layer base for the same reason as the color reset below: unlayered, this

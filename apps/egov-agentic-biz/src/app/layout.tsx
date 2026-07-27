@@ -3,11 +3,15 @@ import { Nunito_Sans } from "next/font/google";
 import { InteractionSounds } from "@/components/interaction-sounds";
 import "./globals.css";
 
+// No `weight` list on purpose. Nunito Sans is a variable font, and naming
+// discrete weights makes next/font emit one @font-face per weight over the same
+// file — which snaps anything in between to the nearest named step (500 would
+// render as 400). Omitting it exposes the whole wght axis from one download, so
+// the UI can sit at 500 without a second file.
 const nunito = Nunito_Sans({
   display: "swap",
   subsets: ["latin"],
   variable: "--font-ui",
-  weight: ["400", "600", "700", "800", "900"],
 });
 
 export const metadata: Metadata = {
