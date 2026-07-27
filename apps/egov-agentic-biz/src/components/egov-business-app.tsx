@@ -796,24 +796,29 @@ export function EgaphBusinessApp({
   };
   return (
     <div className="prototype-stage">
+      {/* items-start as well as the definite width on BrandLogo: this column
+          would otherwise stretch every child to 410px, which is what distorted
+          the lockup and would stretch the SSO pill edge to edge too. gap
+          replaces four ad-hoc margins (mt-5/mb-[5px]/mt-5/mt-[55px]). */}
       <div
         aria-hidden="true"
-        className="hidden min-[760px]:flex min-[760px]:w-[min(410px,100%)] min-[760px]:flex-col min-[760px]:justify-self-end"
+        className="hidden min-[760px]:flex min-[760px]:w-[min(410px,100%)] min-[760px]:flex-col min-[760px]:items-start min-[760px]:gap-6 min-[760px]:justify-self-end"
       >
         <BrandLogo height={30} />
-        <p className="mt-5 mb-[5px] text-xs font-bold text-primary">Business</p>
-        <h2 className="m-0 text-[clamp(40px,4vw,60px)] leading-[0.98] tracking-[-2.5px]">
+        {/* The "Business" eyebrow that sat here said the same word the lockup
+            says, 5px below it. */}
+        <h2 className="m-0 text-[clamp(40px,4vw,60px)] leading-[0.98] -tracking-[0.032em]">
           Start your business,
           <br />
           step by step.
         </h2>
-        <span className="mt-5 max-w-[360px] text-base leading-[1.55] text-muted-foreground">
+        <span className="max-w-[360px] text-md leading-[1.5] text-muted-foreground">
           One clear path through government services.
         </span>
-        <div className="mt-[55px] flex items-center gap-2 text-xs text-muted-foreground">
-          <ShieldCheckIcon className="size-[15px] shrink-0 text-success" weight="fill" />
-          <span>Live eGov SSO</span>
-        </div>
+        <span className="mt-3 inline-flex items-center gap-2 rounded-full border border-success-border bg-success-soft px-3 py-1.5 text-xs font-bold text-success-ink">
+          <ShieldCheckIcon className="size-[14px] shrink-0 text-success" weight="fill" />
+          Live eGov SSO
+        </span>
       </div>
       <div className="phone-shell">
         {status === "loading" ? (

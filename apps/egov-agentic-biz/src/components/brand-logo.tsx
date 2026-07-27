@@ -8,6 +8,13 @@ import logo from "../../public/images/egovbusiness-logo.png";
 //
 // next/image is mandatory here, not stylistic: the source is 2172x724 / 308 KB
 // and must never be served at full resolution for a 23px-tall mark.
+// 2172 / 724. The width has to be a definite length, not `auto`: a flex column
+// defaults to align-items:stretch, which only stretches a cross-size of `auto`.
+// As `width: auto` this mark was pulled to its container's full width while
+// `height` stayed put — the desktop panel rendered the lockup at 13.7:1 instead
+// of 3:1, and next/image had sized its srcset for the 90px it expected.
+const ASPECT = 3;
+
 export function BrandLogo({
   className,
   height = 23,
@@ -17,6 +24,7 @@ export function BrandLogo({
   height?: number;
   priority?: boolean;
 }) {
+  const width = Math.round(height * ASPECT);
   return (
     <Image
       alt="eGOVbusiness"
@@ -24,7 +32,8 @@ export function BrandLogo({
       height={height}
       priority={priority}
       src={logo}
-      style={{ height, width: "auto" }}
+      style={{ height, width }}
+      width={width}
     />
   );
 }
