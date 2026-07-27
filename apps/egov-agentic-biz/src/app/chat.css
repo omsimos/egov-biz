@@ -1,8 +1,13 @@
 /* Human-in-the-loop business chat */
-.agent-chat-screen {
+/* Compound selector on purpose: `.screen` is unlayered and sets
+   `background: var(--surface)` (white). At equal specificity the later rule
+   wins, and chat.css is @imported near the top of globals.css, so a bare
+   `.agent-chat-screen` loses and this screen paints white — flattening every
+   white card and bubble on it. 0-2-0 wins regardless of order. */
+.screen.agent-chat-screen {
   display: grid;
   grid-template-rows: 36px 62px minmax(0, 1fr) auto;
-  background: #f4f6fa;
+  background: var(--canvas);
 }
 .completion-confetti {
   position: absolute;
@@ -777,10 +782,15 @@
   }
 }
 /* Human-in-the-loop business chat */
-.agent-chat-screen {
+/* Compound selector on purpose: `.screen` is unlayered and sets
+   `background: var(--surface)` (white). At equal specificity the later rule
+   wins, and chat.css is @imported near the top of globals.css, so a bare
+   `.agent-chat-screen` loses and this screen paints white — flattening every
+   white card and bubble on it. 0-2-0 wins regardless of order. */
+.screen.agent-chat-screen {
   display: grid;
   grid-template-rows: 36px 62px minmax(0, 1fr) auto;
-  background: #f4f6fa;
+  background: var(--canvas);
 }
 .chat-header {
   display: grid;
