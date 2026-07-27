@@ -515,6 +515,11 @@ a:focus-visible {
     grid-template-columns: minmax(300px, 440px) 410px;
     gap: clamp(35px, 7vw, 110px);
     padding: 38px;
+    /* Overrides the base `place-items: center`. Centring both columns
+       independently gave the rail and the device no shared horizon, and a rail
+       that grows as copy is added drifts upward against a fixed-height phone,
+       moving the whole composition. */
+    align-items: start;
   }
   .phone-shell {
     width: 390px;

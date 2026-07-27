@@ -45,6 +45,15 @@ import { cn, FOCUS_RING } from "@/lib/utils";
 
 type Screen = "restoring" | "home" | "business" | "business-detail" | "chat";
 
+// Shown on the signed-out desktop rail. A four-step summary of the shape of
+// the ten-step plan the agent builds, not a replacement for it.
+const registrationOutline = [
+  { detail: "DTI, or SEC for a corporation", step: "01", title: "Register the name" },
+  { detail: "Where the business operates", step: "02", title: "Barangay clearance" },
+  { detail: "Your city or municipality", step: "03", title: "Mayor’s permit" },
+  { detail: "And the correct RDO", step: "04", title: "Register with BIR" },
+];
+
 const suggestions = [
   { icon: CoffeeIcon, text: "I want to start a coffee subscription business in Makati" },
   { icon: LaptopIcon, text: "I’m a freelancer and want to register with BIR" },
@@ -796,26 +805,49 @@ export function EgaphBusinessApp({
   };
   return (
     <div className="prototype-stage">
-      {/* items-start as well as the definite width on BrandLogo: this column
+      {/* Not aria-hidden any more. It was, correctly, while this rail only
+          restated the phone beside it — but the four steps below exist nowhere
+          else in the signed-out app, so hiding them from screen readers would
+          hide the only copy of that information.
+
+          items-start as well as the definite width on BrandLogo: this column
           would otherwise stretch every child to 410px, which is what distorted
           the lockup and would stretch the SSO pill edge to edge too. gap
-          replaces four ad-hoc margins (mt-5/mb-[5px]/mt-5/mt-[55px]). */}
-      <div
-        aria-hidden="true"
-        className="hidden min-[760px]:flex min-[760px]:w-[min(410px,100%)] min-[760px]:flex-col min-[760px]:items-start min-[760px]:gap-6 min-[760px]:justify-self-end"
-      >
+          replaces four ad-hoc margins (mt-5/mb-[5px]/mt-5/mt-[55px]).
+
+          pt = the phone's 10px bezel + its status bar's 11px top padding, so
+          the lockup starts on the same line as the time. */}
+      <div className="hidden min-[760px]:flex min-[760px]:w-[min(410px,100%)] min-[760px]:flex-col min-[760px]:items-start min-[760px]:gap-6 min-[760px]:justify-self-end min-[760px]:pt-[21px]">
         <BrandLogo height={30} />
         {/* The "Business" eyebrow that sat here said the same word the lockup
-            says, 5px below it. */}
-        <h2 className="m-0 text-[clamp(40px,4vw,60px)] leading-[0.98] -tracking-[0.032em]">
-          Start your business,
-          <br />
-          step by step.
+            says, 5px below it. No hard <br> either: it was set for one width
+            and fought the wrap the 410px column already forces at every other. */}
+        <h2 className="m-0 text-[clamp(40px,4vw,60px)] leading-[0.98] -tracking-[0.032em] text-balance">
+          Start your business, step by step.
         </h2>
-        <span className="max-w-[360px] text-md leading-[1.5] text-muted-foreground">
-          One clear path through government services.
-        </span>
-        <span className="mt-3 inline-flex items-center gap-2 rounded-full border border-success-border bg-success-soft px-3 py-1.5 text-xs font-bold text-success-ink">
+        <p className="m-0 max-w-[380px] text-md leading-[1.5] text-muted-foreground">
+          From your DTI business name to your BIR certificate — the offices, the order, and what
+          each one needs.
+        </p>
+        {/* Numbered because the order is a real dependency, not decoration: no
+            mayor's permit without barangay clearance, no BIR certificate
+            without either. Summarises the ten-step plan the agent generates.
+            Sub-labels stay generic — nobody reading this has signed in yet. */}
+        <ol className="m-0 w-full max-w-[380px] list-none p-0">
+          {registrationOutline.map(({ detail, step, title }) => (
+            <li
+              className="grid grid-cols-[26px_minmax(0,1fr)] items-baseline gap-3.5 border-t border-border py-2.5 last:border-b"
+              key={step}
+            >
+              <span className="text-xs font-black tabular-nums text-primary">{step}</span>
+              <span className="grid gap-px">
+                <strong className="text-sm">{title}</strong>
+                <span className="text-xs text-muted-foreground">{detail}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+        <span className="mt-1 inline-flex items-center gap-2 rounded-full border border-success-border bg-success-soft px-3 py-1.5 text-xs font-bold text-success-ink">
           <ShieldCheckIcon className="size-[14px] shrink-0 text-success" weight="fill" />
           Live eGov SSO
         </span>
