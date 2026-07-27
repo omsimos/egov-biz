@@ -1,7 +1,13 @@
 /* ============================================================
-   eGOVbusiness brand token layer — ported verbatim from the
-   design handoff (design_handoff_egovbusiness/tokens/*).
+   eGOVbusiness brand token layer, from the design handoff
+   (design_handoff_egovbusiness/tokens/*).
    Consumed by globals.css (@theme inline) and bespoke screen CSS.
+
+   Two groups deliberately depart from the handoff: --canvas and the
+   --shadow-* ramp (see DEPTH below), and the derived neutral/tint
+   ramps (see DERIVED EXTENSION below). Every other value here is the
+   handoff's. Departures record the original inline so the delta stays
+   auditable against the source.
 
    Fonts: --font-sans is declared here as a variable only. Nunito
    Sans itself is loaded via next/font in a later task — do NOT add
@@ -21,7 +27,7 @@
   --ink: #17233b;
   --slate: #6c768a;
   --line: #e4e9f2;
-  --canvas: #f2f5fb;
+  --canvas: #e9eef8; /* DEPTH — handoff #f2f5fb; see the DEPTH block below */
   --surface: #ffffff;
   --success: #15875d;
   --success-soft: #e9f7f1;
@@ -163,10 +169,32 @@
   --radius-2xl: calc(var(--radius) + 13px); /* 25px — sheets */
   --radius-pill: 999px;
 
-  --shadow-xs: 0 2px 8px rgba(41, 55, 82, 0.06);
-  --shadow-sm: 0 5px 15px rgba(33, 55, 90, 0.06);
-  --shadow-md: 0 10px 30px rgba(28, 55, 104, 0.07);
-  --shadow-lg: 0 12px 34px rgba(24, 52, 102, 0.1);
+  /* ---- DEPTH — departs from the handoff ----
+     The handoff pairs a canvas 3.5 L* points off white with single-blur
+     shadows at 6-10% alpha. At that separation a card's border is the only
+     thing marking its edge, so every screen reads as one flat sheet with
+     lines drawn on it. Two changes, together:
+
+     1. --canvas #f2f5fb -> #e9eef8, ΔL* 3.5 -> 6.0 against white. Still
+        lighter than --line (ΔL* 7.8), so no border stops reading.
+     2. Each step becomes two layers — a tight contact shadow saying the
+        surface rests on something, plus a broad ambient one giving it
+        height. Raising a single blur's alpha instead just paints a grey
+        smudge, which is why the handoff's values cannot be fixed by
+        scaling them.
+
+     --shadow-primary and --shadow-sheet keep their handoff values: both
+     already sit at 20% and neither reads flat.
+
+     Handoff originals, for audit:
+       xs 0 2px 8px  rgba(41, 55, 82, .06)
+       sm 0 5px 15px rgba(33, 55, 90, .06)
+       md 0 10px 30px rgba(28, 55, 104, .07)
+       lg 0 12px 34px rgba(24, 52, 102, .10)                             */
+  --shadow-xs: 0 1px 2px rgba(23, 35, 59, 0.06), 0 2px 8px rgba(41, 55, 82, 0.08);
+  --shadow-sm: 0 1px 3px rgba(23, 35, 59, 0.07), 0 6px 16px rgba(33, 55, 90, 0.11);
+  --shadow-md: 0 2px 6px rgba(23, 35, 59, 0.08), 0 12px 32px rgba(28, 55, 104, 0.14);
+  --shadow-lg: 0 4px 10px rgba(23, 35, 59, 0.09), 0 20px 46px rgba(24, 52, 102, 0.18);
   --shadow-primary: 0 9px 19px rgba(7, 85, 233, 0.2);
   --shadow-sheet: 0 -15px 40px rgba(14, 28, 53, 0.2);
 }
