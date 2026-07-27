@@ -381,8 +381,25 @@ function latestRegistrationPlan(messages: BusinessChatMessage[]) {
   return null;
 }
 
-function PlanDock({ plan, active }: { plan: RegistrationPlan; active: boolean }) {
+function PlanDock({
+  plan,
+  active,
+  collapseKey,
+}: {
+  plan: RegistrationPlan;
+  active: boolean;
+  // Tool call id of the question currently being asked, if any. The dock and
+  // the question form are siblings inside .chat-composer-shell, which caps at
+  // min(76dvh, 680px) — so an expanded plan (list capped at min(28dvh, 260px))
+  // eats height the question then can't have, and the composer clips it.
+  // Yielding on each new question keeps the task visible; the user can reopen
+  // the plan and it stays open until the next one arrives.
+  collapseKey?: string;
+}) {
   const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    if (collapseKey) setExpanded(false);
+  }, [collapseKey]);
   const completed = plan.steps.filter((step) => step.status === "completed").length;
   const allResolved =
     plan.steps.length > 0 &&
@@ -1689,7 +1706,13 @@ export function BusinessChatScreen({
         )}
       </main>
       <footer className="chat-composer-shell">
-        {latestPlan && <PlanDock plan={latestPlan.plan} active={latestPlan.active} />}
+        {latestPlan && (
+          <PlanDock
+            plan={latestPlan.plan}
+            active={latestPlan.active}
+            collapseKey={pending?.part.toolCallId}
+          />
+        )}
         {pending ? (
           <QuestionComposer
             key={pending.part.toolCallId}
