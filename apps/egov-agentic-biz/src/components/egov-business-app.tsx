@@ -450,6 +450,206 @@ export function BusinessLanding({
     event.preventDefault();
     if (prompt.trim()) onSubmit(prompt.trim());
   };
+
+  // Someone with a business or a plan in progress came back for those, not for
+  // an invitation to describe a business they already registered. While the
+  // list is still loading, assume they are returning: showing the first-run
+  // hero and then reshuffling once data arrives is worse than either order.
+  const returning = businessesLoading || (businesses?.length ?? 0) > 0 || conversations.length > 0;
+
+  const submitButton = (
+    <IconButton
+      aria-label="Continue"
+      data-cuelume-toggle="page"
+      disabled={!prompt.trim()}
+      type="submit"
+      variant="primary"
+    >
+      <ArrowRightIcon weight="bold" />
+    </IconButton>
+  );
+
+  const composer = (
+    <form
+      className={cn(
+        "rounded-2xl border-[1.5px] border-input-strong bg-white transition-[border-color,box-shadow] focus-within:border-primary focus-within:shadow-[0_12px_32px_rgba(7,85,233,0.11)]",
+        returning
+          ? "flex items-center gap-2.5 py-2.5 pr-2.5 pl-[15px] shadow-sm"
+          : "p-[15px] shadow-md",
+      )}
+      onSubmit={submit}
+    >
+      <Textarea
+        aria-label="Describe your business idea"
+        className={cn(
+          "min-h-0 resize-none border-0 bg-transparent p-0 text-base leading-[1.45] shadow-none focus:border-transparent focus:ring-0",
+          returning && "self-center py-1",
+        )}
+        onChange={(event) => setPrompt(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+            event.preventDefault();
+            event.currentTarget.form?.requestSubmit();
+          }
+        }}
+        placeholder="Describe your business idea…"
+        ref={inputRef}
+        rows={returning ? 1 : 3}
+        value={prompt}
+      />
+      {returning ? (
+        submitButton
+      ) : (
+        <div className="mt-2.5 flex items-center justify-between">
+          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-primary">
+            <ShieldCheckIcon className="size-[13px]" weight="fill" />
+            Your details stay private
+          </span>
+          {submitButton}
+        </div>
+      )}
+    </form>
+  );
+
+  // These write into the textarea and focus it, so they belong under the field
+  // rather than below the saved plans. No trailing arrow — nothing navigates —
+  // and 62px rows at 15px overstated what amounts to placeholder text.
+  const prompts = (
+    <div className="mt-2.5 flex flex-col gap-1.5">
+      {suggestions.map(({ icon: Icon, text }) => (
+        <button
+          className={cn(
+            "grid w-full grid-cols-[22px_1fr] items-center gap-2.5 rounded-md border border-border bg-white px-3 py-2.5 text-left text-sm leading-[1.35] font-semibold text-foreground",
+            FOCUS_RING,
+          )}
+          data-cuelume-toggle="toggle"
+          key={text}
+          onClick={() => {
+            setPrompt(text);
+            inputRef.current?.focus();
+          }}
+          type="button"
+        >
+          <Icon className="size-[15px] text-primary" />
+          {text}
+        </button>
+      ))}
+    </div>
+  );
+
+  const plansSection = conversations.length > 0 && (
+    <section className="mt-7">
+      <div className="mb-3">
+        <small className="mb-0.5 block text-xs font-bold text-primary">
+          {returning ? "In progress" : "Saved sessions"}
+        </small>
+        <h2 className="text-lg -tracking-[.5px]">Registration plans</h2>
+      </div>
+      <div className="flex flex-col gap-2">
+        {conversations.map((conversation) => (
+          <div
+            className="grid grid-cols-[minmax(0,1fr)_34px] overflow-hidden rounded-lg border border-border bg-white"
+            key={conversation.id}
+          >
+            <button
+              className={cn(
+                "grid min-h-[58px] min-w-0 grid-cols-[minmax(0,1fr)_18px] items-center gap-2.5 px-3 py-2.5 text-left",
+                FOCUS_RING,
+              )}
+              data-cuelume-toggle="page"
+              onClick={() => onResume(conversation.id)}
+              type="button"
+            >
+              <span className="grid min-w-0 gap-[3px]">
+                <strong className="truncate text-sm">{conversation.title}</strong>
+                <small className="text-2xs text-muted-foreground">
+                  Updated {new Date(conversation.updatedAt).toLocaleDateString()}
+                </small>
+              </span>
+              <ArrowRightIcon className="size-4 text-primary" />
+            </button>
+            {/* Quiet by default. A divider plus destructive ink gave deleting the
+                same billing as resuming, on the row that represents work in
+                progress — and the confirm dialog is what makes it safe, not the
+                colour. */}
+            <button
+              aria-label={`Delete ${conversation.title}`}
+              className={cn(
+                "grid place-items-center text-gray-500 transition-colors hover:bg-destructive-soft hover:text-destructive-ink",
+                FOCUS_RING,
+              )}
+              data-cuelume-toggle="droplet"
+              onClick={() => onDelete(conversation)}
+              type="button"
+            >
+              <TrashIcon className="size-[15px]" />
+            </button>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+
+  const businessesSection = (
+    <section className="mt-7">
+      <div className="mb-[13px]">
+        <small className="mb-0.5 block text-xs font-bold text-primary">Linked to your TIN</small>
+        <h2 className="text-lg -tracking-[.5px]">Your businesses</h2>
+      </div>
+      {businessesLoading ? (
+        <div className="skeleton-card h-[82px] rounded-xl" />
+      ) : businesses?.length === 0 ? (
+        <div className="flex min-h-[82px] items-center gap-3 rounded-xl border border-dashed border-gray-300 bg-white p-3.5 text-muted-foreground">
+          <BriefcaseIcon className="size-[30px] shrink-0 text-primary" weight="duotone" />
+          <div className="flex flex-col gap-[3px]">
+            <strong className="text-base text-foreground">No linked businesses yet</strong>
+            <span className="text-sm leading-[1.4]">
+              Complete a registration plan to save its records and tax calendar here.
+            </span>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-col gap-2.5">
+            {businesses?.map((business) => (
+              <button
+                className={cn("block w-full rounded-xl text-left", FOCUS_RING)}
+                data-cuelume-toggle="page"
+                key={business.id}
+                onClick={() => onOpenBusiness(business.id)}
+                type="button"
+              >
+                <Card>
+                  <CardContent className="grid grid-cols-[44px_1fr_auto] items-center gap-[11px]">
+                    <span className="grid size-11 place-items-center rounded-lg bg-secondary text-primary">
+                      <BriefcaseIcon className="size-[23px]" weight="duotone" />
+                    </span>
+                    <div className="flex min-w-0 flex-col">
+                      <strong className="truncate text-base">{business.name}</strong>
+                      <span className="text-sm text-muted-foreground">{business.type}</span>
+                      <small className="text-sm text-muted-foreground">
+                        {business.registrationNumber}
+                      </small>
+                    </div>
+                    <Badge variant="success">{business.status}</Badge>
+                  </CardContent>
+                </Card>
+              </button>
+            ))}
+          </div>
+          {/* A caption, not an Alert. It confirms something about the card right
+              above it; the full-width success banner was the treatment a real
+              warning gets, and it used to render over the empty state too,
+              claiming a match to nothing. */}
+          <span className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            <ShieldCheckIcon className="size-[13px] text-success" weight="fill" />
+            Matched to your eGovPH account
+          </span>
+        </>
+      )}
+    </section>
+  );
+
   return (
     <div className="screen">
       <StatusBar />
@@ -474,181 +674,38 @@ export function BusinessLanding({
         className="h-[calc(100%-36px-58px)] overflow-y-auto overscroll-contain px-5 pb-[112px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         id="app-content"
       >
-        <section className="flex flex-col items-center px-2.5 pt-[26px] pb-5 text-center">
-          <div className="relative grid size-[62px] rotate-[-4deg] place-items-center rounded-2xl bg-primary text-white shadow-[0_12px_28px_rgba(7,85,233,0.24)]">
-            <SparkleIcon className="size-[29px]" weight="fill" />
-            <span className="absolute -top-1 right-[7px] size-2.5 rounded-full border-2 border-white bg-[var(--egov-orange)]" />
-          </div>
-          <span className="mt-[17px] inline-flex items-center gap-1.5 text-xs font-bold text-primary">
-            <ShieldCheckIcon className="size-[13px]" weight="fill" /> eGovPH
-          </span>
-          <h2 className="mt-2.5 mb-2 text-2xl leading-[1.03] tracking-[-1.5px] text-balance">
-            Describe your business
-          </h2>
-          <p className="max-w-[330px] text-base leading-[1.55] text-muted-foreground">
-            Tell us what you want to sell or do.
-          </p>
-        </section>
-        <form
-          className="rounded-2xl border-[1.5px] border-input-strong bg-white p-[15px] shadow-md transition-[border-color,box-shadow] focus-within:border-primary focus-within:shadow-[0_12px_32px_rgba(7,85,233,0.11)]"
-          onSubmit={submit}
-        >
-          <Textarea
-            aria-label="Describe your business idea"
-            className="min-h-0 resize-none border-0 bg-transparent p-0 text-base leading-[1.45] shadow-none focus:border-transparent focus:ring-0"
-            onChange={(event) => setPrompt(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                event.preventDefault();
-                event.currentTarget.form?.requestSubmit();
-              }
-            }}
-            placeholder="Describe your business idea…"
-            ref={inputRef}
-            rows={3}
-            value={prompt}
-          />
-          <div className="mt-2.5 flex items-center justify-between">
-            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-primary">
-              <ShieldCheckIcon className="size-[13px]" weight="fill" />
-              Your details stay private
-            </span>
-            <IconButton
-              aria-label="Continue"
-              data-cuelume-toggle="page"
-              disabled={!prompt.trim()}
-              type="submit"
-              variant="primary"
-            >
-              <ArrowRightIcon weight="bold" />
-            </IconButton>
-          </div>
-        </form>
-        {conversations.length > 0 && (
-          <section className="mt-6 mb-7">
-            <div className="mb-3">
-              <small className="mb-0.5 block text-xs font-bold text-primary">Saved sessions</small>
-              <h2 className="text-lg -tracking-[.5px]">Registration plans</h2>
-            </div>
-            <div className="flex flex-col gap-2">
-              {conversations.map((conversation) => (
-                <div
-                  className="grid grid-cols-[minmax(0,1fr)_42px] overflow-hidden rounded-lg border border-border bg-white"
-                  key={conversation.id}
-                >
-                  <button
-                    className={cn(
-                      "grid min-h-[58px] min-w-0 grid-cols-[minmax(0,1fr)_18px] items-center gap-2.5 px-3 py-2.5 text-left",
-                      FOCUS_RING,
-                    )}
-                    data-cuelume-toggle="page"
-                    onClick={() => onResume(conversation.id)}
-                    type="button"
-                  >
-                    <span className="grid min-w-0 gap-[3px]">
-                      <strong className="truncate text-sm">{conversation.title}</strong>
-                      <small className="text-2xs text-muted-foreground">
-                        Updated {new Date(conversation.updatedAt).toLocaleDateString()}
-                      </small>
-                    </span>
-                    <ArrowRightIcon className="size-4 text-primary" />
-                  </button>
-                  <button
-                    aria-label={`Delete ${conversation.title}`}
-                    className={cn(
-                      "grid place-items-center border-l border-border text-destructive-ink hover:bg-destructive-soft",
-                      FOCUS_RING,
-                    )}
-                    data-cuelume-toggle="droplet"
-                    onClick={() => onDelete(conversation)}
-                    type="button"
-                  >
-                    <TrashIcon className="size-[15px]" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-        <section className="mt-6 mb-[30px]">
-          <h3 className="mb-2.5 text-sm text-muted-foreground">Try asking</h3>
-          <div className="flex flex-col gap-2">
-            {suggestions.map(({ icon: Icon, text }) => (
-              <button
-                className={cn(
-                  "grid min-h-[62px] w-full grid-cols-[38px_1fr_18px] items-center gap-2.5 rounded-lg border border-border bg-white px-3 py-2.5 text-left text-base leading-[1.4] font-semibold text-foreground",
-                  FOCUS_RING,
-                )}
-                data-cuelume-toggle="toggle"
-                key={text}
-                onClick={() => {
-                  setPrompt(text);
-                  inputRef.current?.focus();
-                }}
-                type="button"
-              >
-                <span className="grid size-[34px] place-items-center rounded-md bg-secondary text-primary">
-                  <Icon className="size-[17px]" />
-                </span>
-                {text}
-                <ArrowRightIcon className="size-4 text-gray-600" />
-              </button>
-            ))}
-          </div>
-        </section>
-        <section>
-          <div className="mb-[13px]">
-            <small className="mb-0.5 block text-xs font-bold text-primary">
-              Linked to your TIN
-            </small>
-            <h2 className="text-lg -tracking-[.5px]">Your businesses</h2>
-          </div>
-          {businessesLoading ? (
-            <div className="skeleton-card h-[82px] rounded-xl" />
-          ) : businesses?.length === 0 ? (
-            <div className="flex min-h-[82px] items-center gap-3 rounded-xl border border-dashed border-gray-300 bg-white p-3.5 text-muted-foreground">
-              <BriefcaseIcon className="size-[30px] shrink-0 text-primary" weight="duotone" />
-              <div className="flex flex-col gap-[3px]">
-                <strong className="text-base text-foreground">No linked businesses yet</strong>
-                <span className="text-sm leading-[1.4]">
-                  Complete a registration plan to save its records and tax calendar here.
-                </span>
+        {returning ? (
+          <>
+            {businessesSection}
+            {plansSection}
+            <section className="mt-7">
+              <h2 className="mb-3 text-lg -tracking-[.5px]">Start something new</h2>
+              {composer}
+              {prompts}
+            </section>
+          </>
+        ) : (
+          <>
+            <section className="flex flex-col items-center px-2.5 pt-[26px] pb-5 text-center">
+              <div className="relative grid size-[62px] rotate-[-4deg] place-items-center rounded-2xl bg-primary text-white shadow-[0_12px_28px_rgba(7,85,233,0.24)]">
+                <SparkleIcon className="size-[29px]" weight="fill" />
+                <span className="absolute -top-1 right-[7px] size-2.5 rounded-full border-2 border-white bg-[var(--egov-orange)]" />
               </div>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2.5">
-              {businesses?.map((business) => (
-                <button
-                  className={cn("block w-full rounded-xl text-left", FOCUS_RING)}
-                  data-cuelume-toggle="page"
-                  key={business.id}
-                  onClick={() => onOpenBusiness(business.id)}
-                  type="button"
-                >
-                  <Card>
-                    <CardContent className="grid grid-cols-[44px_1fr_auto] items-center gap-[11px]">
-                      <span className="grid size-11 place-items-center rounded-lg bg-secondary text-primary">
-                        <BriefcaseIcon className="size-[23px]" weight="duotone" />
-                      </span>
-                      <div className="flex min-w-0 flex-col">
-                        <strong className="truncate text-base">{business.name}</strong>
-                        <span className="text-sm text-muted-foreground">{business.type}</span>
-                        <small className="text-sm text-muted-foreground">
-                          {business.registrationNumber}
-                        </small>
-                      </div>
-                      <Badge variant="success">{business.status}</Badge>
-                    </CardContent>
-                  </Card>
-                </button>
-              ))}
-            </div>
-          )}
-          <Alert className="mt-2.5" variant="success">
-            <ShieldCheckIcon weight="fill" />
-            Matched to your eGovPH account.
-          </Alert>
-        </section>
+              <span className="mt-[17px] inline-flex items-center gap-1.5 text-xs font-bold text-primary">
+                <ShieldCheckIcon className="size-[13px]" weight="fill" /> eGovPH
+              </span>
+              <h2 className="mt-2.5 mb-2 text-2xl leading-[1.03] tracking-[-1.5px] text-balance">
+                Describe your business
+              </h2>
+              <p className="max-w-[330px] text-base leading-[1.55] text-muted-foreground">
+                Tell us what you want to sell or do.
+              </p>
+            </section>
+            {composer}
+            {prompts}
+            {businessesSection}
+          </>
+        )}
       </div>
       <BottomNav active="business" />
     </div>
