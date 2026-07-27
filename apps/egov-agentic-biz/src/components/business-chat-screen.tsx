@@ -595,18 +595,21 @@ function QuestionComposer({
   };
 
   return (
-    <form className="grid min-h-0 gap-3 overflow-y-auto pt-1 pr-1" onSubmit={submit}>
+    <form className="grid min-h-0 gap-4 overflow-y-auto pt-1 pr-1" onSubmit={submit}>
       <div className="flex items-start gap-2">
         <span className="grid size-[26px] flex-none place-items-center rounded-lg bg-secondary text-primary">
           <SparkleIcon className="size-[13px]" weight="fill" />
         </span>
-        <div className="grid gap-0.5">
+        <div className="grid gap-1">
           {pending.questions.length > 1 && (
             <small className="text-2xs font-black uppercase tracking-[0.06em] text-muted-foreground">
               Question {questionIndex + 1} of {pending.questions.length}
             </small>
           )}
-          <strong className="text-sm leading-[1.3]">{question.title}</strong>
+          {/* The one thing the user has to act on. --text-md is in the scale
+              and was never used here, so the question sat at the same size as
+              its own help text. */}
+          <strong className="text-md font-extrabold leading-[1.25]">{question.title}</strong>
           {question.helpText && (
             <small className="text-xs leading-[1.35] text-muted-foreground">
               {question.helpText}
@@ -629,18 +632,23 @@ function QuestionComposer({
                 },
               ]
             : (question.options ?? []);
+        // p-3 with a 13px label puts the row at ~46px, over the 44pt tap-target
+        // floor it used to sit under. border-2 and the 900 label are what make
+        // a selected row read as chosen at a glance — the fill alone doesn't.
         const optionCard = (checked: boolean) =>
           cn(
-            "flex cursor-pointer items-center gap-2.5 rounded-md border-[1.5px] p-2.5 transition-colors",
+            "flex cursor-pointer items-center gap-2.5 rounded-md border-2 p-3 transition-colors",
             checked
               ? "border-primary bg-secondary"
               : "border-input bg-white hover:border-primary/40",
           );
-        const optionCopy = (label: string, description?: string) => (
+        const optionCopy = (label: string, description?: string, checked?: boolean) => (
           <span className="grid gap-0.5">
-            <strong className="text-xs leading-[1.3]">{label}</strong>
+            <strong className={cn("text-sm leading-[1.3]", checked && "font-black")}>
+              {label}
+            </strong>
             {description && (
-              <small className="text-2xs leading-[1.25] text-muted-foreground">{description}</small>
+              <small className="text-xs leading-[1.25] text-muted-foreground">{description}</small>
             )}
           </span>
         );
@@ -649,7 +657,7 @@ function QuestionComposer({
             {question.type === "single" ? (
               <>
                 <RadioGroup
-                  className="gap-1.5"
+                  className="gap-2"
                   aria-label={question.title}
                   value={typeof value === "string" ? value : ""}
                   onValueChange={(next) =>
@@ -663,7 +671,7 @@ function QuestionComposer({
                       data-cuelume-toggle="toggle"
                     >
                       <RadioGroupItem value={option.id} />
-                      {optionCopy(option.label, option.description)}
+                      {optionCopy(option.label, option.description, value === option.id)}
                     </label>
                   ))}
                 </RadioGroup>
@@ -682,7 +690,7 @@ function QuestionComposer({
                 )}
               </>
             ) : question.type === "multi" ? (
-              <div className="grid gap-1.5" role="group" aria-label={question.title}>
+              <div className="grid gap-2" role="group" aria-label={question.title}>
                 {options.map((option) => {
                   const checked = selected.includes(option.id);
                   return (
@@ -702,7 +710,7 @@ function QuestionComposer({
                           }))
                         }
                       />
-                      {optionCopy(option.label, option.description)}
+                      {optionCopy(option.label, option.description, checked)}
                     </label>
                   );
                 })}

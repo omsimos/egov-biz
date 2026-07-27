@@ -600,7 +600,7 @@
   width: 13px;
 }
 .chat-composer-shell {
-  padding: 9px 12px max(12px, env(safe-area-inset-bottom));
+  padding: 10px 16px max(14px, env(safe-area-inset-bottom));
   border-top: 1px solid #e1e6ef;
   background: rgba(248, 250, 253, 0.97);
   box-shadow: 0 -7px 20px rgba(42, 57, 87, 0.05);
@@ -1054,12 +1054,6 @@
   background-clip: text;
   animation: chat-shimmer 1.6s linear infinite;
 }
-.chat-composer-shell {
-  padding: 9px 12px max(12px, env(safe-area-inset-bottom));
-  border-top: 1px solid #e1e6ef;
-  background: rgba(248, 250, 253, 0.97);
-  box-shadow: 0 -7px 20px rgba(42, 57, 87, 0.05);
-}
 .chat-error {
   margin: 8px 0;
   padding: 10px 11px;
@@ -1307,7 +1301,7 @@
 /* Registration plan dock */
 .chat-composer-shell {
   display: grid;
-  gap: 8px;
+  gap: 12px;
   max-height: min(76dvh, 680px);
   overflow: hidden;
 }
