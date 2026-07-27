@@ -60,21 +60,24 @@ export function BottomNav({ active = "home" }: { active?: "home" | "business" })
         <House weight={homeActive ? "fill" : "regular"} />
         <span>Home</span>
       </div>
-      <div data-cuelume-toggle="tick">
+      <div className="unbuilt" data-cuelume-toggle="tick">
         <Scan />
         <span>Scan</span>
       </div>
+      {/* Digital ID keeps full strength: recessing a raised brand-blue orb reads
+          as broken rather than unavailable. It is the most misleading element in
+          this nav and the fix is to wire it or remove it, not to dim it. */}
       <div className="id-button" data-cuelume-toggle="page">
         <span className="id-orb">
           <IdentificationCard weight="fill" />
         </span>
         <span>Digital ID</span>
       </div>
-      <div data-cuelume-toggle="tick">
+      <div className="unbuilt" data-cuelume-toggle="tick">
         <FileText />
         <span>History</span>
       </div>
-      <div data-cuelume-toggle="tick">
+      <div className="unbuilt" data-cuelume-toggle="tick">
         <SquaresFour />
         <span>Account</span>
       </div>

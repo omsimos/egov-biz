@@ -18,24 +18,26 @@ import { AccountDialog } from "@/components/account-dialog";
 import { BrandLogo } from "@/components/brand-logo";
 import { FlagSunrise } from "@/components/flag-sunrise";
 import { BottomNav, StatusBar } from "@/components/phone-chrome";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { IconButton } from "@/components/ui/icon-button";
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import { cn, FOCUS_RING } from "@/lib/utils";
 
 type ServiceTile = {
   Icon: PhosphorIcon;
   label: string;
-  badge?: string;
   business?: boolean;
 };
 
+// No `badge` field any more. Jobs carried a red "New" badge over a tile wired
+// to nothing — an advertisement for a screen that does not exist — and
+// Business no longer needs one: the promo card below already says NEW IN
+// eGOVPH, and two shouts for one destination is the duplication this screen
+// was suffering from.
 const services: ServiceTile[] = [
   { Icon: BankIcon, label: "NGAs" },
   { Icon: BuildingsIcon, label: "LGUs" },
-  { Icon: BriefcaseIcon, label: "Jobs", badge: "New" },
-  { Icon: StorefrontIcon, label: "Business", badge: "New", business: true },
+  { Icon: BriefcaseIcon, label: "Jobs" },
+  { Icon: StorefrontIcon, label: "Business", business: true },
   { Icon: AirplaneIcon, label: "Travel" },
   { Icon: HeartbeatIcon, label: "Health" },
   { Icon: MegaphoneIcon, label: "Report" },
@@ -55,25 +57,41 @@ export function HomeScreen({
     <div className="screen">
       <StatusBar />
       <div
-        className="h-[calc(100%-36px-76px)] overflow-y-auto overscroll-contain pb-[30px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        // pb clears the Digital ID orb, which is 54px at margin-top:-27px and so
+        // floats 27px over this scroller. At the old pb-[30px] the last card
+        // stopped 3px short of it.
+        className="h-[calc(100%-36px-76px)] overflow-y-auto overscroll-contain pb-11 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         id="app-content"
       >
         <header className="sticky top-0 z-12 flex h-[58px] items-center justify-between bg-white/94 px-5 py-2 backdrop-blur-[8px]">
           <BrandLogo height={23} priority />
-          <IconButton aria-label="Notifications" className="relative" variant="plain">
+          {/* Deliberately not an IconButton: there is no notifications screen to
+              open, and a focusable <button> with no handler is a control that
+              fails on contact — worse than the inert service tiles below, which
+              are plain elements for exactly this reason. It stays as the status
+              indicator it actually is until there is something to open. */}
+          <span
+            aria-label="You have unread notifications"
+            className="relative inline-grid size-10 shrink-0 place-items-center rounded-full"
+            role="img"
+          >
             <BellSimpleIcon className="size-6" weight="fill" />
             <span className="absolute top-1.5 right-1.5 size-2 rounded-full border-2 border-white bg-[var(--egov-red)]" />
-          </IconButton>
+          </span>
         </header>
 
         <section className="flex items-center justify-between px-5 py-2">
           <div className="flex items-center gap-3">
             <AccountDialog onLogout={onLogout} profile={profile} />
             <div className="flex flex-col gap-0.5">
-              <strong className="text-lg -tracking-[.4px] text-primary">
+              {/* --text-xl, defined at 27px and used once in the whole app. The
+                  greeting was the largest type on Home at 20px, which left the
+                  screen with no anchor; the mobile number sat beneath it at 15px
+                  competing for the same attention nobody came here to give it. */}
+              <strong className="text-xl -tracking-[.6px] text-primary">
                 Hi, {profile.firstName}
               </strong>
-              <span className="text-base text-gray-800">{profile.mobile}</span>
+              <span className="text-sm text-muted-foreground">{profile.mobile}</span>
             </div>
           </div>
           <FlagSunrise />
@@ -83,26 +101,26 @@ export function HomeScreen({
           aria-label="eGovPH services"
           className="grid grid-cols-4 gap-x-1.5 gap-y-4 px-3.5 pb-6"
         >
-          {services.map(({ Icon, badge, business, label }) => {
+          {services.map(({ Icon, business, label }) => {
+            // Business is the only tile with a destination. It used to be the
+            // only *filled* one too, which read as "featured" rather than "this
+            // is the one that works" — so seven identical-looking neighbours
+            // failed silently on tap. The seven now recede and Business takes
+            // the standard tint, leaving the promo card as the single blue block.
             const chip = (
               <span
                 className={cn(
                   "relative grid size-[62px] place-items-center rounded-full",
                   business
-                    ? "bg-primary text-primary-foreground shadow-primary transition-transform group-active:scale-[.93]"
-                    : "bg-secondary text-primary",
+                    ? "bg-secondary text-primary transition-transform group-active:scale-[.93]"
+                    : "bg-gray-100 text-gray-500",
                 )}
               >
                 <Icon className="size-[31px]" weight="duotone" />
-                {badge && (
-                  <Badge className="absolute -top-[3px] -right-[5px] rounded-sm border-2 border-white bg-[var(--egov-red)] text-white">
-                    {badge}
-                  </Badge>
-                )}
               </span>
             );
             const caption = (
-              <span className={business ? "font-black" : "font-normal"}>{label}</span>
+              <span className={business ? "font-black" : "font-normal text-gray-600"}>{label}</span>
             );
             // Only Business is wired to anything. The rest are a service
             // directory, so they render as plain content — a <button> that
@@ -170,7 +188,8 @@ export function HomeScreen({
               </small>
               <h2 className="text-lg -tracking-[.5px]">Featured for you</h2>
             </div>
-            <span className="text-base font-bold text-primary">See all</span>
+            {/* Styled as a link, wired to nothing — so it stops looking like one. */}
+            <span className="text-base text-gray-600">See all</span>
           </div>
           <div className="grid grid-cols-2 gap-2.5">
             {[

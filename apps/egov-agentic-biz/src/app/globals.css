@@ -426,6 +426,14 @@ a:focus-visible {
   color: var(--blue);
   font-weight: 600;
 }
+/* Nav items with nothing behind them yet. Recessed so they stop reading as
+   available destinations. --gray-500 rather than something fainter on purpose:
+   these are 10.5px labels, and unreadable is a different failure from
+   unavailable. Specificity (0,2,0) beats `.bottom-nav > div` (0,1,1), so this
+   holds wherever it sits in the file. */
+.bottom-nav .unbuilt {
+  color: var(--gray-500);
+}
 .bottom-nav .id-button {
   justify-content: flex-start;
   color: #242b38;
