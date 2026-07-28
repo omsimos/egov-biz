@@ -558,10 +558,9 @@ body {
    and carries only their e-* utilities, so an id selector (1,0,1) beats every
    one of them without !important, and nothing here depends on a class name they
    are free to rename.
-   White ground with a brand border rather than filled blue, because the mark the
-   widget injects is the full-colour eGOVPH wordmark — it cannot sit on a blue
-   field, and a neutral ground carrying the provider's mark in its own colours is
-   the standard treatment for third-party sign-in. */
+   Filled brand blue, matching Button variant="primary" size="lg" (h-[50px],
+   rounded-lg, --shadow-primary) so the screen's main action is the same object
+   the rest of the app uses for one. */
 #egov-sso-widget-button button {
   width: 100%;
   min-height: 52px;
@@ -569,11 +568,11 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 9px;
-  border: 1.5px solid var(--primary);
+  gap: 10px;
+  border: 0;
   border-radius: var(--radius-lg);
-  background: #fff;
-  box-shadow: 0 8px 20px rgba(7, 85, 233, 0.14);
+  background: var(--primary);
+  box-shadow: var(--shadow-primary);
   cursor: pointer;
   transition:
     background-color 150ms var(--ease-out),
@@ -581,22 +580,29 @@ body {
     scale 150ms var(--ease-out);
 }
 #egov-sso-widget-button button:hover {
-  background: var(--egov-blue-soft);
+  background: var(--primary-hover);
 }
 #egov-sso-widget-button button:active {
   scale: var(--press-lg);
 }
-/* The widget sets its label at its own text-sm/400. This is the screen's
-   primary action, so it takes the weight the rest of the app gives one. */
+/* The widget sets its label at its own text-sm/400 in black. This is the
+   screen's primary action, so it takes the size and weight the rest of the app
+   gives one — and white, because the ground is now brand blue. */
 #egov-sso-widget-button button p {
   margin: 0;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
-  color: var(--primary);
+  color: #fff;
 }
+/* The injected mark is the full-colour eGOVPH wordmark, which is unreadable on
+   blue. brightness(0) flattens it to black while keeping its alpha, then
+   invert(1) lifts it to white — so the lockup's shape survives and only its ink
+   changes. Done in CSS rather than by swapping in our own asset, because the
+   <img> src belongs to widgets.e.gov.ph and is theirs to change. */
 #egov-sso-widget-button button img {
   width: auto;
-  height: 21px;
+  height: 22px;
+  filter: brightness(0) invert(1);
 }
 /* .auth-loading-mark's animation target — element now built from utilities
    in egov-business-app.tsx via animate-[auth-pulse_...]. */

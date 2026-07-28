@@ -230,15 +230,20 @@ export function LoginScreen({ initialError }: { initialError?: string }) {
             </a>
           </form>
         ) : (
+          // Only "exchange code" carries the link colour. Muting the whole
+          // sentence made the one alternative route off this screen read as
+          // disabled help text; colouring all of it would have given a secondary
+          // path the same billing as the blue CTA above it.
           <button
             className={cn(
-              "mx-auto mt-3.5 block w-fit text-sm font-bold text-muted-foreground transition hover:text-foreground",
+              "mx-auto mt-4 block w-fit text-sm font-bold text-foreground",
+              "transition-[scale] duration-150 ease-[var(--ease-out)] active:scale-[var(--press-md)]",
               FOCUS_RING,
             )}
             onClick={() => setCodeOpen(true)}
             type="button"
           >
-            Have an exchange code? Enter it instead
+            Have an <span className="text-primary">exchange code</span>? Enter it instead
           </button>
         )}
 
