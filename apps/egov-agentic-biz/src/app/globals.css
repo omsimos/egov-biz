@@ -666,12 +666,15 @@ body {
        under-reserved by 20 — and since this resolves to calc() on any viewport
        at or below 900px tall, the stage came out 20px taller than the screen
        and the page scrolled by exactly that on most laptops.
-       No min-height either: a floor taller than the space available is the same
-       bug wearing a different hat (660 + 76 = 736, so every viewport shorter
-       than that scrolled no matter what this line said). The phone is free to
-       shrink; .screen below already drops its own 640px floor here, and every
-       screen inside it scrolls its own content. */
+       The floor goes to 0, and it has to be *stated*: the base rule above sets
+       min-height: 100svh for the phone-as-whole-page case, min-height beats
+       height, and this block is the only thing that ever overrode it. Deleting
+       the old `min-height: 660px` outright therefore let the base value back in
+       and the phone rendered a full viewport tall inside a slot 76px shorter —
+       clipping its own bottom bezel and the nav labels. .screen does exactly
+       this two rules down, for exactly the same reason. */
     height: min(844px, calc(100svh - 76px));
+    min-height: 0;
     border: 10px solid #111820;
     border-radius: 48px;
     box-shadow:
