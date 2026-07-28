@@ -155,6 +155,11 @@ export function HomeScreen({
         <button
           className={cn(
             "relative mx-[18px] mb-[27px] grid grid-cols-[50px_1fr_22px] items-center gap-3 overflow-hidden rounded-xl bg-primary px-[15px] py-[17px] text-left text-primary-foreground shadow-[0_12px_25px_rgba(7,85,233,.18)]",
+            // The one control on Home that leads anywhere, and the only large
+            // one that did not answer a press. The tile above it already dips
+            // (group-active:scale-[.93]) and cuelume plays a click on both, so
+            // this card was making a sound and standing still.
+            "transition-transform duration-150 ease-[var(--ease-out)] active:scale-[var(--press-lg)]",
             FOCUS_RING,
           )}
           data-cuelume-toggle="page"

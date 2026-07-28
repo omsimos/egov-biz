@@ -17,6 +17,7 @@ import {
   StorefrontIcon,
   TrashIcon,
 } from "@phosphor-icons/react";
+import { AnimatePresence, motion } from "motion/react";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { BrandLogo } from "@/components/brand-logo";
 import { BusinessChatScreen } from "@/components/business-chat-screen";
@@ -39,6 +40,7 @@ import type {
 } from "@/lib/business-chat";
 import type { CitizenProfile, RegisteredBusiness } from "@/lib/citizen-profile";
 import type { RegisteredBusiness as RegisteredBusinessDetail } from "@/lib/registered-business";
+import { SCREEN, SCREEN_DEPTH, SCREEN_VARIANTS } from "@/lib/motion";
 import { useApi } from "@/lib/use-api";
 import { useAuthSession } from "@/lib/use-auth-session";
 import { cn, FOCUS_RING } from "@/lib/utils";
@@ -104,7 +106,7 @@ export function BusinessDetailScreen({
           </Alert>
         ) : (
           <>
-            <Card className="border-transparent bg-[var(--egov-blue-dark)] text-white">
+            <Card className="resolve-in border-transparent bg-[var(--egov-blue-dark)] text-white">
               <CardContent className="grid grid-cols-[48px_1fr] gap-3">
                 <span className="grid size-12 place-items-center rounded-lg bg-white/10">
                   <StorefrontIcon className="size-[26px]" weight="duotone" />
@@ -124,7 +126,7 @@ export function BusinessDetailScreen({
               </CardContent>
             </Card>
             <Tabs
-              className="mt-3"
+              className="resolve-in mt-3"
               onValueChange={(value) =>
                 setTab(value as "overview" | "records" | "files" | "calendar")
               }
@@ -520,6 +522,13 @@ export function BusinessLanding({
         <button
           className={cn(
             "grid w-full grid-cols-[22px_1fr] items-center gap-2.5 rounded-md border border-border bg-white px-3 py-2.5 text-left text-sm leading-[1.35] font-semibold text-foreground",
+            // These write into the textarea rather than navigating, so the
+            // press is the whole confirmation the user gets that the tap landed
+            // on the row they aimed at.
+            // scale, not transform — see the note on optionCard in
+            // business-chat-screen.tsx for why a hand-written transition list
+            // has to name it.
+            "transition-[scale,border-color,background-color] duration-150 ease-[var(--ease-out)] hover:border-input-strong hover:bg-gray-50 active:scale-[var(--press-lg)]",
             FOCUS_RING,
           )}
           data-cuelume-toggle="toggle"
@@ -549,14 +558,18 @@ export function BusinessLanding({
         <h2 className="text-lg -tracking-[.5px]">Registration plans</h2>
       </div>
       <div className="flex flex-col gap-2">
+        {/* The press lives on the row, not on either button inside it. :active
+            propagates to ancestors, so pressing resume or delete dips the whole
+            row as one object — scaling only the resume half would shear it away
+            from the delete column it shares a border with. */}
         {conversations.map((conversation) => (
           <div
-            className="grid grid-cols-[minmax(0,1fr)_34px] overflow-hidden rounded-lg border border-border bg-white"
+            className="grid grid-cols-[minmax(0,1fr)_34px] overflow-hidden rounded-lg border border-border bg-white transition-transform duration-150 ease-[var(--ease-out)] active:scale-[var(--press-lg)]"
             key={conversation.id}
           >
             <button
               className={cn(
-                "grid min-h-[58px] min-w-0 grid-cols-[minmax(0,1fr)_18px] items-center gap-2.5 px-3 py-2.5 text-left",
+                "grid min-h-[58px] min-w-0 grid-cols-[minmax(0,1fr)_18px] items-center gap-2.5 px-3 py-2.5 text-left transition-colors duration-150 hover:bg-gray-50",
                 FOCUS_RING,
               )}
               data-cuelume-toggle="page"
@@ -609,7 +622,7 @@ export function BusinessLanding({
       {businessesLoading ? (
         <div className="skeleton-card h-[82px] rounded-xl" />
       ) : businesses?.length === 0 ? (
-        <div className="flex min-h-[82px] items-center gap-3 rounded-xl border border-dashed border-gray-300 bg-white p-3.5 text-muted-foreground">
+        <div className="resolve-in flex min-h-[82px] items-center gap-3 rounded-xl border border-dashed border-gray-300 bg-white p-3.5 text-muted-foreground">
           <BriefcaseIcon className="size-[30px] shrink-0 text-primary" weight="duotone" />
           <div className="flex flex-col gap-[3px]">
             <strong className="text-base text-foreground">No linked businesses yet</strong>
@@ -620,16 +633,23 @@ export function BusinessLanding({
         </div>
       ) : (
         <>
-          <div className="flex flex-col gap-2.5">
+          <div className="resolve-in flex flex-col gap-2.5">
             {businesses?.map((business) => (
               <button
-                className={cn("block w-full rounded-xl text-left", FOCUS_RING)}
+                className={cn(
+                  "group block w-full rounded-xl text-left",
+                  "transition-transform duration-150 ease-[var(--ease-out)] active:scale-[var(--press-lg)]",
+                  FOCUS_RING,
+                )}
                 data-cuelume-toggle="page"
                 key={business.id}
                 onClick={() => onOpenBusiness(business.id)}
                 type="button"
               >
-                <Card>
+                {/* Hover lifts the card's own shadow rather than tinting it: the
+                    card is white on a white-ish ground, so a background change
+                    reads as a colour bug where depth reads as "this opens". */}
+                <Card className="transition-shadow duration-150 group-hover:shadow-md">
                   <CardContent className="grid grid-cols-[44px_1fr_auto] items-center gap-[11px]">
                     <span className="grid size-11 place-items-center rounded-lg bg-secondary text-primary">
                       <BriefcaseIcon className="size-[23px]" weight="duotone" />
@@ -732,6 +752,15 @@ export function EgaphBusinessApp({
   const [screen, setScreen] = useState<Screen>(
     initialConversation ? "chat" : requestedChatId ? "restoring" : "home",
   );
+  // Which way the last navigation went, derived from the screens' depth rather
+  // than passed in by each of the eleven setScreen callers. Read during the
+  // render where `screen` has already changed but the ref has not, so it still
+  // holds where we came from; the effect then catches it up after paint.
+  const lastDepth = useRef(SCREEN_DEPTH[screen]);
+  const goingBack = SCREEN_DEPTH[screen] < lastDepth.current;
+  useEffect(() => {
+    lastDepth.current = SCREEN_DEPTH[screen];
+  }, [screen]);
   const [prompt, setPrompt] = useState(initialConversation?.initialPrompt ?? "");
   const [conversation, setConversation] = useState<BusinessConversation | null>(
     initialConversation,
@@ -934,76 +963,94 @@ export function EgaphBusinessApp({
         ) : !profile ? (
           <LoginScreen initialError={authError} />
         ) : (
-          <>
-            {screen === "restoring" && (
-              <div className="screen bg-canvas!">
-                <StatusBar />
-                <div
-                  className="flex h-[calc(100%-36px)] flex-col items-center justify-center px-[38px] text-center"
-                  role="status"
-                >
-                  <div className="relative grid size-[62px] animate-[soft-pulse_1.8s_infinite] rotate-[-4deg] place-items-center rounded-[22px] bg-primary text-white shadow-[0_12px_28px_rgba(7,85,233,0.24)] motion-reduce:animate-none!">
-                    <FolderOpenIcon className="size-[29px]" weight="fill" />
-                  </div>
-                  <h1 className="mt-7 mb-2 text-[25px] leading-[1.15] tracking-[-0.8px]">
-                    Opening your saved plan
-                  </h1>
-                  <p className="m-0 text-[14px] text-muted-foreground">
-                    Restoring the conversation…
-                  </p>
-                  <div aria-hidden="true" className="mt-6 flex gap-[5px]">
-                    <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary motion-reduce:animate-none!" />
-                    <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary [animation-delay:0.2s] motion-reduce:animate-none!" />
-                    <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary [animation-delay:0.4s] motion-reduce:animate-none!" />
+          // One keyed wrapper per screen instead of five loose conditionals, so
+          // the outgoing screen stays mounted long enough to leave. Each is
+          // absolutely positioned because both halves have to occupy the same
+          // box during the swap; .phone-shell is already `position: relative;
+          // overflow: hidden`, which is what clips the 24px of travel.
+          // initial={false} stops the first screen animating in on load — that
+          // is an arrival, not a navigation.
+          <AnimatePresence custom={goingBack} initial={false}>
+            <motion.div
+              animate="animate"
+              className="absolute inset-0"
+              custom={goingBack}
+              exit="exit"
+              initial="initial"
+              key={screen}
+              transition={SCREEN}
+              variants={SCREEN_VARIANTS}
+            >
+              {screen === "restoring" && (
+                <div className="screen bg-canvas!">
+                  <StatusBar />
+                  <div
+                    className="flex h-[calc(100%-36px)] flex-col items-center justify-center px-[38px] text-center"
+                    role="status"
+                  >
+                    <div className="relative grid size-[62px] animate-[soft-pulse_1.8s_infinite] rotate-[-4deg] place-items-center rounded-[22px] bg-primary text-white shadow-[0_12px_28px_rgba(7,85,233,0.24)] motion-reduce:animate-none!">
+                      <FolderOpenIcon className="size-[29px]" weight="fill" />
+                    </div>
+                    <h1 className="mt-7 mb-2 text-[25px] leading-[1.15] tracking-[-0.8px]">
+                      Opening your saved plan
+                    </h1>
+                    <p className="m-0 text-[14px] text-muted-foreground">
+                      Restoring the conversation…
+                    </p>
+                    <div aria-hidden="true" className="mt-6 flex gap-[5px]">
+                      <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary motion-reduce:animate-none!" />
+                      <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary [animation-delay:0.2s] motion-reduce:animate-none!" />
+                      <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary [animation-delay:0.4s] motion-reduce:animate-none!" />
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
-            {screen === "home" && (
-              <HomeScreen
-                profile={profile}
-                onBusiness={() => setScreen("business")}
-                onLogout={() => void signOut()}
-              />
-            )}
-            {screen === "business" && (
-              <BusinessLanding
-                profile={profile}
-                businesses={businesses}
-                businessesLoading={businessesLoading}
-                conversations={conversations}
-                initialPrompt={prompt}
-                onBack={() => setScreen("home")}
-                onSubmit={startChat}
-                onResume={(id) => void openConversation(id)}
-                onDelete={setPendingDelete}
-                onOpenBusiness={openBusiness}
-              />
-            )}
-            {screen === "business-detail" && (
-              <BusinessDetailScreen
-                business={selectedBusiness}
-                loading={selectedBusinessLoading}
-                error={selectedBusinessError}
-                onBack={leaveBusinessDetail}
-                profile={profile}
-              />
-            )}
-            {screen === "chat" && conversation && (
-              <BusinessChatScreen
-                key={conversation.id}
-                conversation={conversation}
-                conversations={conversations}
-                profile={profile}
-                paymentStatus={paymentStatus}
-                paymentService={paymentService}
-                onBack={leaveChat}
-                onNewConversation={leaveChat}
-                onSelectConversation={(id) => void openConversation(id)}
-                onDeleteConversation={setPendingDelete}
-              />
-            )}
-          </>
+              )}
+              {screen === "home" && (
+                <HomeScreen
+                  profile={profile}
+                  onBusiness={() => setScreen("business")}
+                  onLogout={() => void signOut()}
+                />
+              )}
+              {screen === "business" && (
+                <BusinessLanding
+                  profile={profile}
+                  businesses={businesses}
+                  businessesLoading={businessesLoading}
+                  conversations={conversations}
+                  initialPrompt={prompt}
+                  onBack={() => setScreen("home")}
+                  onSubmit={startChat}
+                  onResume={(id) => void openConversation(id)}
+                  onDelete={setPendingDelete}
+                  onOpenBusiness={openBusiness}
+                />
+              )}
+              {screen === "business-detail" && (
+                <BusinessDetailScreen
+                  business={selectedBusiness}
+                  loading={selectedBusinessLoading}
+                  error={selectedBusinessError}
+                  onBack={leaveBusinessDetail}
+                  profile={profile}
+                />
+              )}
+              {screen === "chat" && conversation && (
+                <BusinessChatScreen
+                  key={conversation.id}
+                  conversation={conversation}
+                  conversations={conversations}
+                  profile={profile}
+                  paymentStatus={paymentStatus}
+                  paymentService={paymentService}
+                  onBack={leaveChat}
+                  onNewConversation={leaveChat}
+                  onSelectConversation={(id) => void openConversation(id)}
+                  onDeleteConversation={setPendingDelete}
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
         )}
       </div>
       <div id="egov-sso-widget-portal" />

@@ -40,6 +40,7 @@ import {
 } from "@phosphor-icons/react";
 import { DefaultChatTransport, getToolName, isToolUIPart } from "ai";
 import { play } from "cuelume";
+import { AnimatePresence, motion } from "motion/react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 import { StatusBar } from "@/components/phone-chrome";
@@ -54,6 +55,7 @@ import { Input } from "@/components/ui/input";
 import { PulseDot } from "@/components/ui/pulse-dot";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
+import { POPOVER_IN, POPOVER_OUT, SCRIM_IN, SCRIM_OUT, SHEET_IN, SHEET_OUT } from "@/lib/motion";
 import type { BirFormArtifact } from "@/lib/bir-form/artifact";
 import {
   latestRegistrationPlan,
@@ -412,7 +414,7 @@ function PlanDock({
       )}
     >
       <button
-        className="grid min-h-[54px] w-full grid-cols-[32px_minmax(0,1fr)_auto_20px] items-center gap-2 bg-white px-2.5 py-2 text-left hover:bg-gray-50"
+        className="grid min-h-[54px] w-full grid-cols-[32px_minmax(0,1fr)_auto_20px] items-center gap-2 bg-white px-2.5 py-2 text-left transition-colors duration-150 hover:bg-gray-50"
         data-cuelume-toggle={expanded ? "droplet" : "bloom"}
         type="button"
         aria-expanded={expanded}
@@ -453,7 +455,7 @@ function PlanDock({
         </span>
         <CaretDownIcon
           className={cn(
-            "size-[15px] text-muted-foreground transition-transform duration-200",
+            "size-[15px] text-muted-foreground transition-transform duration-200 ease-[var(--ease-out)] motion-reduce:transition-none",
             expanded && "rotate-180",
           )}
           weight="bold"
@@ -461,7 +463,11 @@ function PlanDock({
       </button>
       <div
         className={cn(
-          "grid transition-[grid-template-rows] duration-300 ease-out",
+          // motion-reduce:transition-none is load-bearing now that the global
+          // reduced-motion rule no longer clamps every transition to 0.01ms:
+          // this one animates a row size, which is movement, so it is one of the
+          // handful that has to opt out by hand.
+          "grid transition-[grid-template-rows] duration-300 ease-[var(--ease-out)] motion-reduce:transition-none",
           expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
         )}
         id="registration-plan-items"
@@ -602,7 +608,15 @@ function QuestionComposer({
   };
 
   return (
-    <form className="grid min-h-0 gap-4 overflow-y-auto pt-1 pr-1" onSubmit={submit}>
+    // chat-arrive is the keyframe every message in the thread already enters
+    // with, so the question card arrives in the app's existing handwriting
+    // rather than a second one invented for it. Before this, the composer was
+    // the only region on the screen that swapped in a single frame — and it is
+    // the one the user has to act on.
+    <form
+      className="grid min-h-0 animate-[chat-arrive_0.2s_ease-out] gap-4 overflow-y-auto pt-1 pr-1 motion-reduce:animate-none!"
+      onSubmit={submit}
+    >
       <div className="flex items-start gap-2">
         <span className="grid size-[26px] flex-none place-items-center rounded-lg bg-secondary text-primary">
           <SparkleIcon className="size-[13px]" weight="fill" />
@@ -642,9 +656,20 @@ function QuestionComposer({
         // p-3 with a 13px label puts the row at ~46px, over the 44pt tap-target
         // floor it used to sit under. border-2 and the 900 label are what make
         // a selected row read as chosen at a glance — the fill alone doesn't.
+        // These rows are the single most-tapped control in the product — every
+        // answer the agent needs comes through one — and the only feedback was a
+        // colour change that lands after the finger has already lifted. The dip
+        // happens while it is still down.
         const optionCard = (checked: boolean) =>
           cn(
-            "flex cursor-pointer items-center gap-2.5 rounded-md border-2 p-3 transition-colors",
+            "flex cursor-pointer items-center gap-2.5 rounded-md border-2 p-3",
+            // `scale`, not `transform`, in the transition list. Tailwind v4
+            // compiles scale-* to the standalone `scale:` property rather than
+            // `transform: scale()`, so an arbitrary transition-[transform,…]
+            // names a property that never changes and the dip snaps. The
+            // shorthand `transition-transform` covers it (it expands to
+            // transform,translate,scale,rotate); a hand-written list does not.
+            "transition-[scale,border-color,background-color] duration-150 ease-[var(--ease-out)] active:scale-[var(--press-lg)]",
             checked
               ? "border-primary bg-secondary"
               : "border-input bg-white hover:border-primary/40",
@@ -660,7 +685,14 @@ function QuestionComposer({
           </span>
         );
         return (
-          <section className="grid gap-3" key={question.id}>
+          // key={question.id} already remounts this on every advance, so the
+          // keyframe replays without any state to track. 4px and no more: the
+          // form above is overflow-y:auto, and a larger offset would briefly
+          // add scroll range to a container that is already height-capped.
+          <section
+            className="grid animate-[chat-arrive_0.2s_ease-out] gap-3 motion-reduce:animate-none!"
+            key={question.id}
+          >
             {question.type === "single" ? (
               <>
                 <RadioGroup
@@ -1315,20 +1347,31 @@ function PdfPreviewDialog({
   }, [onClose]);
 
   return (
+    // The enter used to be `animation: chat-sheet-in` in chat.css and the exit
+    // did not exist, so the sheet eased up over 250ms and then disappeared in a
+    // single frame — and the backdrop did the opposite, snapping to 55% black
+    // while the sheet was still travelling. Both halves now animate together
+    // and both leave the way they arrived, faster on the way out.
     <div className="chat-dialog-layer pdf-preview-layer">
-      <button
+      <motion.button
+        animate={{ opacity: 1, transition: SCRIM_IN }}
+        aria-label="Close PDF preview"
         className="chat-dialog-scrim"
         data-cuelume-toggle="droplet"
+        exit={{ opacity: 0, transition: SCRIM_OUT }}
+        initial={{ opacity: 0 }}
         onClick={onClose}
-        aria-label="Close PDF preview"
       />
-      <section
-        className="pdf-preview-dialog"
-        role="dialog"
-        aria-modal="true"
+      <motion.section
+        animate={{ opacity: 1, transform: "translateY(0px)", transition: SHEET_IN }}
         aria-labelledby="pdf-preview-title"
-        tabIndex={-1}
+        aria-modal="true"
+        className="pdf-preview-dialog"
+        exit={{ opacity: 0, transform: "translateY(20px)", transition: SHEET_OUT }}
+        initial={{ opacity: 0, transform: "translateY(20px)" }}
         ref={dialogRef}
+        role="dialog"
+        tabIndex={-1}
       >
         <header>
           <span>
@@ -1356,7 +1399,7 @@ function PdfPreviewDialog({
             <ArrowSquareOut weight="bold" /> Open full screen
           </a>
         </footer>
-      </section>
+      </motion.section>
     </div>
   );
 }
@@ -1397,6 +1440,28 @@ export function BusinessChatScreen({
   const scrollRef = useRef<HTMLDivElement>(null);
   const seeded = useRef(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const headerRef = useRef<HTMLElement>(null);
+  // Adding an exit animation exposed that there was no way to trigger one: the
+  // only thing that closed this menu was the trigger itself, so tapping the
+  // thread behind it left it hanging over the conversation. Escape and an
+  // outside press are what a menu is expected to answer to.
+  useEffect(() => {
+    if (!historyOpen) return;
+    // pointerdown rather than click, so a press that starts on the scrim of the
+    // thread dismisses on the way down instead of waiting for mouseup.
+    const dismiss = (event: PointerEvent) => {
+      if (!headerRef.current?.contains(event.target as Node)) setHistoryOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setHistoryOpen(false);
+    };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [historyOpen]);
   const initialPrompt = conversation.initialPrompt;
   const transport = useMemo(
     () => new DefaultChatTransport({ api: "/api/agent/chat", body: { initialPrompt } }),
@@ -1562,7 +1627,7 @@ export function BusinessChatScreen({
     <div className="screen agent-chat-screen">
       {registrationFinalized && <CompletionConfetti />}
       <StatusBar />
-      <header className="chat-header">
+      <header className="chat-header" ref={headerRef}>
         <button data-cuelume-toggle="page" onClick={onBack} aria-label="Go back">
           <ArrowLeft />
         </button>
@@ -1570,6 +1635,7 @@ export function BusinessChatScreen({
           <Headset weight="fill" />
         </div>
         <button
+          aria-expanded={historyOpen}
           className="chat-session-trigger"
           data-cuelume-toggle={historyOpen ? "droplet" : "bloom"}
           onClick={() => setHistoryOpen((open) => !open)}
@@ -1580,7 +1646,15 @@ export function BusinessChatScreen({
               <ShieldCheck weight="fill" /> Saved registration plan
             </small>
           </span>
-          <CaretDown />
+          {/* PlanDock's caret already turns over when its panel opens
+              (duration-200, same curve). This one is the same glyph doing the
+              same job three rows up and was the only one holding still. */}
+          <CaretDown
+            className={cn(
+              "transition-transform duration-200 ease-[var(--ease-out)] motion-reduce:transition-none",
+              historyOpen && "rotate-180",
+            )}
+          />
         </button>
         <button
           className="chat-new-session"
@@ -1590,35 +1664,55 @@ export function BusinessChatScreen({
         >
           <Plus />
         </button>
-        {historyOpen && (
-          <div className="chat-session-menu">
-            {conversations.map((item) => (
-              <div
-                className={`chat-session-row ${item.id === conversation.id ? "active" : ""}`}
-                key={item.id}
-              >
-                <button
-                  className="chat-session-open"
-                  data-cuelume-toggle="page"
-                  onClick={() => {
-                    setHistoryOpen(false);
-                    onSelectConversation(item.id);
-                  }}
+        {/* The one job motion is here for: this menu is a conditional render, so
+            before AnimatePresence it could fade in but never out — it vanished
+            in a single frame while its own trigger was still animating. The
+            origin is the trigger (top left, set in chat.css), so it grows out
+            of the control that opened it rather than out of its own middle. */}
+        <AnimatePresence>
+          {historyOpen && (
+            <motion.div
+              animate={{
+                opacity: 1,
+                transform: "scale(1) translateY(0px)",
+                transition: POPOVER_IN,
+              }}
+              className="chat-session-menu"
+              exit={{
+                opacity: 0,
+                transform: "scale(0.97) translateY(-6px)",
+                transition: POPOVER_OUT,
+              }}
+              initial={{ opacity: 0, transform: "scale(0.97) translateY(-6px)" }}
+            >
+              {conversations.map((item) => (
+                <div
+                  className={`chat-session-row ${item.id === conversation.id ? "active" : ""}`}
+                  key={item.id}
                 >
-                  {item.title}
-                </button>
-                <button
-                  className="chat-session-delete"
-                  data-cuelume-toggle="droplet"
-                  onClick={() => onDeleteConversation(item)}
-                  aria-label={`Delete ${item.title}`}
-                >
-                  <Trash />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+                  <button
+                    className="chat-session-open"
+                    data-cuelume-toggle="page"
+                    onClick={() => {
+                      setHistoryOpen(false);
+                      onSelectConversation(item.id);
+                    }}
+                  >
+                    {item.title}
+                  </button>
+                  <button
+                    className="chat-session-delete"
+                    data-cuelume-toggle="droplet"
+                    onClick={() => onDeleteConversation(item)}
+                    aria-label={`Delete ${item.title}`}
+                  >
+                    <Trash />
+                  </button>
+                </div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </header>
       <main className="chat-thread" ref={scrollRef} id="app-content">
         {localPaymentStatus && (
@@ -1768,9 +1862,13 @@ export function BusinessChatScreen({
           onClose={() => setPaymentRequest(null)}
         />
       )}
-      {pdfArtifact && (
-        <PdfPreviewDialog artifact={pdfArtifact} onClose={() => setPdfArtifact(null)} />
-      )}
+      {/* AnimatePresence has to sit outside the condition — it is what keeps the
+          dialog mounted long enough for its exit to play. */}
+      <AnimatePresence>
+        {pdfArtifact && (
+          <PdfPreviewDialog artifact={pdfArtifact} onClose={() => setPdfArtifact(null)} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

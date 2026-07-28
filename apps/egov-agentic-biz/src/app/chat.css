@@ -635,7 +635,10 @@
   outline: 0;
   background: #f3f5f9;
   box-shadow: 0 -15px 40px rgba(14, 28, 53, 0.24);
-  animation: chat-sheet-in 0.25s ease-out;
+  /* No `animation: chat-sheet-in` here any more. A keyframe can only play on
+     the way in — this sheet needs to animate on the way out too, so both
+     directions moved to motion in business-chat-screen.tsx where they can be
+     stated together and stay symmetric. */
 }
 .pdf-preview-dialog > header {
   min-height: 68px;
@@ -751,18 +754,13 @@
     transform: rotate(360deg);
   }
 }
-@keyframes chat-sheet-in {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-}
 @media (prefers-reduced-motion: reduce) {
+  /* .pdf-preview-dialog is no longer listed here: its motion moved to motion,
+     which reads the same OS setting through <MotionConfig reducedMotion="user">. */
   .chat-message,
   .chat-working-shimmer,
   .chat-shimmer,
-  .spin,
-  .pdf-preview-dialog {
+  .spin {
     animation: none;
   }
   .chat-shimmer,
@@ -1119,12 +1117,6 @@
     transform: rotate(360deg);
   }
 }
-@keyframes chat-sheet-in {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-}
 @media (prefers-reduced-motion: reduce) {
   .chat-message,
   .chat-working-shimmer,
@@ -1201,6 +1193,11 @@
   border-radius: 14px;
   background: #fff;
   box-shadow: 0 16px 34px rgba(21, 39, 71, 0.18);
+  /* The menu's left edge sits under the trigger's left edge, so scaling from
+     here reads as the panel unfolding out of the control that opened it. The
+     CSS default of `center` would have it inflate from its own middle, which
+     connects it to nothing. */
+  transform-origin: top left;
 }
 .chat-session-row {
   display: grid;
