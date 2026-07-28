@@ -56,6 +56,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
 import type { BirFormArtifact } from "@/lib/bir-form/artifact";
 import {
+  latestRegistrationPlan,
   uniqueMessagesById,
   type BarangayClearance,
   type BusinessChatMessage,
@@ -368,17 +369,6 @@ function Markdown({ children, streaming = false }: { children: string; streaming
       {children}
     </Streamdown>
   );
-}
-
-function latestRegistrationPlan(messages: BusinessChatMessage[]) {
-  for (const message of [...messages].reverse())
-    for (const part of [...message.parts].reverse()) {
-      if (part.type !== "tool-updatePlan") continue;
-      if (part.state === "output-available") return { plan: part.output.plan, active: false };
-      if (part.state === "input-available")
-        return { plan: { title: part.input.title, steps: part.input.steps }, active: true };
-    }
-  return null;
 }
 
 function PlanDock({

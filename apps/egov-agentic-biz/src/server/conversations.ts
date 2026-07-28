@@ -1,9 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type { UIMessage } from "ai";
 import {
+  latestPlanInParts,
+  latestRegistrationPlan,
+  planProgress,
   uniqueMessagesById,
+  type BusinessChatMessage,
   type BusinessConversation,
   type ConversationSummary,
+  type PlanProgress,
   type PaymentServiceType,
 } from "@/lib/business-chat";
 import { getDatabase } from "@/server/db";
@@ -28,7 +33,10 @@ export function deleteConversation(id: string) {
   return getDatabase().prepare("DELETE FROM conversations WHERE id = ?").run(id).changes > 0;
 }
 
-function mapSummary(row: ConversationRow): ConversationSummary {
+function mapSummary(
+  row: ConversationRow,
+  progress: PlanProgress | null = null,
+): ConversationSummary {
   return {
     id: row.id,
     title: row.title,
@@ -36,14 +44,43 @@ function mapSummary(row: ConversationRow): ConversationSummary {
     activeStreamId: row.active_stream_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    progress,
   };
 }
 
+function progressFromParts(partsJson: string): PlanProgress | null {
+  let parts: BusinessChatMessage["parts"];
+  try {
+    parts = JSON.parse(partsJson);
+  } catch {
+    return null;
+  }
+  const found = latestPlanInParts(parts);
+  return found ? planProgress(found.plan) : null;
+}
+
 export function listConversations(): ConversationSummary[] {
-  const rows = getDatabase()
+  const database = getDatabase();
+  const rows = database
     .prepare("SELECT * FROM conversations ORDER BY updated_at DESC")
     .all() as ConversationRow[];
-  return rows.map(mapSummary);
+  // One extra query for the whole list, not one per row, and the LIKE keeps it
+  // to the messages that actually carry a plan — the rest of a transcript is
+  // large and irrelevant here. Rows arrive oldest-first so the last write per
+  // conversation wins.
+  const planRows = database
+    .prepare(`
+      SELECT conversation_id, parts_json FROM messages
+      WHERE parts_json LIKE '%tool-updatePlan%'
+      ORDER BY created_at ASC, rowid ASC
+    `)
+    .all() as { conversation_id: string; parts_json: string }[];
+  const progressById = new Map<string, PlanProgress>();
+  for (const planRow of planRows) {
+    const progress = progressFromParts(planRow.parts_json);
+    if (progress) progressById.set(planRow.conversation_id, progress);
+  }
+  return rows.map((row) => mapSummary(row, progressById.get(row.id) ?? null));
 }
 
 export function getConversation(id: string): BusinessConversation | null {
@@ -65,15 +102,17 @@ export function getConversation(id: string): BusinessConversation | null {
       "SELECT id, role, parts_json FROM messages WHERE conversation_id = ? ORDER BY created_at ASC, rowid ASC",
     )
     .all(id) as MessageRow[];
+  const parsed = messages.map((message) => ({
+    id: message.id,
+    role: message.role,
+    parts: JSON.parse(message.parts_json) as UIMessage["parts"],
+  }));
+  const plan = latestRegistrationPlan(parsed as Pick<BusinessChatMessage, "parts">[]);
   return {
-    ...mapSummary(row),
+    ...mapSummary(row, plan ? planProgress(plan.plan) : null),
     paymentStatus: paymentStatuses["dti-business-name"] ?? null,
     paymentStatuses,
-    messages: messages.map((message) => ({
-      id: message.id,
-      role: message.role,
-      parts: JSON.parse(message.parts_json) as UIMessage["parts"],
-    })),
+    messages: parsed,
   } as BusinessConversation;
 }
 

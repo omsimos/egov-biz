@@ -566,6 +566,13 @@ export function BusinessLanding({
               <span className="grid min-w-0 gap-[3px]">
                 <strong className="truncate text-sm">{conversation.title}</strong>
                 <small className="text-2xs text-muted-foreground">
+                  {conversation.progress
+                    ? `${
+                        conversation.progress.done
+                          ? "Complete"
+                          : `${conversation.progress.completed} of ${conversation.progress.total} steps`
+                      } · `
+                    : null}
                   Updated {new Date(conversation.updatedAt).toLocaleDateString()}
                 </small>
               </span>
