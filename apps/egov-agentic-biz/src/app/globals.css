@@ -635,16 +635,43 @@ body {
     grid-template-columns: minmax(300px, 440px) 410px;
     gap: clamp(35px, 7vw, 110px);
     padding: 38px;
+    /* Exactly one viewport, and it does not scroll. This is a device mock: a
+       page scrollbar running alongside a phone frame reads as a broken layout
+       rather than as more content, and dragging the whole composition upward
+       to reach a rail that was only 20px too tall is nobody's idea of reading.
+       height, not min-height, so the grid row is a known size the two columns
+       can be sized against; overflow: hidden is the backstop, and everything
+       inside that can genuinely exceed it owns a scroller instead. */
+    height: 100svh;
+    overflow: hidden;
     /* Overrides the base `place-items: center`. Centring both columns
        independently gave the rail and the device no shared horizon, and a rail
        that grows as copy is added drifts upward against a fixed-height phone,
        moving the whole composition. */
     align-items: start;
   }
+  /* Taken out of flow. It is an empty mount point for the eGovPH widget's
+     modal, but as a third child of a two-column grid it was claiming a whole
+     implicit second row — which the stage then had to find height for, and
+     which split the leftover vertical space so the phone sat higher than
+     centred. The modal itself is position: fixed and .prototype-stage sets no
+     transform, filter or contain, so nothing here is a containing block for it:
+     it still covers the viewport and is not clipped by the overflow above. */
+  #egov-sso-widget-portal {
+    position: absolute;
+  }
   .phone-shell {
     width: 390px;
-    height: min(844px, calc(100svh - 56px));
-    min-height: 660px;
+    /* 76px, not 56px. The stage pads 38px on *each* side, so the old value
+       under-reserved by 20 — and since this resolves to calc() on any viewport
+       at or below 900px tall, the stage came out 20px taller than the screen
+       and the page scrolled by exactly that on most laptops.
+       No min-height either: a floor taller than the space available is the same
+       bug wearing a different hat (660 + 76 = 736, so every viewport shorter
+       than that scrolled no matter what this line said). The phone is free to
+       shrink; .screen below already drops its own 640px floor here, and every
+       screen inside it scrolls its own content. */
+    height: min(844px, calc(100svh - 76px));
     border: 10px solid #111820;
     border-radius: 48px;
     box-shadow:

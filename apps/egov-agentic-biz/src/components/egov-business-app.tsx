@@ -913,17 +913,22 @@ export function EgaphBusinessApp({
 
           pt = the phone's 10px bezel + its status bar's 11px top padding, so
           the lockup starts on the same line as the time. */}
-      <div className="hidden min-[760px]:flex min-[760px]:w-[min(410px,100%)] min-[760px]:flex-col min-[760px]:items-start min-[760px]:gap-6 min-[760px]:justify-self-end min-[760px]:pt-[21px]">
+      {/* max-h-full plus its own scroller, because .prototype-stage now clips at
+          one viewport: on a short window this copy would otherwise be cut off
+          with no way to reach it. The scrollbar is hidden the same way the
+          phone's own scrollers hide theirs, so the rail never grows furniture
+          the composition has to make room for. */}
+      <div className="hidden min-[760px]:flex min-[760px]:max-h-full min-[760px]:w-[min(410px,100%)] min-[760px]:flex-col min-[760px]:items-start min-[760px]:gap-6 min-[760px]:justify-self-end min-[760px]:overflow-y-auto min-[760px]:pt-[21px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <BrandLogo height={30} />
         {/* The "Business" eyebrow that sat here said the same word the lockup
             says, 5px below it. No hard <br> either: it was set for one width
             and fought the wrap the 410px column already forces at every other. */}
-        <h2 className="m-0 text-[clamp(40px,4vw,60px)] leading-[0.98] -tracking-[0.032em] text-balance font-bold">
+        <h2 className="m-0 text-[clamp(40px,4vw,60px)] leading-[0.9] -tracking-[0.032em] text-balance font-extrabold">
           Start your business, step by step.
         </h2>
         <p className="m-0 max-w-[380px] text-md leading-[1.5] text-muted-foreground">
-          From your DTI business name to your BIR certificate — the offices, the order, and what
-          each one needs.
+          From your DTI business name to your BIR certificate, the offices, the order, and what each
+          one needs.
         </p>
         {/* Numbered because the order is a real dependency, not decoration: no
             mayor's permit without barangay clearance, no BIR certificate
@@ -943,10 +948,10 @@ export function EgaphBusinessApp({
             </li>
           ))}
         </ol>
-        <span className="mt-1 inline-flex items-center gap-2 rounded-full border border-success-border bg-success-soft px-3 py-1.5 text-xs font-bold text-success-ink">
+        {/*<span className="mt-1 inline-flex items-center gap-2 rounded-full border border-success-border bg-success-soft px-3 py-1.5 text-xs font-bold text-success-ink">
           <ShieldCheckIcon className="size-[14px] shrink-0 text-success" weight="fill" />
           Live eGov SSO
-        </span>
+        </span>*/}
       </div>
       <div className="phone-shell">
         {status === "loading" ? (
