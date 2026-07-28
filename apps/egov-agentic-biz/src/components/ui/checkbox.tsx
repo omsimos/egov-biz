@@ -15,9 +15,13 @@ function Checkbox({ className, ...props }: CheckboxPrimitive.Root.Props) {
       )}
       {...props}
     >
+      {/* scale-50 with opacity, not scale-0 on its own. From 0 the tick was
+          still fully opaque at scale 0.1, so the first thing the eye caught was
+          a solid dot in the middle of the box that then grew into a check.
+          Fading it over the same 150ms makes it read as one mark being set. */}
       <CheckboxPrimitive.Indicator
         data-slot="checkbox-indicator"
-        className="flex scale-100 items-center justify-center text-primary-foreground transition-transform duration-150 data-ending-style:scale-0 data-starting-style:scale-0"
+        className="flex scale-100 items-center justify-center text-primary-foreground opacity-100 transition-[scale,opacity] duration-150 ease-[var(--ease-out)] motion-reduce:transition-none data-ending-style:scale-50 data-ending-style:opacity-0 data-starting-style:scale-50 data-starting-style:opacity-0"
       >
         <CheckIcon weight="bold" className="size-3" />
       </CheckboxPrimitive.Indicator>

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Nunito_Sans } from "next/font/google";
 import { InteractionSounds } from "@/components/interaction-sounds";
+import { MotionProvider } from "@/components/motion-provider";
 import "./globals.css";
 
 // No `weight` list on purpose. Nunito Sans is a variable font, and naming
@@ -37,7 +38,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       </head>
       <body>
         <InteractionSounds />
-        {children}
+        <MotionProvider>{children}</MotionProvider>
       </body>
     </html>
   );

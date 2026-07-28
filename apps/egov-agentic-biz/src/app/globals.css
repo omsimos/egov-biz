@@ -151,7 +151,23 @@
   --orange: var(--egov-orange);
   --red: var(--egov-red);
   --text-muted: var(--muted-foreground);
+  /* Motion vocabulary. The same three curves are mirrored as number tuples in
+     lib/motion.ts, because motion takes arrays and cannot read a var(). Change
+     one, change both. --ease-out for anything entering or leaving, --ease-in-out
+     for something already on screen moving from A to B, --ease-drawer for the
+     bottom sheets (it is Ionic's iOS curve). Never ease-in: it delays the first
+     frame, which is the one the user is watching. */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  /* Press feedback travels a fixed *distance*, not a fixed ratio: 0.97 on a
+     340px card moves each edge 5px and reads as a lurch, while on a 40px button
+     it moves 0.6px and reads as nothing. Three tiers, largest surface smallest
+     factor. Set to 1 under reduced motion below, which no-ops every press
+     without any component needing to know. */
+  --press-lg: 0.985;
+  --press-md: 0.97;
+  --press-sm: 0.94;
 }
 
 * {
@@ -462,6 +478,19 @@ body {
   animation: shimmer 1.4s infinite;
   border: 0;
 }
+/* Goes on whatever replaces a .skeleton-card. The shimmer is a promise that the
+   real thing is on its way; swapping it out on a single frame breaks that
+   promise. Opacity only, deliberately — the content lands in exactly the box the
+   skeleton occupied, so there is nothing for it to travel from, and a rise would
+   contradict the continuity the skeleton just set up. */
+.resolve-in {
+  animation: resolve-in 180ms var(--ease-out);
+}
+@keyframes resolve-in {
+  from {
+    opacity: 0;
+  }
+}
 /* Current-step marker in the registration plan. Sized by the caller; the two
    layers fill it proportionally so one component covers 11px and 16px alike. */
 .pulse-dot {
@@ -571,13 +600,32 @@ body {
   }
 }
 
+/* Reduced motion means fewer and gentler animations, not none. This used to
+   clamp `transition-duration` to 0.01ms on `*`, which also killed every colour,
+   opacity and ring transition in the app — the ones that aid comprehension and
+   that nobody with a vestibular disorder is asking to lose. What that setting
+   is actually about is *movement*, so movement is what stops:
+
+   - keyframe animations are clamped as before (they are the decorative loops:
+     shimmer, spin, confetti, orbit, pulse)
+   - transitions keep running, so colour and opacity still bridge state changes
+   - the press tokens flatten to 1, no-oping every :active scale in one place
+   - the handful of components that transition a transform or a size carry
+     `motion-reduce:transition-none` at the call site
+
+   Anything driven by motion is covered separately by <MotionConfig
+   reducedMotion="user"> in layout.tsx. */
 @media (prefers-reduced-motion: reduce) {
+  :root {
+    --press-lg: 1;
+    --press-md: 1;
+    --press-sm: 1;
+  }
   *,
   *::before,
   *::after {
     scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
   }
 }
