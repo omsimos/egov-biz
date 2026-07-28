@@ -1,6 +1,11 @@
 "use client";
 
-import { ArrowRightIcon, ShieldCheckIcon, WarningCircleIcon } from "@phosphor-icons/react";
+import {
+  ArrowRightIcon,
+  ShieldCheckIcon,
+  WarningCircleIcon,
+  WrenchIcon,
+} from "@phosphor-icons/react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { EGovLogo } from "@/components/egov-logo";
 import { BagongPilipinasMark, CityscapeArt, DictSeal, NpcSeal } from "@/components/gov-seals";
@@ -235,6 +240,32 @@ export function LoginScreen({ initialError }: { initialError?: string }) {
           >
             Have an exchange code? Enter it instead
           </button>
+        )}
+
+        {/* Local dev only, and deliberately not a fake success.
+            The MPIN step in the eGovPH widget is validated by
+            hackathon-sso.e.gov.ph; a rejected MPIN means no exchange code, and
+            an exchange code cannot be produced here, because minting one is the
+            entire job of their server. So this does not pretend the widget
+            succeeded — it skips it and mints a real session through the same
+            createSession a genuine exchange calls, which is why everything
+            downstream (chat, tools, prefill, eGovPay) behaves normally.
+            Dashed and warning-toned so it never reads as part of the product.
+            Two guards, as with /preview: NODE_ENV is inlined at build time so
+            this element is absent from a production bundle, and the route
+            itself 404s outside dev and off loopback. */}
+        {process.env.NODE_ENV !== "production" && (
+          <a
+            className={cn(
+              "relative z-[2] mt-4 flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-warning-border bg-warning-soft px-3 py-2.5 text-sm font-bold text-warning-ink no-underline",
+              "transition-[scale,background-color] duration-150 ease-[var(--ease-out)] active:scale-[var(--press-lg)]",
+              FOCUS_RING,
+            )}
+            href="/api/auth/dev-login"
+          >
+            <WrenchIcon className="size-4" weight="fill" />
+            Skip sign-in — local dev session
+          </a>
         )}
 
         <div className="relative z-[2] mt-[clamp(30px,5.5vh,56px)] mb-6 text-center [@media(max-height:720px)]:mt-[34px]">

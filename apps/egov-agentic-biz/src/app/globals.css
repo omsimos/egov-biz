@@ -539,12 +539,64 @@ body {
 }
 
 /* Authentication */
+/* The eGovPH widget mounts a React root into this box, and immediately before it
+   does it writes width/height/display/justify-content/align-items onto the
+   element as *inline* styles. So any layout this rule states is overridden the
+   moment the script lands, and only min-height survives — which is the one that
+   matters, because it holds the row's height while the widget loads instead of
+   letting the screen reflow under the reader. */
 #egov-sso-widget-button {
   width: 100%;
-  min-height: 50px;
+  min-height: 52px;
   margin-top: 8px;
-  display: flex;
+}
+/* The control the widget injects is its own `ghost` variant — transparent
+   background, black text — so untouched, the primary action on the login screen
+   renders as the bare words "Login with" beside a wordmark and reads as a
+   caption rather than a button.
+   Styled by element and id on purpose: the markup belongs to widgets.e.gov.ph
+   and carries only their e-* utilities, so an id selector (1,0,1) beats every
+   one of them without !important, and nothing here depends on a class name they
+   are free to rename.
+   White ground with a brand border rather than filled blue, because the mark the
+   widget injects is the full-colour eGOVPH wordmark — it cannot sit on a blue
+   field, and a neutral ground carrying the provider's mark in its own colours is
+   the standard treatment for third-party sign-in. */
+#egov-sso-widget-button button {
+  width: 100%;
+  min-height: 52px;
+  padding: 0 18px;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
+  gap: 9px;
+  border: 1.5px solid var(--primary);
+  border-radius: var(--radius-lg);
+  background: #fff;
+  box-shadow: 0 8px 20px rgba(7, 85, 233, 0.14);
+  cursor: pointer;
+  transition:
+    background-color 150ms var(--ease-out),
+    box-shadow 150ms var(--ease-out),
+    scale 150ms var(--ease-out);
+}
+#egov-sso-widget-button button:hover {
+  background: var(--egov-blue-soft);
+}
+#egov-sso-widget-button button:active {
+  scale: var(--press-lg);
+}
+/* The widget sets its label at its own text-sm/400. This is the screen's
+   primary action, so it takes the weight the rest of the app gives one. */
+#egov-sso-widget-button button p {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--primary);
+}
+#egov-sso-widget-button button img {
+  width: auto;
+  height: 21px;
 }
 /* .auth-loading-mark's animation target — element now built from utilities
    in egov-business-app.tsx via animate-[auth-pulse_...]. */
