@@ -31,6 +31,17 @@ export function rememberAccount(profile: CitizenProfile) {
   });
 }
 
+// Backs "Switch Account" on the login screen. That control used to link to the
+// eGov API catalog, which switched nothing; forgetting the remembered account
+// is the whole of what it should do, since nothing else about it is persisted.
+export function clearLastAccount() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Storage may be unavailable (private mode); the login screen degrades gracefully.
+  }
+}
+
 export function readLastAccount(): LastAccount | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
