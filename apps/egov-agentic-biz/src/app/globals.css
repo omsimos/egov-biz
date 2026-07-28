@@ -141,14 +141,12 @@
    --card-foreground, --muted, --muted-foreground, --border, --input,
    --primary, --primary-foreground, --radius, --ink, --line, --surface,
    --canvas, --success now come solely from styles/tokens.css. The
-   aliases below have no brand-token twin (--logo-blue, --ease-out)
-   or are repointed at the equivalent brand
-   token so bespoke CSS keeps reading its familiar name while there is
-   a single source of truth for the value. */
+   aliases below have no brand-token twin (--ease-out) or are repointed at the
+   equivalent brand token so bespoke CSS keeps reading its familiar name while
+   there is a single source of truth for the value. */
 :root {
   --blue: var(--primary);
   --blue-dark: var(--egov-blue-dark);
-  --logo-blue: #0a3fd6;
   --blue-soft: var(--egov-blue-soft);
   --orange: var(--egov-orange);
   --red: var(--egov-red);
@@ -381,32 +379,6 @@ body {
   height: 5px;
   background: #171c26;
   border-radius: 0 1px 1px 0;
-}
-.egov-logo {
-  display: inline-flex;
-  align-items: center;
-  color: var(--logo-blue);
-  font-family: var(--font-ui), "Avenir Next", ui-rounded, system-ui, sans-serif;
-  font-weight: 800;
-  letter-spacing: -0.045em;
-  line-height: 1;
-}
-.egov-logo > span {
-  display: block;
-}
-.egov-logo-ring {
-  flex: none;
-  width: 0.7em;
-  height: 0.7em;
-  margin: 0 0.02em;
-}
-.egov-logo small {
-  font-size: 0.42em;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin-left: 0.08em;
-  align-self: flex-end;
-  transform: translateY(0.04em);
 }
 .chat-header > .profile-avatar-fallback {
   width: 36px;

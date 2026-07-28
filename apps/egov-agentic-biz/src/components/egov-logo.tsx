@@ -1,28 +1,36 @@
-// The official eGovPH wordmark, rebuilt as text plus an SVG ring so it stays
-// crisp at every size. The "O" carries the Philippine flag colors: sun-yellow
-// up top, blue on the right, red sweeping the bottom.
-const RING_SEGMENTS = [
-  { color: "#f5c400", d: "M16.2 40.9A35 35 0 0 1 62 17.1" },
-  { color: "currentColor", d: "M62 17.1A35 35 0 0 1 72.5 76.8" },
-  { color: "#c8102e", d: "M72.5 76.8A35 35 0 0 1 16.2 40.9" },
-];
+import Image from "next/image";
+import logo from "../../public/images/logo-egov.png";
 
-export function EGovLogo({ className, size = 26 }: { className?: string; size?: number }) {
+// The eGovPH platform wordmark, from the supplied asset. This was previously a
+// hand-built recreation — text plus three SVG arcs for the flag-coloured "O" —
+// which read well but was not the real mark. Login is the one screen where a
+// citizen checks they are on a genuine government sign-in, so it uses the file
+// rather than an approximation of it.
+//
+// 854 / 244. Width is a definite length for the same reason BrandLogo's is: a
+// flex container stretches a cross-size of `auto`, and next/image sizes its
+// srcset from the dimensions it is handed.
+const ASPECT = 3.5;
+
+export function EGovLogo({
+  className,
+  size = 26,
+  priority = false,
+}: {
+  className?: string;
+  size?: number;
+  priority?: boolean;
+}) {
+  const width = Math.round(size * ASPECT);
   return (
-    <span
-      aria-label="eGovPH"
-      className={`egov-logo${className ? ` ${className}` : ""}`}
-      role="img"
-      style={{ fontSize: size }}
-    >
-      <span>eG</span>
-      <svg aria-hidden="true" className="egov-logo-ring" viewBox="0 0 100 100">
-        {RING_SEGMENTS.map(({ color, d }) => (
-          <path d={d} fill="none" key={color} stroke={color} strokeWidth="30" />
-        ))}
-      </svg>
-      <span>V</span>
-      <small>PH</small>
-    </span>
+    <Image
+      alt="eGovPH"
+      className={className}
+      height={size}
+      priority={priority}
+      src={logo}
+      style={{ height: size, width }}
+      width={width}
+    />
   );
 }
