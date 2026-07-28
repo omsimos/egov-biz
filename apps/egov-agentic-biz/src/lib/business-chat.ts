@@ -194,6 +194,12 @@ export function uniqueMessagesById<T extends { id: string }>(messages: readonly 
   return unique;
 }
 
+// How far a saved plan actually got. `completed` counts only steps marked
+// completed, matching the plan dock's own n/total chip; `done` also accepts
+// skipped steps, because a plan whose remaining work was deliberately skipped
+// is finished, not abandoned. Null when a conversation has no plan yet.
+export type PlanProgress = { completed: number; total: number; done: boolean };
+
 export type ConversationSummary = {
   id: string;
   title: string;
@@ -201,6 +207,7 @@ export type ConversationSummary = {
   activeStreamId: string | null;
   createdAt: string;
   updatedAt: string;
+  progress: PlanProgress | null;
 };
 
 export type BusinessConversation = ConversationSummary & {
@@ -213,3 +220,39 @@ export type BusinessChatContext = {
   profile: CitizenProfile | null;
   initialPrompt: string;
 };
+
+// The most recent updatePlan in a parts array, streaming or settled. Shared so
+// the chat dock and the conversations list read a plan the same way — they
+// disagreed silently before, and the list had no view of plans at all.
+export function latestPlanInParts(
+  parts: BusinessChatMessage["parts"],
+): { plan: RegistrationPlan; active: boolean } | null {
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    const part = parts[index];
+    if (part.type !== "tool-updatePlan") continue;
+    if (part.state === "output-available") return { active: false, plan: part.output.plan };
+    if (part.state === "input-available")
+      return { active: true, plan: { steps: part.input.steps, title: part.input.title } };
+  }
+  return null;
+}
+
+export function latestRegistrationPlan(messages: Pick<BusinessChatMessage, "parts">[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const found = latestPlanInParts(messages[index].parts);
+    if (found) return found;
+  }
+  return null;
+}
+
+export function planProgress(plan: RegistrationPlan): PlanProgress {
+  const completed = plan.steps.filter((step) => step.status === "completed").length;
+  const resolved = plan.steps.filter(
+    (step) => step.status === "completed" || step.status === "skipped",
+  ).length;
+  return {
+    completed,
+    done: plan.steps.length > 0 && resolved === plan.steps.length,
+    total: plan.steps.length,
+  };
+}

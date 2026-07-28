@@ -1,12 +1,24 @@
 "use client";
 
-import { ArrowRight, ShieldCheck, UserFocus } from "@phosphor-icons/react";
+import {
+  ArrowRightIcon,
+  ShieldCheckIcon,
+  WarningCircleIcon,
+  WrenchIcon,
+} from "@phosphor-icons/react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { EGovLogo } from "@/components/egov-logo";
 import { BagongPilipinasMark, CityscapeArt, DictSeal, NpcSeal } from "@/components/gov-seals";
 import { StatusBar } from "@/components/phone-chrome";
+import { ServiceLogo } from "@/components/service-logo";
+import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { FieldLabel } from "@/components/ui/field";
+import { IconButton } from "@/components/ui/icon-button";
+import { Input } from "@/components/ui/input";
 import type { CitizenProfile } from "@/lib/citizen-profile";
-import { LastAccount, readLastAccount } from "@/lib/last-account";
+import { clearLastAccount, LastAccount, readLastAccount } from "@/lib/last-account";
+import { cn, FOCUS_RING } from "@/lib/utils";
 
 declare global {
   interface Window {
@@ -22,13 +34,19 @@ export function LoginScreen({ initialError }: { initialError?: string }) {
   const [intentReady, setIntentReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [lastAccount, setLastAccount] = useState<LastAccount | null>(null);
+  // The code path stays reachable, just not first. An error means a code was
+  // already attempted, so the form has to be open to show it.
+  const [codeOpen, setCodeOpen] = useState(Boolean(initialError));
 
   useEffect(() => {
     setLastAccount(readLastAccount());
   }, []);
 
   useEffect(() => {
-    if (initialError) setError(initialError);
+    if (!initialError) return;
+    setError(initialError);
+    // An exchange-code error has to be visible, so the collapsed form opens.
+    setCodeOpen(true);
   }, [initialError]);
 
   const authenticate = useCallback(
@@ -103,101 +121,193 @@ export function LoginScreen({ initialError }: { initialError?: string }) {
   };
 
   return (
-    <div className="screen login-screen">
+    <div className="screen text-foreground">
       <StatusBar />
-      <main className="login-content" id="app-content">
-        <div className="login-government-marks" aria-hidden="true">
-          <BagongPilipinasMark className="seal-bp" />
-          <DictSeal className="seal-dict" />
-          <NpcSeal className="seal-npc" />
+      <main
+        className="relative flex h-[calc(100%-36px)] min-h-[604px] flex-col overflow-x-hidden overflow-y-auto px-[22px] pt-[34px] [scrollbar-width:none] [@media(max-height:720px)]:pt-[25px] [&::-webkit-scrollbar]:hidden [&>*]:flex-none"
+        id="app-content"
+      >
+        <div aria-hidden="true" className="flex h-12 items-center justify-center gap-[9px]">
+          <BagongPilipinasMark className="size-[46px]" />
+          <DictSeal className="size-[42px]" />
+          <NpcSeal className="h-12 w-[38px]" />
         </div>
 
-        <div className="login-logo-row">
-          <EGovLogo size={46} />
+        <div className="mt-[13px] flex justify-center">
+          <EGovLogo priority size={46} />
         </div>
 
-        <header className="login-welcome">
-          <h1>
-            Welcome back
-            {lastAccount ? `, ${lastAccount.firstName.toUpperCase()}` : ""}
+        <header className="mt-[26px] text-center [@media(max-height:720px)]:mt-[22px]">
+          {/* Not .toUpperCase(). A citizen's own name was the last shouted string
+              left in the app, and the profile already stores the right case. */}
+          <h1 className="text-xl leading-[1.15] -tracking-[.4px] text-foreground">
+            Welcome back{lastAccount ? `, ${lastAccount.firstName}` : ""}
           </h1>
-          <p>Enter your eGov exchange code</p>
+          <p className="mt-2.5 text-base font-medium text-muted-foreground">
+            {codeOpen ? "Enter your eGov exchange code" : "Sign in with your eGovPH account"}
+          </p>
         </header>
 
-        <form className="test-code-form" onSubmit={submit}>
-          <div className="test-code-label">
-            <label htmlFor="exchange-code">Exchange code</label>
-            <button
-              data-cuelume-toggle="droplet"
-              disabled={!exchangeCode || loading}
-              onClick={() => setExchangeCode("")}
-              type="button"
-            >
-              Clear
-            </button>
-          </div>
-          <div className="test-code-field">
-            <input
-              autoComplete="off"
-              id="exchange-code"
-              onChange={(event) => setExchangeCode(event.target.value)}
-              placeholder="Paste a fresh one-time code"
-              spellCheck={false}
-              type="password"
-              value={exchangeCode}
-            />
-            <button
-              aria-label="Continue with exchange code"
-              data-cuelume-toggle="loading"
-              disabled={!exchangeCode.trim() || !intentReady || loading}
-              type="submit"
-            >
-              <ArrowRight weight="bold" />
-            </button>
-          </div>
-          {error ? (
-            <p className="login-error" role="alert">
-              {error}
-            </p>
-          ) : null}
-        </form>
-
-        <a
-          className="login-code-help"
-          href="https://platforms.e.gov.ph/dashboard/api-catalogs/egov-sso"
-          rel="noreferrer"
-          target="_blank"
+        {/* eGovPH SSO leads. The exchange code is a one-time string minted by a
+            developer console — it is how this prototype is driven and it has to
+            stay reachable, but it is not what a citizen signs in with, and it
+            used to occupy the whole top of the screen. */}
+        <section
+          aria-label="eGovPH sign in"
+          className="relative z-[2] mt-7 grid justify-items-center gap-2.5 [@media(max-height:720px)]:mt-[23px]"
         >
-          Forgot your code? Generate one
-        </a>
-
-        <button className="faceid-pill" data-cuelume-toggle="page" type="button">
-          <UserFocus weight="regular" /> Login with Face ID
-        </button>
-
-        <section className="official-login" aria-label="eGovPH sign in">
-          <span>or</span>
-          <div id="egov-sso-widget-button" />
-          <p>
-            <ShieldCheck weight="fill" /> Secure eGovPH authentication
+          {/* The widget injects its own button here; we own the box, not the
+              button inside it, so this reserves full width and a stable height
+              rather than restyling markup from widgets.e.gov.ph. */}
+          <div
+            className="grid min-h-[54px] w-full place-items-center"
+            id="egov-sso-widget-button"
+          />
+          <p className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
+            <ServiceLogo
+              fallback={<ShieldCheckIcon className="size-4 text-success" weight="fill" />}
+              height={16}
+              service="egov-sso"
+            />
+            Secure eGovPH authentication
           </p>
         </section>
 
-        <div className="login-account-switch">
+        {codeOpen ? (
+          <form className="relative z-[2] mt-5 grid gap-[9px]" onSubmit={submit}>
+            <div className="flex items-center justify-between">
+              <FieldLabel className="mb-0" htmlFor="exchange-code">
+                Exchange code
+              </FieldLabel>
+              <button
+                className="text-xs font-extrabold text-muted-foreground transition hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+                data-cuelume-toggle="droplet"
+                disabled={!exchangeCode || loading}
+                onClick={() => setExchangeCode("")}
+                type="button"
+              >
+                Clear
+              </button>
+            </div>
+            <div className="relative">
+              <Input
+                aria-describedby={error ? "exchange-code-error" : undefined}
+                aria-invalid={error ? true : undefined}
+                autoComplete="off"
+                autoFocus
+                className="h-[58px] pr-14 tracking-[0.5px]"
+                id="exchange-code"
+                onChange={(event) => setExchangeCode(event.target.value)}
+                placeholder="Paste a fresh one-time code"
+                spellCheck={false}
+                type="password"
+                value={exchangeCode}
+              />
+              <IconButton
+                aria-label="Continue with exchange code"
+                className="absolute top-1/2 right-2 -translate-y-1/2"
+                data-cuelume-toggle="loading"
+                disabled={!exchangeCode.trim() || !intentReady || loading}
+                type="submit"
+                variant="primary"
+              >
+                <ArrowRightIcon weight="bold" />
+              </IconButton>
+            </div>
+            {error ? (
+              <Alert className="mt-2.5" id="exchange-code-error" variant="destructive">
+                <WarningCircleIcon weight="fill" />
+                {error}
+              </Alert>
+            ) : null}
+            <a
+              className="mx-auto mt-1 block w-fit text-sm font-bold text-primary no-underline"
+              href="https://platforms.e.gov.ph/dashboard/api-catalogs/egov-sso"
+              rel="noreferrer"
+              target="_blank"
+            >
+              Forgot your code? Generate one
+            </a>
+          </form>
+        ) : (
+          // Only "exchange code" carries the link colour. Muting the whole
+          // sentence made the one alternative route off this screen read as
+          // disabled help text; colouring all of it would have given a secondary
+          // path the same billing as the blue CTA above it.
+          <button
+            className={cn(
+              "mx-auto mt-4 block w-fit text-sm font-bold text-foreground",
+              "transition-[scale] duration-150 ease-[var(--ease-out)] active:scale-[var(--press-md)]",
+              FOCUS_RING,
+            )}
+            onClick={() => setCodeOpen(true)}
+            type="button"
+          >
+            Have an <span className="text-primary">exchange code</span>? Enter it instead
+          </button>
+        )}
+
+        {/* Local dev only, and deliberately not a fake success.
+            The MPIN step in the eGovPH widget is validated by
+            hackathon-sso.e.gov.ph; a rejected MPIN means no exchange code, and
+            an exchange code cannot be produced here, because minting one is the
+            entire job of their server. So this does not pretend the widget
+            succeeded — it skips it and mints a real session through the same
+            createSession a genuine exchange calls, which is why everything
+            downstream (chat, tools, prefill, eGovPay) behaves normally.
+            Dashed and warning-toned so it never reads as part of the product.
+            Two guards, as with /preview: NODE_ENV is inlined at build time so
+            this element is absent from a production bundle, and the route
+            itself 404s outside dev and off loopback. */}
+        {process.env.NODE_ENV !== "production" && (
+          <a
+            className={cn(
+              "relative z-[2] mt-4 flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-warning-border bg-warning-soft px-3 py-2.5 text-sm font-bold text-warning-ink no-underline",
+              "transition-[scale,background-color] duration-150 ease-[var(--ease-out)] active:scale-[var(--press-lg)]",
+              FOCUS_RING,
+            )}
+            href="/api/auth/dev-login"
+          >
+            <WrenchIcon className="size-4" weight="fill" />
+            Skip sign-in — local dev session
+          </a>
+        )}
+
+        <div className="relative z-[2] mt-[clamp(30px,5.5vh,56px)] mb-6 text-center [@media(max-height:720px)]:mt-[34px]">
           {lastAccount?.maskedMobile ? (
-            <small className="masked-chip">{lastAccount.maskedMobile}</small>
+            <Badge variant="neutral">{lastAccount.maskedMobile}</Badge>
           ) : (
-            <small>Staging environment</small>
+            <Badge variant="primary">Staging environment</Badge>
           )}
-          <p>
-            Not you?{" "}
-            <a href="https://platforms.e.gov.ph/dashboard/api-catalogs/egov-sso">Switch Account</a>
-          </p>
+          {lastAccount ? (
+            <p className="mt-2.5 text-base font-medium text-foreground">
+              Not you?{" "}
+              {/* Was a link to the eGov API catalog, which switched nothing. The
+                  remembered account is the only thing this screen persists, so
+                  forgetting it is the entire action. */}
+              <button
+                className={cn("ml-1 font-bold text-primary", FOCUS_RING)}
+                onClick={() => {
+                  clearLastAccount();
+                  setLastAccount(null);
+                }}
+                type="button"
+              >
+                Switch Account
+              </button>
+            </p>
+          ) : null}
         </div>
 
-        <div className="login-cityscape" aria-hidden="true">
-          <BagongPilipinasMark className="cityscape-bp" />
-          <CityscapeArt className="cityscape-art" />
+        {/* 132px, not 212. At the old size the mark alone was 152px tall and the
+            content above already filled an 844px viewport, so a citizen saw the
+            top third of a starburst and no cityscape at all. */}
+        <div
+          aria-hidden="true"
+          className="relative mt-auto -mx-[22px] h-[132px] overflow-hidden pointer-events-none"
+        >
+          <BagongPilipinasMark className="absolute top-0 left-1/2 z-[1] size-[92px] -translate-x-1/2 drop-shadow-[0_3px_8px_rgba(20,40,90,.16)]" />
+          <CityscapeArt className="absolute inset-x-0 bottom-0 z-[2] h-[96px] w-full" />
         </div>
       </main>
     </div>

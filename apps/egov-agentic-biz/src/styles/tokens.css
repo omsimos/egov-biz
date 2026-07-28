@@ -1,0 +1,200 @@
+/* ============================================================
+   eGOVbusiness brand token layer, from the design handoff
+   (design_handoff_egovbusiness/tokens/*).
+   Consumed by globals.css (@theme inline) and bespoke screen CSS.
+
+   Two groups deliberately depart from the handoff: --canvas and the
+   --shadow-* ramp (see DEPTH below), and the derived neutral/tint
+   ramps (see DERIVED EXTENSION below). Every other value here is the
+   handoff's. Departures record the original inline so the delta stays
+   auditable against the source.
+
+   Fonts: --font-sans is declared here as a variable only. Nunito
+   Sans itself is loaded via next/font in a later task — do NOT add
+   a Google Fonts @import here.
+   ============================================================ */
+
+/* ---- colors.css ---- */
+:root {
+  /* Brand base */
+  --egov-blue: #0755e9; /* Trust Blue — primary */
+  --egov-blue-dark: #073caa; /* Deep Blue — hover/press, headings on tint */
+  --egov-blue-soft: #edf3ff; /* Soft Blue — tint surfaces, icon chips */
+  --egov-gold: #f5b400;
+  --egov-orange: #f5a400;
+  --egov-red: #e84343;
+  --flag-red: #cf1e2a;
+  --ink: #17233b;
+  --slate: #6c768a;
+  --line: #e4e9f2;
+  --canvas: #e9eef8; /* DEPTH — handoff #f2f5fb; see the DEPTH block below */
+  --surface: #ffffff;
+  --success: #15875d;
+  --success-soft: #e9f7f1;
+  --warning-soft: #fff4cc;
+
+  /* Semantic (shadcn) */
+  --background: #ffffff;
+  --foreground: #17233b;
+  --card: #ffffff;
+  --card-foreground: #17233b;
+  --popover: #ffffff;
+  --popover-foreground: #17233b;
+
+  --primary: #0755e9;
+  --primary-hover: #0a4ecb;
+  --primary-foreground: #ffffff;
+
+  --secondary: #edf3ff;
+  --secondary-foreground: #073caa;
+
+  --muted: #f0f3f8;
+  --muted-foreground: #6c768a;
+
+  --accent: #edf3ff;
+  --accent-foreground: #073caa;
+
+  --destructive: #e84343;
+  --destructive-foreground: #ffffff;
+
+  --border: #e4e9f2;
+  --input: #cfd7e4;
+  --ring: rgba(7, 85, 233, 0.4);
+}
+
+/* ============================================================
+   DERIVED EXTENSION — not from the design handoff.
+   The brand defines only six flat neutrals (Ink, Slate, Soft Blue,
+   Canvas, Line, Success) and no ramp, so screens invented ~15
+   one-off greys. This ramp interpolates between the brand's own
+   anchors; the four anchor steps are marked. Do not treat the
+   unmarked steps as brand-approved values.
+   ============================================================ */
+:root {
+  --gray-50: #f8faff;
+  --gray-100: #f1f3f6;
+  --gray-200: #e4e9f2; /* anchor — brand Line */
+  --gray-300: #d5deeb;
+  --gray-400: #c4ccda;
+  --gray-500: #9aa4b5;
+  --gray-600: #8a94a7;
+  --gray-700: #6c768a; /* anchor — brand Slate */
+  --gray-800: #4f5d74;
+  --gray-900: #17233b; /* anchor — brand Ink */
+
+  /* Tint families: 2 surface steps + border + ink, per semantic colour. */
+  --primary-tint: #edf3ff; /* anchor — brand Soft Blue */
+  --primary-tint-strong: #e2ecff;
+  --primary-border: #cfe0ff;
+  --primary-border-strong: #a9bde9;
+  --primary-ink: #183f8f;
+
+  --success-border: #bfe4d6;
+  --success-ink: #236348;
+
+  --warning-border: #ead99c;
+  --warning-ink: #866000;
+
+  --destructive-soft: #fff1ef;
+  --destructive-border: #f1cfca;
+  --destructive-ink: #8d392c;
+  --destructive-hover: #d93b3b; /* 4.5pts darker than --destructive, matching --primary-hover's delta */
+
+  /* Handoff values that were used on screen but never named. */
+  --input-strong: #cfd9ec; /* emphasised input / outline-button border */
+  --line-soft: #edf0f5; /* border on blurred and nav surfaces (lighter than Line) */
+}
+
+/* ---- typography.css (variables only; NO @import) ---- */
+:root {
+  --font-sans: "Nunito Sans", ui-rounded, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --text-2xs: 0.625rem; /* 10px */
+  --text-xs: 0.6875rem; /* 11px */
+  --text-sm: 0.8125rem; /* 13px */
+  --text-base: 0.9375rem; /* 15px */
+  --text-md: 1.0625rem; /* 17px */
+  --text-lg: 1.25rem; /* 20px */
+  --text-xl: 1.6875rem; /* 27px */
+  --text-2xl: 2.125rem; /* 34px */
+  --text-display: 2.875rem; /* 46px */
+
+  --fw-regular: 400;
+  --fw-medium: 500; /* DEPTH-adjacent addition — the app's base UI weight, see body in globals.css */
+  --fw-semibold: 600;
+  --fw-bold: 700;
+  --fw-heavy: 800;
+  --fw-black: 900;
+
+  --lh-tight: 1.08;
+  --lh-snug: 1.35;
+  --lh-normal: 1.55;
+
+  --tracking-tight: -1px;
+  --tracking-label: 1.2px;
+
+  --text-heading: var(--fw-black) var(--text-2xl) / var(--lh-tight) var(--font-sans);
+  --text-title: var(--fw-heavy) var(--text-md) / var(--lh-snug) var(--font-sans);
+  --text-body: var(--fw-regular) var(--text-base) / var(--lh-normal) var(--font-sans);
+  --label-caps: var(--fw-heavy) var(--text-xs) / 1 var(--font-sans);
+}
+
+/* ---- spacing.css ---- */
+:root {
+  --space-0: 0;
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 10px;
+  --space-6: 12px;
+  --space-7: 14px;
+  --space-8: 16px;
+  --space-10: 20px;
+  --space-12: 24px;
+  --space-16: 32px;
+  --space-20: 40px;
+  --gutter-screen: 20px;
+  --gutter-card: 14px;
+}
+
+/* ---- radius-shadow.css ---- */
+:root {
+  --radius: 0.75rem; /* 12px base */
+  --radius-sm: calc(var(--radius) - 5px); /* 7px  — inputs, small chips */
+  --radius-md: calc(var(--radius) - 1px); /* 11px — buttons */
+  --radius-lg: var(--radius); /* 12px */
+  --radius-xl: calc(var(--radius) + 5px); /* 17px — cards */
+  --radius-2xl: calc(var(--radius) + 13px); /* 25px — sheets */
+  --radius-pill: 999px;
+
+  /* ---- DEPTH — departs from the handoff ----
+     The handoff pairs a canvas 3.5 L* points off white with single-blur
+     shadows at 6-10% alpha. At that separation a card's border is the only
+     thing marking its edge, so every screen reads as one flat sheet with
+     lines drawn on it. Two changes, together:
+
+     1. --canvas #f2f5fb -> #e9eef8, ΔL* 3.5 -> 6.0 against white. Still
+        lighter than --line (ΔL* 7.8), so no border stops reading.
+     2. Each step becomes two layers — a tight contact shadow saying the
+        surface rests on something, plus a broad ambient one giving it
+        height. Raising a single blur's alpha instead just paints a grey
+        smudge, which is why the handoff's values cannot be fixed by
+        scaling them.
+
+     --shadow-primary and --shadow-sheet keep their handoff values: both
+     already sit at 20% and neither reads flat.
+
+     Handoff originals, for audit:
+       xs 0 2px 8px  rgba(41, 55, 82, .06)
+       sm 0 5px 15px rgba(33, 55, 90, .06)
+       md 0 10px 30px rgba(28, 55, 104, .07)
+       lg 0 12px 34px rgba(24, 52, 102, .10)                             */
+  --shadow-xs: 0 1px 2px rgba(23, 35, 59, 0.06), 0 2px 8px rgba(41, 55, 82, 0.08);
+  --shadow-sm: 0 1px 3px rgba(23, 35, 59, 0.07), 0 6px 16px rgba(33, 55, 90, 0.11);
+  --shadow-md: 0 2px 6px rgba(23, 35, 59, 0.08), 0 12px 32px rgba(28, 55, 104, 0.14);
+  --shadow-lg: 0 4px 10px rgba(23, 35, 59, 0.09), 0 20px 46px rgba(24, 52, 102, 0.18);
+  --shadow-primary: 0 9px 19px rgba(7, 85, 233, 0.2);
+  --shadow-sheet: 0 -15px 40px rgba(14, 28, 53, 0.2);
+}

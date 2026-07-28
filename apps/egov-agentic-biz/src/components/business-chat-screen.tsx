@@ -4,9 +4,12 @@ import { useChat } from "@ai-sdk/react";
 import {
   ArrowLeft,
   ArrowRight,
+  ArrowRightIcon,
   ArrowSquareOut,
   Check,
   CheckCircle,
+  CheckCircleIcon,
+  CheckIcon,
   CircleNotch,
   Buildings,
   CalendarDots,
@@ -14,30 +17,48 @@ import {
   DownloadSimple,
   FilePdf,
   FileText,
-  FlagCheckered,
-  GlobeHemisphereWest,
+  FlagCheckeredIcon,
+  GlobeHemisphereWestIcon,
   Headset,
-  Info,
-  ListChecks,
-  MagnifyingGlass,
-  Minus,
-  PaperPlaneRight,
+  InfoIcon,
+  ListChecksIcon,
+  MagnifyingGlassIcon,
+  MinusIcon,
+  PaperPlaneRightIcon,
   PencilSimple,
+  PencilSimpleIcon,
   ShieldCheck,
+  SparkleIcon,
   Storefront,
   StopCircle,
   Plus,
   CaretDown,
+  CaretDownIcon,
   Trash,
   X,
+  XIcon,
 } from "@phosphor-icons/react";
 import { DefaultChatTransport, getToolName, isToolUIPart } from "ai";
 import { play } from "cuelume";
+import { AnimatePresence, motion } from "motion/react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 import { StatusBar } from "@/components/phone-chrome";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { FieldHint, FieldLabel } from "@/components/ui/field";
+import { IconButton } from "@/components/ui/icon-button";
+import { Input } from "@/components/ui/input";
+import { PulseDot } from "@/components/ui/pulse-dot";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { cn } from "@/lib/utils";
+import { POPOVER_IN, POPOVER_OUT, SCRIM_IN, SCRIM_OUT, SHEET_IN, SHEET_OUT } from "@/lib/motion";
 import type { BirFormArtifact } from "@/lib/bir-form/artifact";
 import {
+  latestRegistrationPlan,
   uniqueMessagesById,
   type BarangayClearance,
   type BusinessChatMessage,
@@ -103,7 +124,7 @@ export function ComplianceResultCard({
           <ShieldCheck weight="duotone" />
         </span>
         <div>
-          <small>SETUP RESULT</small>
+          <small>Setup result</small>
           <strong>{title}</strong>
           <p>{subtitle}</p>
         </div>
@@ -159,7 +180,7 @@ export function BarangayClearanceCard({
           <Certificate weight="duotone" />
         </span>
         <div>
-          <small>ELECTRONIC BARANGAY CLEARANCE</small>
+          <small>Electronic barangay clearance</small>
           <strong>
             {clearance.barangay}, {clearance.city}
           </strong>
@@ -194,7 +215,7 @@ export function BarangayClearanceCard({
         ]}
       />
       <section>
-        <small>DOCUMENTS SUBMITTED</small>
+        <small>Documents submitted</small>
         <ul>
           {clearance.supportingDocuments.map((document) => (
             <li key={document}>
@@ -204,7 +225,7 @@ export function BarangayClearanceCard({
         </ul>
       </section>
       <section className="local-permit-use">
-        <small>USED FOR</small>
+        <small>Used for</small>
         <ul>
           {clearance.usedFor.map((use) => (
             <li key={use}>
@@ -216,7 +237,7 @@ export function BarangayClearanceCard({
       {!approved && (
         <footer className="local-permit-payment">
           <div>
-            <small>BARANGAY CLEARANCE FEE</small>
+            <small>Barangay clearance fee</small>
             <strong>{clearance.feeLabel}</strong>
           </div>
           <button
@@ -300,7 +321,7 @@ export function EbplsPermitCard({
         ]}
       />
       <section>
-        <small>ATTACHMENTS SENT</small>
+        <small>Attachments sent</small>
         <ul>
           {receipt.attachments.map((attachment) => (
             <li key={attachment}>
@@ -312,7 +333,7 @@ export function EbplsPermitCard({
       {!issued && (
         <footer className="local-permit-payment">
           <div>
-            <small>ASSESSED LGU FEES</small>
+            <small>Assessed LGU fees</small>
             <strong>{receipt.feeLabel}</strong>
           </div>
           <button
@@ -352,19 +373,25 @@ function Markdown({ children, streaming = false }: { children: string; streaming
   );
 }
 
-function latestRegistrationPlan(messages: BusinessChatMessage[]) {
-  for (const message of [...messages].reverse())
-    for (const part of [...message.parts].reverse()) {
-      if (part.type !== "tool-updatePlan") continue;
-      if (part.state === "output-available") return { plan: part.output.plan, active: false };
-      if (part.state === "input-available")
-        return { plan: { title: part.input.title, steps: part.input.steps }, active: true };
-    }
-  return null;
-}
-
-function PlanDock({ plan, active }: { plan: RegistrationPlan; active: boolean }) {
+function PlanDock({
+  plan,
+  active,
+  collapseKey,
+}: {
+  plan: RegistrationPlan;
+  active: boolean;
+  // Tool call id of the question currently being asked, if any. The dock and
+  // the question form are siblings inside .chat-composer-shell, which caps at
+  // min(76dvh, 680px) — so an expanded plan (list capped at min(28dvh, 260px))
+  // eats height the question then can't have, and the composer clips it.
+  // Yielding on each new question keeps the task visible; the user can reopen
+  // the plan and it stays open until the next one arrives.
+  collapseKey?: string;
+}) {
   const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    if (collapseKey) setExpanded(false);
+  }, [collapseKey]);
   const completed = plan.steps.filter((step) => step.status === "completed").length;
   const allResolved =
     plan.steps.length > 0 &&
@@ -378,70 +405,133 @@ function PlanDock({ plan, active }: { plan: RegistrationPlan; active: boolean })
     : (current?.label ?? "Preparing your registration plan");
 
   return (
-    <section
-      className={`registration-plan-dock ${expanded ? "expanded" : "collapsed"} ${active ? "active" : ""}`}
+    <Card
+      role="region"
       aria-label="Registration plan"
+      className={cn(
+        "min-w-0 shadow-xs",
+        active ? "border-primary-border-strong" : "border-gray-300",
+      )}
     >
       <button
-        className="registration-plan-toggle"
+        className="grid min-h-[54px] w-full grid-cols-[32px_minmax(0,1fr)_auto_20px] items-center gap-2 bg-white px-2.5 py-2 text-left transition-colors duration-150 hover:bg-gray-50"
         data-cuelume-toggle={expanded ? "droplet" : "bloom"}
         type="button"
         aria-expanded={expanded}
         aria-controls="registration-plan-items"
         onClick={() => setExpanded((open) => !open)}
       >
-        <span className={`registration-plan-status ${current?.status ?? "pending"}`}>
+        <span
+          className={cn(
+            "grid size-8 place-items-center rounded-md",
+            allResolved || current?.status === "completed"
+              ? "bg-success text-white"
+              : current?.status === "in_progress"
+                ? "bg-secondary text-primary"
+                : "bg-muted text-muted-foreground",
+          )}
+        >
           {allResolved || current?.status === "completed" ? (
-            <Check weight="bold" />
+            <CheckIcon className="size-4" weight="bold" />
           ) : current?.status === "in_progress" ? (
-            <ArrowRight weight="bold" />
+            <PulseDot className="size-4" />
           ) : (
-            <ListChecks weight="duotone" />
+            <ListChecksIcon className="size-4" weight="duotone" />
           )}
         </span>
-        <span className="registration-plan-summary">
-          <small>{expanded ? "REGISTRATION PLAN" : "CURRENT TASK"}</small>
-          <strong>{expanded ? plan.title : currentLabel}</strong>
+        <span className="grid min-w-0 gap-0.5">
+          <small className="text-xs font-bold text-muted-foreground">
+            {expanded ? "Registration plan" : "Current task"}
+          </small>
+          <strong className="truncate text-xs leading-[1.35]">
+            {expanded ? plan.title : currentLabel}
+          </strong>
         </span>
         <span
-          className="registration-plan-count"
+          className="rounded-sm bg-muted px-[7px] py-1 text-2xs font-extrabold tabular-nums text-muted-foreground"
           aria-label={`${completed} of ${plan.steps.length} tasks completed`}
         >
           {completed}/{plan.steps.length}
         </span>
-        <CaretDown className="registration-plan-caret" weight="bold" />
+        <CaretDownIcon
+          className={cn(
+            "size-[15px] text-muted-foreground transition-transform duration-200 ease-[var(--ease-out)] motion-reduce:transition-none",
+            expanded && "rotate-180",
+          )}
+          weight="bold"
+        />
       </button>
       <div
-        className="registration-plan-reveal"
+        className={cn(
+          // motion-reduce:transition-none is load-bearing now that the global
+          // reduced-motion rule no longer clamps every transition to 0.01ms:
+          // this one animates a row size, which is movement, so it is one of the
+          // handful that has to opt out by hand.
+          "grid transition-[grid-template-rows] duration-300 ease-[var(--ease-out)] motion-reduce:transition-none",
+          expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+        )}
         id="registration-plan-items"
         aria-hidden={!expanded}
       >
-        <div className="registration-plan-items">
-          <ol>
+        <div className="min-h-0 overflow-hidden">
+          <ol className="m-0 max-h-[min(28dvh,260px)] list-none overflow-y-auto border-t border-gray-200 px-2.5 pt-[5px] pb-2">
             {plan.steps.map((step, index) => {
               const finishLine = index === plan.steps.length - 1;
               return (
                 <li
-                  className={`${step.status}${finishLine ? " finish-line" : ""}`}
+                  className={cn(
+                    "grid min-h-9 grid-cols-[22px_minmax(0,1fr)] items-start gap-2 py-1.5 text-xs leading-[1.4]",
+                    step.status === "in_progress"
+                      ? "font-extrabold text-foreground"
+                      : step.status === "completed"
+                        ? "text-gray-800"
+                        : step.status === "skipped"
+                          ? "text-gray-500"
+                          : "text-gray-700",
+                  )}
                   key={step.id}
                   aria-current={step.status === "in_progress" ? "step" : undefined}
                   aria-label={step.status === "skipped" ? `${step.label} — skipped` : undefined}
                 >
-                  <i aria-hidden="true">
+                  <span
+                    className={cn(
+                      "grid size-[18px] place-items-center rounded-sm border-[1.5px]",
+                      finishLine
+                        ? "border-0 bg-transparent"
+                        : step.status === "completed"
+                          ? "border-success bg-success text-white"
+                          : step.status === "in_progress"
+                            ? "border-primary-border-strong bg-secondary text-primary"
+                            : step.status === "skipped"
+                              ? "border-gray-300 bg-gray-100 text-gray-600"
+                              : "border-gray-400 bg-white text-white",
+                    )}
+                    aria-hidden="true"
+                  >
                     {step.status === "skipped" ? (
-                      <Minus weight="bold" />
+                      <MinusIcon className="size-[11px]" weight="bold" />
                     ) : finishLine ? (
-                      <FlagCheckered weight={step.status === "completed" ? "fill" : "duotone"} />
+                      <FlagCheckeredIcon
+                        className={cn(
+                          "size-[17px]",
+                          step.status === "completed"
+                            ? "text-success"
+                            : step.status === "in_progress"
+                              ? "text-primary"
+                              : "text-gray-600",
+                        )}
+                        weight={step.status === "completed" ? "fill" : "duotone"}
+                      />
                     ) : step.status === "completed" ? (
-                      <Check weight="bold" />
+                      <CheckIcon className="size-[11px]" weight="bold" />
                     ) : step.status === "in_progress" ? (
-                      <ArrowRight weight="bold" />
+                      <PulseDot className="size-[11px]" />
                     ) : null}
-                  </i>
+                  </span>
                   <span>
                     {step.label}
                     {step.status === "skipped" && (
-                      <small className="registration-plan-skipped-label"> (skipped)</small>
+                      <small className="italic text-gray-500"> (skipped)</small>
                     )}
                   </span>
                 </li>
@@ -450,7 +540,7 @@ function PlanDock({ plan, active }: { plan: RegistrationPlan; active: boolean })
           </ol>
         </div>
       </div>
-    </section>
+    </Card>
   );
 }
 
@@ -518,15 +608,35 @@ function QuestionComposer({
   };
 
   return (
-    <form className="hitl-composer" onSubmit={submit}>
-      <div className="hitl-batch-intro">
-        <ListChecks weight="bold" />
-        <span>
-          <strong>Complete this checkpoint</strong>
-          <small>
-            Question {questionIndex + 1} of {pending.questions.length}
-          </small>
+    // chat-arrive is the keyframe every message in the thread already enters
+    // with, so the question card arrives in the app's existing handwriting
+    // rather than a second one invented for it. Before this, the composer was
+    // the only region on the screen that swapped in a single frame — and it is
+    // the one the user has to act on.
+    <form
+      className="grid min-h-0 animate-[chat-arrive_0.2s_ease-out] gap-4 overflow-y-auto pt-1 pr-1 motion-reduce:animate-none!"
+      onSubmit={submit}
+    >
+      <div className="flex items-start gap-2">
+        <span className="grid size-[26px] flex-none place-items-center rounded-lg bg-secondary text-primary">
+          <SparkleIcon className="size-[13px]" weight="fill" />
         </span>
+        <div className="grid gap-1">
+          {pending.questions.length > 1 && (
+            <small className="text-xs font-bold text-muted-foreground">
+              Question {questionIndex + 1} of {pending.questions.length}
+            </small>
+          )}
+          {/* The one thing the user has to act on. --text-md is in the scale
+              and was never used here, so the question sat at the same size as
+              its own help text. */}
+          <strong className="text-md font-extrabold leading-[1.25]">{question.title}</strong>
+          {question.helpText && (
+            <small className="text-xs leading-[1.35] text-muted-foreground">
+              {question.helpText}
+            </small>
+          )}
+        </div>
       </div>
       {(() => {
         const value = values[question.id];
@@ -543,57 +653,71 @@ function QuestionComposer({
                 },
               ]
             : (question.options ?? []);
+        // p-3 with a 13px label puts the row at ~46px, over the 44pt tap-target
+        // floor it used to sit under. border-2 and the 900 label are what make
+        // a selected row read as chosen at a glance — the fill alone doesn't.
+        // These rows are the single most-tapped control in the product — every
+        // answer the agent needs comes through one — and the only feedback was a
+        // colour change that lands after the finger has already lifted. The dip
+        // happens while it is still down.
+        const optionCard = (checked: boolean) =>
+          cn(
+            "flex cursor-pointer items-center gap-2.5 rounded-md border-2 p-3",
+            // `scale`, not `transform`, in the transition list. Tailwind v4
+            // compiles scale-* to the standalone `scale:` property rather than
+            // `transform: scale()`, so an arbitrary transition-[transform,…]
+            // names a property that never changes and the dip snaps. The
+            // shorthand `transition-transform` covers it (it expands to
+            // transform,translate,scale,rotate); a hand-written list does not.
+            "transition-[scale,border-color,background-color] duration-150 ease-[var(--ease-out)] active:scale-[var(--press-lg)]",
+            checked
+              ? "border-primary bg-secondary"
+              : "border-input bg-white hover:border-primary/40",
+          );
+        const optionCopy = (label: string, description?: string, checked?: boolean) => (
+          <span className="grid gap-0.5">
+            <strong className={cn("text-sm leading-[1.3]", checked && "font-black")}>
+              {label}
+            </strong>
+            {description && (
+              <small className="text-xs leading-[1.25] text-muted-foreground">{description}</small>
+            )}
+          </span>
+        );
         return (
-          <section className="hitl-question" key={question.id}>
-            <div className="hitl-copy">
-              <b>{questionIndex + 1}</b>
-              <div>
-                <strong>{question.title}</strong>
-                <small>{question.helpText}</small>
-              </div>
-            </div>
-            {question.type === "single" || question.type === "multi" ? (
+          // key={question.id} already remounts this on every advance, so the
+          // keyframe replays without any state to track. 4px and no more: the
+          // form above is overflow-y:auto, and a larger offset would briefly
+          // add scroll range to a container that is already height-capped.
+          <section
+            className="grid animate-[chat-arrive_0.2s_ease-out] gap-3 motion-reduce:animate-none!"
+            key={question.id}
+          >
+            {question.type === "single" ? (
               <>
-                <fieldset className="hitl-options">
-                  <legend>
-                    {question.type === "multi" ? "Choose all that apply" : "Choose one"}
-                  </legend>
-                  {options.map((option, index) => {
-                    const checked = selected.includes(option.id);
-                    return (
-                      <label key={option.id} className={checked ? "selected" : ""}>
-                        <input
-                          data-cuelume-toggle="toggle"
-                          type={question.type === "multi" ? "checkbox" : "radio"}
-                          name={question.id}
-                          value={option.id}
-                          checked={checked}
-                          onChange={() =>
-                            setValues((current) => ({
-                              ...current,
-                              [question.id]:
-                                question.type === "multi"
-                                  ? checked
-                                    ? selected.filter((id) => id !== option.id)
-                                    : [...selected, option.id]
-                                  : option.id,
-                            }))
-                          }
-                        />
-                        <i>{checked && <Check weight="bold" />}</i>
-                        <span>
-                          <b>{String.fromCharCode(65 + index)}</b>
-                          <strong>{option.label}</strong>
-                          {option.description && <small>{option.description}</small>}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </fieldset>
-                {question.type === "single" && value === "__other__" && (
-                  <label className="hitl-input custom">
-                    <span>Your answer</span>
-                    <input
+                <RadioGroup
+                  className="gap-2"
+                  aria-label={question.title}
+                  value={typeof value === "string" ? value : ""}
+                  onValueChange={(next) =>
+                    setValues((current) => ({ ...current, [question.id]: String(next) }))
+                  }
+                >
+                  {options.map((option) => (
+                    <label
+                      key={option.id}
+                      className={optionCard(value === option.id)}
+                      data-cuelume-toggle="toggle"
+                    >
+                      <RadioGroupItem value={option.id} />
+                      {optionCopy(option.label, option.description, value === option.id)}
+                    </label>
+                  ))}
+                </RadioGroup>
+                {value === "__other__" && (
+                  <div className="grid gap-1.5">
+                    <FieldLabel className="mb-0">Your answer</FieldLabel>
+                    <Input
                       value={custom[question.id] ?? ""}
                       onChange={(event) =>
                         setCustom((current) => ({ ...current, [question.id]: event.target.value }))
@@ -601,13 +725,39 @@ function QuestionComposer({
                       placeholder="Type your answer"
                       autoFocus
                     />
-                  </label>
+                  </div>
                 )}
               </>
+            ) : question.type === "multi" ? (
+              <div className="grid gap-2" role="group" aria-label={question.title}>
+                {options.map((option) => {
+                  const checked = selected.includes(option.id);
+                  return (
+                    <label
+                      key={option.id}
+                      className={optionCard(checked)}
+                      data-cuelume-toggle="toggle"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={() =>
+                          setValues((current) => ({
+                            ...current,
+                            [question.id]: checked
+                              ? selected.filter((id) => id !== option.id)
+                              : [...selected, option.id],
+                          }))
+                        }
+                      />
+                      {optionCopy(option.label, option.description, checked)}
+                    </label>
+                  );
+                })}
+              </div>
             ) : (
-              <label className="hitl-input">
-                <span>Your answer</span>
-                <input
+              <div className="grid gap-1.5">
+                <FieldLabel className="mb-0">Your answer</FieldLabel>
+                <Input
                   type={question.type === "number" ? "number" : "text"}
                   min={question.minimum}
                   max={question.maximum}
@@ -616,35 +766,52 @@ function QuestionComposer({
                   onChange={(event) =>
                     setValues((current) => ({ ...current, [question.id]: event.target.value }))
                   }
+                  error={Boolean(enteredText && !complete(question))}
                   autoFocus
                 />
                 {enteredText && !complete(question) && (
-                  <small role="alert">
+                  <FieldHint error role="alert" className="mt-0">
                     {question.id === "business-address"
                       ? "Enter the full street, building, or unit and barangay."
                       : "Enter the complete proposed business name."}
-                  </small>
+                  </FieldHint>
                 )}
-              </label>
+              </div>
             )}
           </section>
         );
       })()}
-      <div className="hitl-navigation">
+      <div className="flex items-center gap-2">
         {questionIndex > 0 && (
-          <button
+          <Button
             type="button"
+            variant="outline"
             onClick={() => setQuestionIndex((current) => current - 1)}
             disabled={disabled}
           >
             <ArrowLeft /> Back
-          </button>
+          </Button>
         )}
-        <button className="chat-submit-answer" type="submit" disabled={!canContinue || disabled}>
-          {lastQuestion ? "Complete details" : "Next question"} <ArrowRight weight="bold" />
-        </button>
+        {/* flex-1 rather than `block`: block is w-full, and Button's base
+            carries shrink-0, so beside the Back button it demanded 100% of the
+            row and ran off the right edge. `shrink` comes last so twMerge drops
+            the shrink-0. */}
+        <Button className="min-w-0 flex-1 shrink" type="submit" disabled={!canContinue || disabled}>
+          {lastQuestion ? "Continue" : "Next question"} <ArrowRightIcon weight="bold" />
+        </Button>
       </div>
     </form>
+  );
+}
+
+function AgentDot() {
+  return (
+    <span
+      className="mt-px grid size-7 flex-none place-items-center rounded-full bg-primary text-white"
+      aria-hidden="true"
+    >
+      <SparkleIcon className="size-[13px]" weight="fill" />
+    </span>
   );
 }
 
@@ -656,10 +823,16 @@ function SearchTool({
   const complete = part.state === "output-available";
   const failed = part.state === "output-error";
   return (
-    <div className={`chat-tool-row ${complete ? "complete" : failed ? "error" : "active"}`}>
-      {complete ? <CheckCircle weight="fill" /> : failed ? <X /> : <MagnifyingGlass />}
-      <div>
-        <small>
+    <div className="grid w-full grid-cols-[22px_1fr_16px] items-center gap-2 rounded-lg border border-border bg-card px-[11px] py-2.5 text-xs text-muted-foreground">
+      {complete ? (
+        <CheckCircleIcon className="size-4 text-success" weight="fill" />
+      ) : failed ? (
+        <XIcon className="size-4 text-destructive" />
+      ) : (
+        <MagnifyingGlassIcon className="size-4 text-primary" />
+      )}
+      <div className="grid min-w-0 gap-0.5">
+        <small className="text-xs font-bold text-muted-foreground">
           {complete
             ? "Searched official sources"
             : failed
@@ -667,10 +840,12 @@ function SearchTool({
               : "Searching official sources"}
         </small>
         {"input" in part && part.input && (
-          <span className={!complete && !failed ? "chat-shimmer" : ""}>{part.input.query}</span>
+          <span className={cn("truncate", !complete && !failed && "chat-shimmer")}>
+            {part.input.query}
+          </span>
         )}
       </div>
-      <GlobeHemisphereWest />
+      <GlobeHemisphereWestIcon className="size-4 text-primary" />
     </div>
   );
 }
@@ -698,54 +873,77 @@ export function DtiFormCard({
   ];
   if (form.missingFields.length || rows.some(([, value]) => !value)) return null;
   return (
-    <article className={`dti-form-card ${paid ? "paid" : ""}`}>
-      <header>
-        <span className="dti-seal">DTI</span>
-        <div>
-          <small>BUSINESS NAME REGISTRATION</small>
-          <strong>Application draft</strong>
+    <Card className="w-full">
+      <div className="grid grid-cols-[39px_1fr_auto] items-center gap-[9px] border-b border-gray-200 p-[13px]">
+        <span className="grid size-[39px] place-items-center rounded-full bg-primary-ink text-xs font-black text-white">
+          DTI
+        </span>
+        <div className="grid gap-0.5">
+          <small className="text-xs font-bold text-muted-foreground">
+            Business name registration
+          </small>
+          <strong className="text-base">Application draft</strong>
         </div>
-        <i className={paid ? "paid" : "ready"}>{paid ? "Paid" : "Ready"}</i>
-      </header>
+        <Badge variant="success">{paid ? "Paid" : "Ready"}</Badge>
+      </div>
       {note && (
-        <p className="dti-note">
-          <PencilSimple /> {note}
+        <p className="m-0 flex gap-1.5 bg-secondary px-[13px] py-[9px] text-xs text-gray-800">
+          <PencilSimpleIcon className="size-[13px] flex-none" /> {note}
         </p>
       )}
-      <div className="dti-fields">
-        {rows.map(([label, value]) => (
-          <div key={label}>
-            <span>{label}</span>
-            <strong>{value}</strong>
+      <div className="px-[13px] py-0.5">
+        {rows.map(([label, value], index) => (
+          <div
+            key={label}
+            className={cn(
+              "grid gap-[3px] py-2.5",
+              index < rows.length - 1 && "border-b border-line-soft",
+            )}
+          >
+            <span className="text-2xs font-bold text-muted-foreground">{label}</span>
+            <strong className="text-xs leading-[1.35]">{value}</strong>
           </div>
         ))}
       </div>
-      <div className="dti-help">
-        <Info weight="fill" />
+      <div
+        className={cn(
+          "mx-[13px] mt-[5px] mb-3 flex gap-[7px] rounded-md p-[9px] text-xs leading-[1.4]",
+          paid ? "bg-success-soft text-success-ink" : "bg-muted text-gray-800",
+        )}
+      >
+        <InfoIcon className="size-[13px] flex-none text-primary" weight="fill" />
         <span>
           {paid
             ? "Payment recorded. This application checkpoint is complete."
             : "To change anything, type it below. For example: “Use the name Reyes Coffee Club.”"}
         </span>
       </div>
-      <footer>
-        <div>
-          <small>PAYMENT</small>
-          <strong>{form.feeLabel}</strong>
+      <div className="grid gap-[9px] border-t border-gray-200 px-[13px] pt-[11px] pb-[13px]">
+        <div className="flex items-center justify-between gap-2.5">
+          <small className="text-2xs font-extrabold text-muted-foreground">Payment</small>
+          <strong className="text-xs tabular-nums">{form.feeLabel}</strong>
         </div>
-        <button data-cuelume-toggle="bloom" onClick={onSubmitPay} disabled={paid}>
+        <Button
+          block
+          data-cuelume-toggle="bloom"
+          onClick={onSubmitPay}
+          disabled={paid}
+          className={cn(
+            paid && "bg-[var(--success-soft)] text-success shadow-none disabled:opacity-100",
+          )}
+        >
           {paid ? (
             <>
-              <CheckCircle weight="fill" /> Paid
+              <CheckCircleIcon weight="fill" /> Paid
             </>
           ) : (
             <>
-              Submit and pay <ArrowRight weight="bold" />
+              Submit and pay <ArrowRightIcon weight="bold" />
             </>
           )}
-        </button>
-      </footer>
-    </article>
+        </Button>
+      </div>
+    </Card>
   );
 }
 
@@ -767,7 +965,7 @@ function BirFormArtifactCard({
         <FilePdf weight="fill" />
       </span>
       <span className="pdf-artifact-copy">
-        <small>PDF ARTIFACT</small>
+        <small>PDF artifact</small>
         <strong>BIR Form 1901</strong>
         <span>
           {artifact.pageCount} pages · {Math.max(1, Math.round(artifact.size / 1024))} KB
@@ -880,7 +1078,7 @@ function ToolPart({
             <FileText weight="duotone" />
           </span>
           <div>
-            <small>BIR REGISTRATION CHECKPOINT</small>
+            <small>BIR registration checkpoint</small>
             <strong>{part.output.status}</strong>
           </div>
           <i>Prepared</i>
@@ -951,7 +1149,7 @@ function ToolPart({
           <Storefront weight="duotone" />
         </span>
         <div>
-          <small>ALL SET UP</small>
+          <small>All set up</small>
           <strong>{part.output.businessName}</strong>
           <p>Open records and tax calendar</p>
         </div>
@@ -1058,17 +1256,8 @@ export function PaymentDialog({
   conversationId: string;
   onClose: () => void;
 }) {
-  const dialogRef = useRef<HTMLDivElement>(null);
   const [opening, setOpening] = useState(false);
   const [paymentError, setPaymentError] = useState("");
-  useEffect(() => {
-    dialogRef.current?.focus();
-    const close = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", close);
-    return () => window.removeEventListener("keydown", close);
-  }, [onClose]);
   const openCheckout = async () => {
     play("loading");
     setOpening(true);
@@ -1101,60 +1290,42 @@ export function PaymentDialog({
   };
 
   return (
-    <div className="chat-dialog-layer">
-      <button
-        className="chat-dialog-scrim"
-        data-cuelume-toggle="droplet"
-        onClick={onClose}
-        aria-label="Close payment"
-      />
-      <section
-        className="chat-payment-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="payment-title"
-        tabIndex={-1}
-        ref={dialogRef}
-      >
-        <button
-          className="chat-dialog-close"
-          data-cuelume-toggle="droplet"
-          onClick={onClose}
-          aria-label="Close"
-        >
-          <X />
-        </button>
-        <div className="payment-service">
-          <span>
-            <ShieldCheck weight="duotone" />
+    <Dialog open onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogContent>
+        <div className="flex flex-col items-center text-center">
+          <span className="mb-2 grid size-12 place-items-center rounded-xl bg-secondary text-primary">
+            <ShieldCheck className="size-[26px]" weight="duotone" />
           </span>
-          <small>eGovPay</small>
-          <h2 id="payment-title">Continue to secure payment</h2>
-          <p>
+          <span className="text-xs font-bold text-primary">eGovPay</span>
+          <DialogTitle className="mt-1 mb-1">Continue to secure payment</DialogTitle>
+          <DialogDescription>
             You’ll continue to eGovPay in this tab. This demo will mark the fee paid while webhook
             support is being completed.
-          </p>
+          </DialogDescription>
         </div>
-        <div className="payment-summary">
-          <span>
-            <small>{payment.serviceLabel}</small>
-            <strong>{payment.proposedName}</strong>
+        <div className="my-4 flex items-center justify-between gap-3 border-y border-border py-3">
+          <span className="grid text-left">
+            <small className="text-2xs text-muted-foreground">{payment.serviceLabel}</small>
+            <strong className="text-xs">{payment.proposedName}</strong>
           </span>
-          <strong>{payment.feeLabel}</strong>
+          <strong className="text-xs tabular-nums">{payment.feeLabel}</strong>
         </div>
         {paymentError && (
-          <p className="payment-inline-error" role="alert">
+          <p
+            className="mb-4 rounded-md bg-destructive/10 px-2.5 py-2 text-xs leading-[1.4] text-destructive"
+            role="alert"
+          >
             {paymentError}
           </p>
         )}
-        <button className="payment-confirm" onClick={openCheckout} disabled={opening}>
+        <Button block size="lg" onClick={openCheckout} disabled={opening}>
           <ShieldCheck weight="fill" /> {opening ? "Preparing checkout…" : "Continue to eGovPay"}
-        </button>
-        <p className="payment-disclaimer">
+        </Button>
+        <p className="mt-2 text-center text-2xs text-muted-foreground">
           Use “Back to merchant” after checkout to return to this saved chat.
         </p>
-      </section>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1176,27 +1347,38 @@ function PdfPreviewDialog({
   }, [onClose]);
 
   return (
+    // The enter used to be `animation: chat-sheet-in` in chat.css and the exit
+    // did not exist, so the sheet eased up over 250ms and then disappeared in a
+    // single frame — and the backdrop did the opposite, snapping to 55% black
+    // while the sheet was still travelling. Both halves now animate together
+    // and both leave the way they arrived, faster on the way out.
     <div className="chat-dialog-layer pdf-preview-layer">
-      <button
+      <motion.button
+        animate={{ opacity: 1, transition: SCRIM_IN }}
+        aria-label="Close PDF preview"
         className="chat-dialog-scrim"
         data-cuelume-toggle="droplet"
+        exit={{ opacity: 0, transition: SCRIM_OUT }}
+        initial={{ opacity: 0 }}
         onClick={onClose}
-        aria-label="Close PDF preview"
       />
-      <section
-        className="pdf-preview-dialog"
-        role="dialog"
-        aria-modal="true"
+      <motion.section
+        animate={{ opacity: 1, transform: "translateY(0px)", transition: SHEET_IN }}
         aria-labelledby="pdf-preview-title"
-        tabIndex={-1}
+        aria-modal="true"
+        className="pdf-preview-dialog"
+        exit={{ opacity: 0, transform: "translateY(20px)", transition: SHEET_OUT }}
+        initial={{ opacity: 0, transform: "translateY(20px)" }}
         ref={dialogRef}
+        role="dialog"
+        tabIndex={-1}
       >
         <header>
           <span>
             <FilePdf weight="fill" />
           </span>
           <div>
-            <small>PDF PREVIEW</small>
+            <small>PDF preview</small>
             <h2 id="pdf-preview-title">BIR Form 1901</h2>
           </div>
           <button
@@ -1217,7 +1399,7 @@ function PdfPreviewDialog({
             <ArrowSquareOut weight="bold" /> Open full screen
           </a>
         </footer>
-      </section>
+      </motion.section>
     </div>
   );
 }
@@ -1258,6 +1440,28 @@ export function BusinessChatScreen({
   const scrollRef = useRef<HTMLDivElement>(null);
   const seeded = useRef(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const headerRef = useRef<HTMLElement>(null);
+  // Adding an exit animation exposed that there was no way to trigger one: the
+  // only thing that closed this menu was the trigger itself, so tapping the
+  // thread behind it left it hanging over the conversation. Escape and an
+  // outside press are what a menu is expected to answer to.
+  useEffect(() => {
+    if (!historyOpen) return;
+    // pointerdown rather than click, so a press that starts on the scrim of the
+    // thread dismisses on the way down instead of waiting for mouseup.
+    const dismiss = (event: PointerEvent) => {
+      if (!headerRef.current?.contains(event.target as Node)) setHistoryOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setHistoryOpen(false);
+    };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [historyOpen]);
   const initialPrompt = conversation.initialPrompt;
   const transport = useMemo(
     () => new DefaultChatTransport({ api: "/api/agent/chat", body: { initialPrompt } }),
@@ -1423,7 +1627,7 @@ export function BusinessChatScreen({
     <div className="screen agent-chat-screen">
       {registrationFinalized && <CompletionConfetti />}
       <StatusBar />
-      <header className="chat-header">
+      <header className="chat-header" ref={headerRef}>
         <button data-cuelume-toggle="page" onClick={onBack} aria-label="Go back">
           <ArrowLeft />
         </button>
@@ -1431,6 +1635,7 @@ export function BusinessChatScreen({
           <Headset weight="fill" />
         </div>
         <button
+          aria-expanded={historyOpen}
           className="chat-session-trigger"
           data-cuelume-toggle={historyOpen ? "droplet" : "bloom"}
           onClick={() => setHistoryOpen((open) => !open)}
@@ -1441,7 +1646,15 @@ export function BusinessChatScreen({
               <ShieldCheck weight="fill" /> Saved registration plan
             </small>
           </span>
-          <CaretDown />
+          {/* PlanDock's caret already turns over when its panel opens
+              (duration-200, same curve). This one is the same glyph doing the
+              same job three rows up and was the only one holding still. */}
+          <CaretDown
+            className={cn(
+              "transition-transform duration-200 ease-[var(--ease-out)] motion-reduce:transition-none",
+              historyOpen && "rotate-180",
+            )}
+          />
         </button>
         <button
           className="chat-new-session"
@@ -1451,35 +1664,55 @@ export function BusinessChatScreen({
         >
           <Plus />
         </button>
-        {historyOpen && (
-          <div className="chat-session-menu">
-            {conversations.map((item) => (
-              <div
-                className={`chat-session-row ${item.id === conversation.id ? "active" : ""}`}
-                key={item.id}
-              >
-                <button
-                  className="chat-session-open"
-                  data-cuelume-toggle="page"
-                  onClick={() => {
-                    setHistoryOpen(false);
-                    onSelectConversation(item.id);
-                  }}
+        {/* The one job motion is here for: this menu is a conditional render, so
+            before AnimatePresence it could fade in but never out — it vanished
+            in a single frame while its own trigger was still animating. The
+            origin is the trigger (top left, set in chat.css), so it grows out
+            of the control that opened it rather than out of its own middle. */}
+        <AnimatePresence>
+          {historyOpen && (
+            <motion.div
+              animate={{
+                opacity: 1,
+                transform: "scale(1) translateY(0px)",
+                transition: POPOVER_IN,
+              }}
+              className="chat-session-menu"
+              exit={{
+                opacity: 0,
+                transform: "scale(0.97) translateY(-6px)",
+                transition: POPOVER_OUT,
+              }}
+              initial={{ opacity: 0, transform: "scale(0.97) translateY(-6px)" }}
+            >
+              {conversations.map((item) => (
+                <div
+                  className={`chat-session-row ${item.id === conversation.id ? "active" : ""}`}
+                  key={item.id}
                 >
-                  {item.title}
-                </button>
-                <button
-                  className="chat-session-delete"
-                  data-cuelume-toggle="droplet"
-                  onClick={() => onDeleteConversation(item)}
-                  aria-label={`Delete ${item.title}`}
-                >
-                  <Trash />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+                  <button
+                    className="chat-session-open"
+                    data-cuelume-toggle="page"
+                    onClick={() => {
+                      setHistoryOpen(false);
+                      onSelectConversation(item.id);
+                    }}
+                  >
+                    {item.title}
+                  </button>
+                  <button
+                    className="chat-session-delete"
+                    data-cuelume-toggle="droplet"
+                    onClick={() => onDeleteConversation(item)}
+                    aria-label={`Delete ${item.title}`}
+                  >
+                    <Trash />
+                  </button>
+                </div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </header>
       <main className="chat-thread" ref={scrollRef} id="app-content">
         {localPaymentStatus && (
@@ -1509,6 +1742,7 @@ export function BusinessChatScreen({
           const streaming = busy && message.id === visibleMessages.at(-1)?.id;
           return (
             <article className={`chat-message ${user ? "user" : "assistant"}`} key={message.id}>
+              {!user && <AgentDot />}
               <div className="message-content">
                 {text &&
                   (user ? (
@@ -1537,6 +1771,7 @@ export function BusinessChatScreen({
         })}
         {busy && (
           <div className="chat-working" role="status" aria-live="polite">
+            <AgentDot />
             <div className="chat-working-shimmer">Preparing your next registration step…</div>
           </div>
         )}
@@ -1557,7 +1792,13 @@ export function BusinessChatScreen({
         )}
       </main>
       <footer className="chat-composer-shell">
-        {latestPlan && <PlanDock plan={latestPlan.plan} active={latestPlan.active} />}
+        {latestPlan && (
+          <PlanDock
+            plan={latestPlan.plan}
+            active={latestPlan.active}
+            collapseKey={pending?.part.toolCallId}
+          />
+        )}
         {pending ? (
           <QuestionComposer
             key={pending.part.toolCallId}
@@ -1566,8 +1807,12 @@ export function BusinessChatScreen({
             onAnswer={answer}
           />
         ) : (
-          <form className="chat-composer" onSubmit={submit}>
+          <form
+            className="overflow-hidden rounded-xl border border-input bg-white shadow-xs transition-colors focus-within:border-primary"
+            onSubmit={submit}
+          >
             <textarea
+              className="max-h-[100px] min-h-[44px] w-full resize-none border-0 bg-transparent px-[13px] pt-3 pb-1 text-base leading-normal text-foreground outline-none placeholder:text-gray-500"
               rows={1}
               value={input}
               onChange={(event) => setInput(event.target.value)}
@@ -1580,24 +1825,31 @@ export function BusinessChatScreen({
               placeholder="Ask or correct your application…"
               aria-label="Message"
             />
-            <div>
-              <span>
-                <ShieldCheck weight="fill" /> Saved automatically
+            <div className="flex items-center justify-between gap-2 py-1.5 pr-1.5 pl-3">
+              <span className="flex items-center gap-1 text-2xs text-muted-foreground">
+                <ShieldCheck className="size-[11px] text-success" weight="fill" /> You can correct
+                any field here
               </span>
               {busy ? (
-                <button
-                  className="chat-stop"
+                <IconButton
+                  className="size-9 bg-destructive text-white hover:bg-destructive-hover"
                   data-cuelume-toggle="droplet"
                   type="button"
                   onClick={() => void stop()}
                   aria-label="Stop"
                 >
-                  <StopCircle weight="fill" />
-                </button>
+                  <StopCircle className="size-[18px]" weight="fill" />
+                </IconButton>
               ) : (
-                <button type="submit" disabled={!input.trim()} aria-label="Send">
-                  <PaperPlaneRight weight="fill" />
-                </button>
+                <IconButton
+                  variant="primary"
+                  className="size-9"
+                  type="submit"
+                  disabled={!input.trim()}
+                  aria-label="Send"
+                >
+                  <PaperPlaneRightIcon className="size-[18px]" weight="fill" />
+                </IconButton>
               )}
             </div>
           </form>
@@ -1610,9 +1862,13 @@ export function BusinessChatScreen({
           onClose={() => setPaymentRequest(null)}
         />
       )}
-      {pdfArtifact && (
-        <PdfPreviewDialog artifact={pdfArtifact} onClose={() => setPdfArtifact(null)} />
-      )}
+      {/* AnimatePresence has to sit outside the condition — it is what keeps the
+          dialog mounted long enough for its exit to play. */}
+      <AnimatePresence>
+        {pdfArtifact && (
+          <PdfPreviewDialog artifact={pdfArtifact} onClose={() => setPdfArtifact(null)} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
