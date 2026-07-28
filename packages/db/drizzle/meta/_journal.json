@@ -1,1 +1,13 @@
-{"version":"7","dialect":"postgresql","entries":[]}
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1785258959119,
+      "tag": "0000_curved_vin_gonzales",
+      "breakpoints": true
+    }
+  ]
+}

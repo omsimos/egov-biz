@@ -128,6 +128,18 @@
         "typescript": "7.0.2",
       },
     },
+    "packages/dx": {
+      "name": "@repo/dx",
+      "version": "0.0.0",
+      "dependencies": {
+        "@repo/db": "workspace:*",
+        "@repo/egov": "workspace:*",
+        "drizzle-orm": "0.45.2",
+      },
+      "devDependencies": {
+        "typescript": "7.0.2",
+      },
+    },
     "packages/egov": {
       "name": "@repo/egov",
       "version": "0.0.0",
@@ -517,6 +529,8 @@
     "@qdrant/openapi-typescript-fetch": ["@qdrant/openapi-typescript-fetch@1.2.6", "", {}, "sha512-oQG/FejNpItrxRHoyctYvT3rwGZOnK4jr3JdppO/c78ktDvkWiPXPHNsrDf33K9sZdRb6PR7gi4noIapu5q4HA=="],
 
     "@repo/db": ["@repo/db@workspace:packages/db"],
+
+    "@repo/dx": ["@repo/dx@workspace:packages/dx"],
 
     "@repo/egov": ["@repo/egov@workspace:packages/egov"],
 
