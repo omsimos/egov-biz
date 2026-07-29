@@ -1,5 +1,5 @@
-import type { EgovPayTransaction } from "@repo/egov/eGovPay/types";
-import { eGovPayApi } from "@repo/egov/eGovPay";
+import { createEgovPayClient } from "@repo/dx";
+import { createClient, type EgovPayTransaction } from "egov.js";
 import { egovPayBaseUrl } from "@/lib/payment-urls";
 import {
   createPayment,
@@ -35,7 +35,18 @@ export class BirDstPaymentError extends Error {
 
 function paymentClient() {
   const baseUrl = egovPayBaseUrl();
-  return { baseUrl, client: eGovPayApi.fromEnv({ baseUrl }) };
+  const apiKey = process.env.EGOVPAY_API_KEY?.trim();
+  const settlementTemplateUuid = process.env.EGOVPAY_SETTLEMENT_TEMPLATE_UUID?.trim();
+  if (!apiKey || !settlementTemplateUuid)
+    throw new Error("eGovPay credentials are required for BIR payment operations.");
+  return {
+    baseUrl,
+    client: createEgovPayClient({
+      apiKey,
+      client: createClient({ baseUrl }),
+      settlementTemplateUuid,
+    }),
+  };
 }
 
 function providerSignal() {

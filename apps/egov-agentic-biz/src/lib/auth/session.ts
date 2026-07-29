@@ -1,4 +1,4 @@
-import type { EgovSsoCitizenProfile } from "@repo/egov/eGovSso";
+import type { EgovSsoCitizenProfile } from "egov.js";
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import { mapEgovCitizenProfile } from "@/lib/auth/profile";
 import {
@@ -9,6 +9,7 @@ import {
 } from "@/server/auth-sessions";
 
 export const AUTH_COOKIE_NAME = "egov_agentic_biz_session";
+export const DEFAULT_SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 export type AuthenticatedSession = {
   expiresAt: number;
@@ -30,10 +31,10 @@ function sessions(): SessionRegistry {
 
 function sessionTtlSeconds(): number {
   const configured = process.env.EGOVSSO_SESSION_TTL_SECONDS?.trim();
-  if (!configured) return 3_600;
+  if (!configured) return DEFAULT_SESSION_TTL_SECONDS;
 
   const parsed = Number.parseInt(configured, 10);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 3_600;
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : DEFAULT_SESSION_TTL_SECONDS;
 }
 
 function cookieValue(request: Request, name: string): string | undefined {

@@ -1,3 +1,4 @@
+import { createEgovPayClient } from "@repo/dx";
 import {
   createDrizzleLguRepository,
   createEgovPayLguPaymentProvider,
@@ -5,7 +6,7 @@ import {
   type LguPaymentProvider,
   type LguService,
 } from "@repo/dx/lgu";
-import { eGovPayApi } from "@repo/egov/eGovPay";
+import { createClient } from "egov.js";
 import { getDxDatabase } from "@/server/dx/database";
 
 const globalCache = globalThis as typeof globalThis & {
@@ -35,9 +36,9 @@ function createLazyPaymentProvider(
     if (!config.baseUrl || !config.apiKey || !config.settlementTemplateUuid)
       throw new Error("LGU eGovPay configuration is required for permit payment operations.");
     provider = createEgovPayLguPaymentProvider(
-      eGovPayApi.create({
+      createEgovPayClient({
         apiKey: config.apiKey,
-        baseUrl: config.baseUrl,
+        client: createClient({ baseUrl: config.baseUrl }),
         settlementTemplateUuid: config.settlementTemplateUuid,
       }),
     );

@@ -35,9 +35,9 @@
   },
   "dependencies": {
     "@repo/db": "workspace:*",
-    "@repo/egov": "workspace:*",
     "@repo/utils": "workspace:*",
-    "drizzle-orm": "0.45.2"
+    "drizzle-orm": "0.45.2",
+    "egov.js": "file:../../../egov.js"
   },
   "devDependencies": {
     "@total-typescript/tsconfig": "1.0.4",

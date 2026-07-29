@@ -84,15 +84,7 @@ Every Qdrant point includes:
 
 ```ts
 {
-  hearingId,
-  videoId,
-  title,
-  text,
-  startSeconds,
-  endSeconds,
-  startSegment,
-  endSegment,
-  segmentIds
+  (hearingId, videoId, title, text, startSeconds, endSeconds, startSegment, endSegment, segmentIds);
 }
 ```
 
@@ -148,7 +140,7 @@ The app uses Vercel AI Gateway for both generation and embeddings. The defaults 
 
 Both use the same `AI_GATEWAY_API_KEY`. Override `CHAT_MODEL`, `EMBEDDING_MODEL`, and `EMBEDDING_DIMENSIONS` in `.env.local` if needed. Changing embedding dimensions requires recreating the Qdrant collection/volume before re-ingesting.
 
-The team's `@repo/egov` reference also exposes the hackathon eGov AI assistant API. That endpoint is useful as an additional tool or non-streaming generation adapter, but its catalog contract does not expose embeddings or AI SDK-compatible streamed tool calls. Keep Qdrant embeddings on Gateway; add eGov AI behind a dedicated tool if hackathon judging requires that API to be demonstrated.
+The linked `egov.js` package also exposes the hackathon eGov AI assistant API. That endpoint is useful as an additional tool or non-streaming generation adapter, but its OpenAPI contract does not expose embeddings or AI SDK-compatible streamed tool calls. Keep Qdrant embeddings on Gateway; add eGov AI behind a dedicated tool if hackathon judging requires that API to be demonstrated.
 
 ## Validation
 

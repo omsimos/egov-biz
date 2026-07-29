@@ -1,8 +1,5 @@
-import {
-  createEgovPayClientFromEnv,
-  createEgovPayDigest,
-  type EgovPayGeneratePaymentResponse,
-} from "../packages/egov/src/eGovPay/index.ts";
+import { createHmac } from "node:crypto";
+import { createClient, egovPay } from "egov.js";
 
 // Verified staging fixture links:
 // Success:
@@ -48,18 +45,8 @@ function requireTransactionUuid(value: string | undefined): string {
   return value;
 }
 
-async function parseResponse(response: Response): Promise<unknown> {
-  const text = await response.text();
-
-  if (!text) {
-    return undefined;
-  }
-
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return text;
-  }
+function createEgovPayDigest(amount: number, transactionId: string, apiKey: string) {
+  return createHmac("sha256", apiKey).update(`${amount}|${transactionId}`).digest("hex");
 }
 
 async function createPayment(amountArg: string | undefined, transactionIdArg: string | undefined) {
@@ -76,9 +63,11 @@ async function createPayment(amountArg: string | undefined, transactionIdArg: st
 
   // The staging gateway uses the test_ prefix to select the environment, but
   // validates the HMAC against the token value after that prefix is removed.
-  const digest = await createEgovPayDigest(amount, transactionId, apiKey.slice(5));
-  const response = await fetch(`${baseUrl}/api/v1/transaction`, {
-    body: JSON.stringify({
+  const digest = createEgovPayDigest(amount, transactionId, apiKey.slice(5));
+  const client = createClient({ baseUrl });
+  const created = await egovPay.generatePayment({
+    auth: apiKey,
+    body: {
       amount,
       callback_url: "https://example.com/egovpay/callback",
       currency: "PHP",
@@ -90,22 +79,10 @@ async function createPayment(amountArg: string | undefined, transactionIdArg: st
       redirect_url: "https://example.com/egovpay/complete",
       settlement_template_uuid: settlementTemplateUuid,
       txnid: transactionId,
-    }),
-    headers: {
-      "content-type": "application/json",
-      "x-egovpay-token": apiKey,
     },
-    method: "POST",
+    client,
+    throwOnError: true,
   });
-  const body = await parseResponse(response);
-
-  if (!response.ok) {
-    throw new Error(
-      `Create payment failed with ${response.status} ${response.statusText}: ${JSON.stringify(body)}`,
-    );
-  }
-
-  const created = body as EgovPayGeneratePaymentResponse;
 
   console.log(
     JSON.stringify(
@@ -126,20 +103,35 @@ async function createPayment(amountArg: string | undefined, transactionIdArg: st
 
 async function getPaymentStatus(transactionUuidArg: string | undefined) {
   const baseUrl = requireEnvironment("EGOVPAY_BASE_URL");
-  requireStagingApiKey();
-  const client = createEgovPayClientFromEnv({ baseUrl });
-  const response = await client.getTransaction(requireTransactionUuid(transactionUuidArg));
+  const apiKey = requireStagingApiKey();
+  const client = createClient({ baseUrl });
+  const response = await egovPay.getTransaction({
+    auth: apiKey,
+    client,
+    path: { uuid: requireTransactionUuid(transactionUuidArg) },
+    throwOnError: true,
+  });
 
   console.log(JSON.stringify(response, null, 2));
 }
 
 async function voidPayment(transactionUuidArg: string | undefined) {
   const baseUrl = requireEnvironment("EGOVPAY_BASE_URL");
-  requireStagingApiKey();
+  const apiKey = requireStagingApiKey();
   const transactionUuid = requireTransactionUuid(transactionUuidArg);
-  const client = createEgovPayClientFromEnv({ baseUrl });
-  const voided = await client.voidTransaction(transactionUuid);
-  const transaction = await client.getTransaction(transactionUuid);
+  const client = createClient({ baseUrl });
+  const voided = await egovPay.voidTransaction({
+    auth: apiKey,
+    client,
+    path: { uuid: transactionUuid },
+    throwOnError: true,
+  });
+  const transaction = await egovPay.getTransaction({
+    auth: apiKey,
+    client,
+    path: { uuid: transactionUuid },
+    throwOnError: true,
+  });
 
   console.log(JSON.stringify({ transaction, voided }, null, 2));
 }

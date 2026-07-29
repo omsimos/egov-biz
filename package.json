@@ -1,10 +1,12 @@
 {
   "name": "hackathon-idea-fact-checker",
   "private": true,
-  "packageManager": "bun@1.3.14",
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/db",
+    "packages/dx",
+    "packages/transcript-scraper",
+    "packages/utils"
   ],
   "scripts": {
     "build": "turbo run build",
@@ -20,8 +22,10 @@
     "test": "turbo run test"
   },
   "devDependencies": {
+    "egov.js": "file:../egov.js",
     "oxfmt": "0.59.0",
     "oxlint": "1.74.0",
     "turbo": "2.10.5"
-  }
+  },
+  "packageManager": "bun@1.3.14"
 }

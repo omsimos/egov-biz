@@ -1,4 +1,4 @@
-import type { EgovSsoCitizenProfile } from "@repo/egov/eGovSso";
+import type { EgovSsoCitizenProfile } from "egov.js";
 import type { BnrsCertificate } from "@repo/dx/bnrs";
 import { LguError, mapEgovSsoProfileToLguApplicantInformation, type LguActor } from "@repo/dx/lgu";
 import {

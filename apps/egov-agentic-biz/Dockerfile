@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 
 # Build this file from the repository root:
-# docker build -f apps/egov-agentic-biz/Dockerfile -t egov-agentic-biz .
+# docker build --build-context egov-js=../egov.js \
+#   -f apps/egov-agentic-biz/Dockerfile -t egov-agentic-biz .
 
 FROM oven/bun:1.3.14-slim AS dependencies
 
@@ -18,8 +19,13 @@ COPY apps/rag-hor/packages/transcript-scraper/package.json \
   apps/rag-hor/packages/transcript-scraper/package.json
 COPY packages/db/package.json packages/db/package.json
 COPY packages/dx/package.json packages/dx/package.json
-COPY packages/egov/package.json packages/egov/package.json
 COPY packages/transcript-scraper/package.json packages/transcript-scraper/package.json
+COPY packages/utils/package.json packages/utils/package.json
+
+# The app's file: dependency resolves to /egov.js from its workspace directory.
+# Build the sibling package before invoking this Docker build.
+COPY --from=egov-js package.json /egov.js/package.json
+COPY --from=egov-js dist /egov.js/dist
 
 RUN bun install --frozen-lockfile
 
@@ -28,7 +34,6 @@ FROM dependencies AS builder
 ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY turbo.json turbo.json
-COPY packages/egov packages/egov
 COPY apps/egov-agentic-biz apps/egov-agentic-biz
 
 RUN bun run turbo build --filter=egov-agentic-biz
