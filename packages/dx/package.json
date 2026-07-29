@@ -12,6 +12,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./bir": {
+      "types": "./dist/bir/index.d.ts",
+      "import": "./dist/bir/index.js"
+    },
     "./bnrs": {
       "types": "./dist/bnrs/index.d.ts",
       "import": "./dist/bnrs/index.js"

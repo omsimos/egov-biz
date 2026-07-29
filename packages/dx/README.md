@@ -143,6 +143,19 @@ Run the generated migration through the `@repo/db` migration command before usin
 - Live DTI/BNRS API calls, agent tools, and application routes are outside this package.
 - Certificate PDF generation and document storage are deferred; the structured JSON certificate is implemented.
 
+# DX BIR demo helper
+
+`@repo/dx/bir` currently exposes `assignDemoRdo` for the simplified BIR demo. The
+helper randomly chooses a simulated assignment containing only the three-digit
+code, a code-only label such as `RDO 047`, and `simulated: true`. The caller
+should retain that result for the duration of its demo flow.
+
+This is intentionally not an address-based BIR jurisdiction lookup. No city or
+office name is returned, and the assignment must not be used for a real filing.
+The current demo deliberately does not collect the Tax Type Questionnaire. That
+questionnaire remains required for an actual NewBizReg filing and must not be
+treated as optional.
+
 # DX LGU business permits
 
 `@repo/dx/lgu` is a separate, local mock of a straightforward sole-proprietor LGU business-permit flow. It accepts a structured business-name certificate credential containing the BNRS business address, derives the issuing city from that address, charges one fixed demo fee, and immediately issues both a business permit and barangay clearance after authoritative payment confirmation.
