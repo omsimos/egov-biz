@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { EMessageClient, EMessageSmsRequest } from "@repo/egov/eMessage";
 import {
   buildTaxPaymentReminderMessage,
+  type EMessageClient,
+  type EMessageSmsRequest,
   extractExplicitSmsMessage,
   extractSmsNumber,
   hasTaxObligationReference,

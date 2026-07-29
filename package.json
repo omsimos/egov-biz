@@ -22,7 +22,7 @@
     "test": "turbo run test"
   },
   "devDependencies": {
-    "egov.js": "file:../egov.js",
+    "egov.js": "0.1.0",
     "oxfmt": "0.59.0",
     "oxlint": "1.74.0",
     "turbo": "2.10.5"
