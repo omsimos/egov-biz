@@ -69,7 +69,6 @@ Set these in the project (all server-side):
 | `REDIS_URL`                                     | Upstash — the `rediss://` TCP URL                                               |
 | `R2_BASE_URL`, `R2_ACCESS_KEY`, `R2_SECRET_KEY` | Cloudflare R2                                                                   |
 | `EMESSAGE_BASE_URL`, `EMESSAGE_ACCESS_TOKEN`    | eMessage SMS provider                                                           |
-| `EMESSAGE_ALLOWED_RECIPIENTS`                   | Comma-separated verified demo/test mobile numbers; SSO mobile is always allowed |
 | `EGOVPAY_BASE_URL`, `EGOVPAY_API_KEY`, `EGOVPAY_SETTLEMENT_TEMPLATE_UUID` | eGovPay checkout for BNRS and LGU; optional `LGU_EGOVPAY_*` values can override the LGU account |
 
 Create the database once, then run `bun run db:migrate` against it as part of
