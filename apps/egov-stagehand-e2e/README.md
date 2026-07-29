@@ -1,7 +1,17 @@
 # eGovPH Business Stagehand E2E
 
-This workspace app drives the complete local eGovPH Business journey with
-[Stagehand](https://github.com/browserbase/stagehand):
+This workspace app drives the local eGovPH Business journeys with
+[Stagehand](https://github.com/browserbase/stagehand). Each supported route has
+its own E2E file and package script:
+
+| Script               | E2E file                                 | Coverage                                                                                  |
+| -------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `e2e:food`           | `whole-business-flow.e2e.ts`             | Complete sole-proprietor food flow, three payments, business record, and management chats |
+| `e2e:self-employed`  | `self-employed-professional-flow.e2e.ts` | Direct-to-BIR professional flow, Form 1901 generation, tax setup, and business record     |
+| `e2e:online-retail`  | `online-retail-flow.e2e.ts`              | Online work-location branch through the converged DTI application checkpoint              |
+| `e2e:vehicle-rental` | `vehicle-rental-flow.e2e.ts`             | Vehicle-use intake branch through the converged DTI application checkpoint                |
+
+The complete food-business journey:
 
 1. authenticate through the loopback-only dev session;
 2. register a Makati coffee-subscription business;
@@ -33,27 +43,50 @@ Copy this app’s environment template if you want to override defaults. The roo
 cp apps/egov-stagehand-e2e/.env.example apps/egov-stagehand-e2e/.env
 ```
 
-Then explicitly acknowledge the three stateful staging payments:
+Run commands from this app so its local `.env` is loaded:
 
 ```bash
-E2E_ALLOW_EGOVPAY=1 bun run e2e:business
+cd apps/egov-stagehand-e2e
+bun run e2e:self-employed
+bun run e2e:online-retail
+bun run e2e:vehicle-rental
 ```
 
-Required:
+The food flow creates three stateful eGovPay staging payments, so it additionally
+requires explicit acknowledgement:
+
+```bash
+cd apps/egov-stagehand-e2e
+E2E_ALLOW_EGOVPAY=1 bun run e2e:food
+```
+
+Required for every scenario:
 
 - `AI_GATEWAY_API_KEY` for the default `gateway/google/gemini-2.5-flash`
   Stagehand model, or `OPENAI_API_KEY` when selecting an OpenAI model;
+- a running local `egov-agentic-biz` app and its Redis dependency.
+
+Required only for `e2e:food`:
+
 - the existing eGovPay staging configuration used by `egov-agentic-biz`;
 - an `EGOVPAY_API_KEY` beginning with `test_` when that key is visible to this
   process.
 
-The test refuses non-loopback targets because it depends on `/api/auth/dev-login`,
-which is intentionally unavailable outside local development. It also refuses
-to run until `E2E_ALLOW_EGOVPAY=1` is set.
+Required only for `e2e:self-employed`:
 
-Each run writes screenshots and a JSON result under `artifacts/<run-id>/`. The
-created demo business, chat sessions, and remote staging transactions are kept
-for inspection.
+- the target `egov-agentic-biz` dev server must have `R2_BASE_URL`,
+  `R2_ACCESS_KEY`, and `R2_SECRET_KEY` configured;
+- the scenario generates Form 1901 and writes that PDF artifact to the configured
+  remote Cloudflare R2 bucket.
+
+Every scenario refuses non-loopback targets because it depends on
+`/api/auth/dev-login`, which is intentionally unavailable outside local
+development. Only the food flow refuses to run until
+`E2E_ALLOW_EGOVPAY=1` is set.
+
+Each run writes screenshots and a JSON result under `artifacts/<run-id>/` or
+`artifacts/<run-id>-<scenario>/`. Created demo businesses, chat sessions, PDF
+artifacts, and remote staging transactions are kept for inspection.
 
 ## Non-live checks
 

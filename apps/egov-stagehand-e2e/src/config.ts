@@ -8,6 +8,11 @@ export type FlowConfig = {
   runId: string;
 };
 
+export type FlowConfigOptions = {
+  businessNamePrefix?: string;
+  stagingPaymentCount?: number;
+};
+
 function booleanValue(value: string | undefined, fallback: boolean) {
   if (value === undefined || value.trim() === "") return fallback;
   if (/^(1|true|yes)$/i.test(value)) return true;
@@ -30,6 +35,7 @@ function loopback(url: URL) {
 export function readFlowConfig(
   environment: NodeJS.ProcessEnv = process.env,
   now = new Date(),
+  options: FlowConfigOptions = {},
 ): FlowConfig {
   const baseUrl = new URL(environment.E2E_BASE_URL?.trim() || "http://localhost:3000");
   if (!loopback(baseUrl))
@@ -39,12 +45,17 @@ export function readFlowConfig(
   if (!["http:", "https:"].includes(baseUrl.protocol))
     throw new Error("E2E_BASE_URL must use http or https.");
 
+  const stagingPaymentCount = options.stagingPaymentCount ?? 3;
+  if (!Number.isInteger(stagingPaymentCount) || stagingPaymentCount < 0)
+    throw new Error("stagingPaymentCount must be a non-negative integer.");
+
   const allowEgovPay = booleanValue(environment.E2E_ALLOW_EGOVPAY, false);
-  if (!allowEgovPay)
+  if (stagingPaymentCount > 0 && !allowEgovPay)
     throw new Error(
-      "Set E2E_ALLOW_EGOVPAY=1 to acknowledge that this test creates three staging payments.",
+      `Set E2E_ALLOW_EGOVPAY=1 to acknowledge that this test creates ${stagingPaymentCount} staging payment${stagingPaymentCount === 1 ? "" : "s"}.`,
     );
   if (
+    stagingPaymentCount > 0 &&
     environment.EGOVPAY_API_KEY?.trim() &&
     !environment.EGOVPAY_API_KEY.trim().startsWith("test_")
   )
@@ -67,7 +78,7 @@ export function readFlowConfig(
   return {
     allowEgovPay,
     baseUrl,
-    businessName: `Stagehand Coffee Club ${runId}`,
+    businessName: `${options.businessNamePrefix ?? "Stagehand Coffee Club"} ${runId}`,
     headless: booleanValue(environment.E2E_HEADLESS, true),
     model,
     modelApiKey,
