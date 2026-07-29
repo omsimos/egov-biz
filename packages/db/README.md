@@ -4,8 +4,11 @@ Shared Turso/libSQL persistence for the DX BNRS and LGU packages, built with Dri
 
 ## Usage
 
-Set `TURSO_DATABASE_URL` in the consuming app. A local database uses a `file:` URL and does not
-need a token; a remote Turso database also requires `TURSO_AUTH_TOKEN`.
+The package defaults to its own local database at `packages/db/data/egov-dx.sqlite`, keeping DX
+data separate from an application's database regardless of the process working directory.
+Override it with `DX_TURSO_DATABASE_URL`; a remote Turso database also requires
+`DX_TURSO_AUTH_TOKEN`. Generic `TURSO_DATABASE_URL` settings are ignored so the package cannot
+accidentally connect to the app database.
 
 ```ts
 import { createDatabaseFromEnv } from "@repo/db";
@@ -31,5 +34,4 @@ bun --filter @repo/db db:studio
 ```
 
 The repository contains one fresh SQLite migration baseline in `packages/db/drizzle`. DX
-migrations use the `__dx_drizzle_migrations` ledger, so these tables can share the app's Turso
-database without colliding with the app's default `__drizzle_migrations` ledger.
+migrations use the `__dx_drizzle_migrations` ledger in the isolated DX database.

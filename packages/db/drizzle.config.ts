@@ -1,9 +1,13 @@
 import { defineConfig } from "drizzle-kit";
+import { ensureLocalDatabaseDirectory, getTursoConfig } from "./src/config.ts";
+
+const config = getTursoConfig();
+ensureLocalDatabaseDirectory(config);
 
 export default defineConfig({
   dbCredentials: {
-    authToken: process.env.TURSO_AUTH_TOKEN,
-    url: process.env.TURSO_DATABASE_URL ?? "",
+    authToken: config.authToken ?? (config.isLocal ? "local-file" : undefined),
+    url: config.url,
   },
   dialect: "turso",
   migrations: {
