@@ -6,6 +6,7 @@ import { XIcon } from "@phosphor-icons/react";
 
 import { cn } from "@/lib/utils";
 import { IconButton } from "@/components/ui/icon-button";
+import { usePhoneFrame } from "@/components/phone-chrome";
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
@@ -23,12 +24,10 @@ function DialogClose({ ...props }: DialogPrimitive.Close.Props) {
   return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
 }
 
-// absolute, not fixed — and no Portal above it. Portalled to <body> and pinned
-// to the viewport, every sheet in the app escaped the phone frame: on a desktop
-// viewport it spanned the whole window and centred itself on the page rather
-// than on the device it belongs to. In place, the nearest positioned ancestor is
-// the phone (`.screen`, or `.phone-shell` for anything rendered above the
-// screens), whose `overflow: hidden` clips the sheet to the frame.
+// absolute, not fixed. Base UI requires the Portal, so the fix for a sheet that
+// escaped the phone is where the portal *lands*, not whether there is one: it
+// goes into `.phone-shell` (see usePhoneFrame), which is the positioned,
+// overflow-hidden ancestor these coordinates then resolve against.
 function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) {
   return (
     <DialogPrimitive.Backdrop
@@ -56,8 +55,9 @@ function DialogContent({
    */
   showCloseButton?: boolean;
 }) {
+  const frame = usePhoneFrame();
   return (
-    <>
+    <DialogPortal container={frame ?? undefined}>
       <DialogOverlay />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
@@ -86,7 +86,7 @@ function DialogContent({
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Popup>
-    </>
+    </DialogPortal>
   );
 }
 

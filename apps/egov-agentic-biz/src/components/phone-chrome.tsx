@@ -12,7 +12,34 @@ import {
   UserIcon,
   WalletIcon,
 } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
+import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
+
+/**
+ * The phone frame element that sheets portal into. Base UI requires a
+ * `Dialog.Portal`, and portalled to `<body>` a sheet escapes the device: on a
+ * desktop viewport it spans the window and centres on the page rather than on
+ * the phone. Pointing the portal at `.phone-shell` — which is
+ * `position: relative; overflow: hidden` — puts every sheet inside the frame
+ * and lets `DialogContent` position itself with `absolute`.
+ *
+ * Null until the frame mounts, and in any tree without one; `DialogPortal`
+ * falls back to `<body>` there rather than failing to render.
+ */
+const PhoneFrameContext = createContext<HTMLElement | null>(null);
+
+export function PhoneFrame({
+  children,
+  element,
+}: {
+  children: ReactNode;
+  element: HTMLElement | null;
+}) {
+  return <PhoneFrameContext.Provider value={element}>{children}</PhoneFrameContext.Provider>;
+}
+
+export function usePhoneFrame() {
+  return useContext(PhoneFrameContext);
+}
 
 export function StatusBar() {
   const [time, setTime] = useState<string | null>(null);

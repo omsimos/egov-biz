@@ -5,7 +5,7 @@ import { DtiFormCard, LguPermitCard, PaymentSheet } from "@/components/business-
 import { BusinessDetailScreen, BusinessLanding } from "@/components/egov-business-app";
 import { HomeScreen } from "@/components/home-screen";
 import { LoginScreen } from "@/components/login-screen";
-import { StatusBar } from "@/components/phone-chrome";
+import { PhoneFrame, StatusBar } from "@/components/phone-chrome";
 import type { DtiBusinessNameForm, LguPermitSummary } from "@/lib/business-chat";
 import type { CitizenProfile, RegisteredBusiness } from "@/lib/citizen-profile";
 import { writeLastAccount } from "@/lib/last-account";
@@ -203,6 +203,9 @@ export function PreviewStage() {
     const hash = window.location.hash.slice(1);
     if ((screens as readonly string[]).includes(hash)) setScreenState(hash as PreviewScreen);
   }, []);
+  // State, not a ref: DialogContent reads it during render to pick its portal
+  // container, so the frame mounting has to cause a re-render.
+  const [phoneFrame, setPhoneFrame] = useState<HTMLElement | null>(null);
   const setScreen = (next: PreviewScreen) => {
     window.location.hash = next;
     setScreenState(next);
@@ -230,44 +233,46 @@ export function PreviewStage() {
           </button>
         ))}
       </div>
-      <div className="phone-shell">
-        {screen === "home" && (
-          <HomeScreen
-            onBusiness={() => setScreen("business")}
-            onLogout={noop}
-            profile={previewProfile}
-          />
-        )}
-        {screen === "business" && (
-          <BusinessLanding
-            businesses={previewBusinesses}
-            businessesLoading={false}
-            conversations={[]}
-            initialPrompt=""
-            onBack={() => setScreen("home")}
-            onDelete={noop}
-            onOpenBusiness={() => setScreen("record")}
-            onResume={noop}
-            onSubmit={noop}
-            profile={previewProfile}
-          />
-        )}
-        {screen === "record" && (
-          <BusinessDetailScreen
-            business={previewBusinessDetail}
-            conversations={[]}
-            conversationsLoading={false}
-            error={null}
-            loading={false}
-            onBack={() => setScreen("business")}
-            onNewChat={noop}
-            onOpenChat={noop}
-            onShowAllChats={noop}
-            profile={previewProfile}
-          />
-        )}
-        {screen === "cards" && <ChatCardsPreview />}
-        {screen === "login" && <LoginScreen />}
+      <div className="phone-shell" ref={setPhoneFrame}>
+        <PhoneFrame element={phoneFrame}>
+          {screen === "home" && (
+            <HomeScreen
+              onBusiness={() => setScreen("business")}
+              onLogout={noop}
+              profile={previewProfile}
+            />
+          )}
+          {screen === "business" && (
+            <BusinessLanding
+              businesses={previewBusinesses}
+              businessesLoading={false}
+              conversations={[]}
+              initialPrompt=""
+              onBack={() => setScreen("home")}
+              onDelete={noop}
+              onOpenBusiness={() => setScreen("record")}
+              onResume={noop}
+              onSubmit={noop}
+              profile={previewProfile}
+            />
+          )}
+          {screen === "record" && (
+            <BusinessDetailScreen
+              business={previewBusinessDetail}
+              conversations={[]}
+              conversationsLoading={false}
+              error={null}
+              loading={false}
+              onBack={() => setScreen("business")}
+              onNewChat={noop}
+              onOpenChat={noop}
+              onShowAllChats={noop}
+              profile={previewProfile}
+            />
+          )}
+          {screen === "cards" && <ChatCardsPreview />}
+          {screen === "login" && <LoginScreen />}
+        </PhoneFrame>
       </div>
     </div>
   );

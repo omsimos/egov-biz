@@ -40,7 +40,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { HomeScreen } from "@/components/home-screen";
 import { LandingCopy, LandingHeader } from "@/components/landing-shell";
 import { LoginScreen } from "@/components/login-screen";
-import { BottomNav, StatusBar } from "@/components/phone-chrome";
+import { BottomNav, PhoneFrame, StatusBar } from "@/components/phone-chrome";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -1168,6 +1168,9 @@ export function EgaphBusinessApp({
   // never needs resetting on success.
   const [signingIn, setSigningIn] = useState(false);
   const copyRef = useRef<HTMLDivElement>(null);
+  // State, not a ref: DialogContent reads this during render to pick its portal
+  // container, so the frame mounting has to cause a re-render.
+  const [phoneFrame, setPhoneFrame] = useState<HTMLElement | null>(null);
   const [copyBox, setCopyBox] = useState({ right: 0, width: 0 });
   // matchMedia rather than a CSS class: motion animates inline transforms and
   // cannot read a media query.
@@ -1415,191 +1418,196 @@ export function EgaphBusinessApp({
           animate={{ x: phoneSlide }}
           className="phone-shell"
           initial={false}
+          ref={setPhoneFrame}
           transition={LANDING}
         >
-          {status === "loading" ? (
-            <div
-              aria-live="polite"
-              className="screen grid place-content-center justify-items-center gap-4 bg-canvas! text-muted-foreground"
-              role="status"
-            >
-              <div className="grid size-[58px] animate-[auth-pulse_1.2s_ease-in-out_infinite_alternate] place-items-center rounded-[19px] bg-primary text-white motion-reduce:animate-none!">
-                <ShieldCheckIcon className="size-[30px]" weight="duotone" />
-              </div>
-              <p className="m-0 text-sm font-bold">Restoring your secure session…</p>
-            </div>
-          ) : !profile ? (
-            // Both halves stay mounted and cross, each travelling its own full
-            // width. Below 760px the login screen is simply the page, parked at
-            // 0, and the preview never renders.
-            <>
-              <motion.div
-                animate={{ x: signingIn ? "-100%" : "0%" }}
-                aria-hidden="true"
-                className="landing-preview hidden min-[760px]:block"
-                initial={false}
-                transition={LANDING}
+          <PhoneFrame element={phoneFrame}>
+            {status === "loading" ? (
+              <div
+                aria-live="polite"
+                className="screen grid place-content-center justify-items-center gap-4 bg-canvas! text-muted-foreground"
+                role="status"
               >
-                {/* Business is live even here: it is the one thing on the
+                <div className="grid size-[58px] animate-[auth-pulse_1.2s_ease-in-out_infinite_alternate] place-items-center rounded-[19px] bg-primary text-white motion-reduce:animate-none!">
+                  <ShieldCheckIcon className="size-[30px]" weight="duotone" />
+                </div>
+                <p className="m-0 text-sm font-bold">Restoring your secure session…</p>
+              </div>
+            ) : !profile ? (
+              // Both halves stay mounted and cross, each travelling its own full
+              // width. Below 760px the login screen is simply the page, parked at
+              // 0, and the preview never renders.
+              <>
+                <motion.div
+                  animate={{ x: signingIn ? "-100%" : "0%" }}
+                  aria-hidden="true"
+                  className="landing-preview hidden min-[760px]:block"
+                  initial={false}
+                  transition={LANDING}
+                >
+                  {/* Business is live even here: it is the one thing on the
                     launcher this product does, and tapping it before signing in
                     means the same thing as pressing Get started. The screen
                     stays aria-hidden — Get started is the labelled path, and
                     this is a picture of where you land. Logging out of a
                     session that does not exist stays a no-op. */}
-                <HomeScreen
-                  onBusiness={() => setSigningIn(true)}
-                  onLogout={noop}
-                  profile={PREVIEW_PROFILE}
-                />
-              </motion.div>
-              <motion.div
-                animate={{ x: wide && !signingIn ? "100%" : "0%" }}
-                // pointer-events, not `hidden`: the screen keeps its box through
-                // the slide, but only the visible half may take a click.
-                className={cn("landing-login", wide && !signingIn && "pointer-events-none")}
-                initial={false}
-                transition={LANDING}
-              >
-                <LoginScreen
-                  initialError={authError}
-                  onBack={signingIn ? () => setSigningIn(false) : undefined}
-                />
-              </motion.div>
-            </>
-          ) : (
-            // One keyed wrapper per screen instead of five loose conditionals, so
-            // the outgoing screen stays mounted long enough to leave. Each is
-            // absolutely positioned because both halves have to occupy the same
-            // box during the swap; .phone-shell is already `position: relative;
-            // overflow: hidden`, which is what clips the 24px of travel.
-            // initial={false} stops the first screen animating in on load — that
-            // is an arrival, not a navigation.
-            <AnimatePresence custom={goingBack} initial={false}>
-              <motion.div
-                animate="animate"
-                className="absolute inset-0"
-                custom={goingBack}
-                exit="exit"
-                initial="initial"
-                key={screen}
-                transition={SCREEN}
-                variants={SCREEN_VARIANTS}
-              >
-                {screen === "restoring" && (
-                  <div className="screen bg-canvas!">
-                    <StatusBar />
-                    <div
-                      className="flex h-[calc(100%-36px)] flex-col items-center justify-center px-[38px] text-center"
-                      role="status"
-                    >
-                      <div className="relative grid size-[62px] animate-[soft-pulse_1.8s_infinite] rotate-[-4deg] place-items-center rounded-[22px] bg-primary text-white shadow-[0_12px_28px_rgba(7,85,233,0.24)] motion-reduce:animate-none!">
-                        <FolderOpenIcon className="size-[29px]" weight="fill" />
-                      </div>
-                      <h1 className="mt-7 mb-2 text-[25px] leading-[1.15] tracking-[-0.8px]">
-                        Opening your saved plan
-                      </h1>
-                      <p className="m-0 text-[14px] text-muted-foreground">
-                        Restoring the conversation…
-                      </p>
-                      <div aria-hidden="true" className="mt-6 flex gap-[5px]">
-                        <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary motion-reduce:animate-none!" />
-                        <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary [animation-delay:0.2s] motion-reduce:animate-none!" />
-                        <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary [animation-delay:0.4s] motion-reduce:animate-none!" />
+                  <HomeScreen
+                    onBusiness={() => setSigningIn(true)}
+                    onLogout={noop}
+                    profile={PREVIEW_PROFILE}
+                  />
+                </motion.div>
+                <motion.div
+                  animate={{ x: wide && !signingIn ? "100%" : "0%" }}
+                  // pointer-events, not `hidden`: the screen keeps its box through
+                  // the slide, but only the visible half may take a click.
+                  className={cn("landing-login", wide && !signingIn && "pointer-events-none")}
+                  initial={false}
+                  transition={LANDING}
+                >
+                  <LoginScreen
+                    initialError={authError}
+                    onBack={signingIn ? () => setSigningIn(false) : undefined}
+                  />
+                </motion.div>
+              </>
+            ) : (
+              // One keyed wrapper per screen instead of five loose conditionals, so
+              // the outgoing screen stays mounted long enough to leave. Each is
+              // absolutely positioned because both halves have to occupy the same
+              // box during the swap; .phone-shell is already `position: relative;
+              // overflow: hidden`, which is what clips the 24px of travel.
+              // initial={false} stops the first screen animating in on load — that
+              // is an arrival, not a navigation.
+              <AnimatePresence custom={goingBack} initial={false}>
+                <motion.div
+                  animate="animate"
+                  className="absolute inset-0"
+                  custom={goingBack}
+                  exit="exit"
+                  initial="initial"
+                  key={screen}
+                  transition={SCREEN}
+                  variants={SCREEN_VARIANTS}
+                >
+                  {screen === "restoring" && (
+                    <div className="screen bg-canvas!">
+                      <StatusBar />
+                      <div
+                        className="flex h-[calc(100%-36px)] flex-col items-center justify-center px-[38px] text-center"
+                        role="status"
+                      >
+                        <div className="relative grid size-[62px] animate-[soft-pulse_1.8s_infinite] rotate-[-4deg] place-items-center rounded-[22px] bg-primary text-white shadow-[0_12px_28px_rgba(7,85,233,0.24)] motion-reduce:animate-none!">
+                          <FolderOpenIcon className="size-[29px]" weight="fill" />
+                        </div>
+                        <h1 className="mt-7 mb-2 text-[25px] leading-[1.15] tracking-[-0.8px]">
+                          Opening your saved plan
+                        </h1>
+                        <p className="m-0 text-[14px] text-muted-foreground">
+                          Restoring the conversation…
+                        </p>
+                        <div aria-hidden="true" className="mt-6 flex gap-[5px]">
+                          <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary motion-reduce:animate-none!" />
+                          <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary [animation-delay:0.2s] motion-reduce:animate-none!" />
+                          <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary [animation-delay:0.4s] motion-reduce:animate-none!" />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
-                {screen === "home" && (
-                  <HomeScreen
-                    profile={profile}
-                    onBusiness={() => setScreen("business")}
-                    onLogout={() => void signOut()}
-                  />
-                )}
-                {screen === "business" && (
-                  <BusinessLanding
-                    profile={profile}
-                    businesses={businesses}
-                    businessesLoading={businessesLoading}
-                    conversations={conversations}
-                    initialPrompt={prompt}
-                    onBack={() => setScreen("home")}
-                    onSubmit={startChat}
-                    onResume={(id) => void openConversation(id)}
-                    onDelete={setPendingDelete}
-                    onOpenBusiness={openBusiness}
-                  />
-                )}
-                {screen === "business-detail" && (
-                  <BusinessDetailScreen
-                    business={selectedBusiness}
-                    conversations={businessConversations}
-                    conversationsLoading={businessConversationsLoading}
-                    loading={selectedBusinessLoading}
-                    error={selectedBusinessError}
-                    onBack={leaveBusinessDetail}
-                    onNewChat={(businessId) => void startBusinessChat(businessId)}
-                    onOpenChat={(id) => void openConversation(id)}
-                    onShowAllChats={openBusinessChats}
-                    profile={profile}
-                  />
-                )}
-                {screen === "business-chats" && (
-                  <BusinessChatsScreen
-                    business={selectedBusiness}
-                    conversations={businessConversations}
-                    loading={businessConversationsLoading}
-                    onBack={() => setScreen("business-detail")}
-                    onNewChat={(businessId) => void startBusinessChat(businessId)}
-                    onOpenChat={(id) => void openConversation(id)}
-                  />
-                )}
-                {screen === "chat" && conversation && (
-                  <BusinessChatScreen
-                    business={selectedBusiness}
-                    key={conversation.id}
-                    conversation={conversation}
-                    conversations={
-                      conversation.purpose === "management" ? businessConversations : conversations
-                    }
-                    profile={profile}
-                    paymentStatus={paymentStatus}
-                    paymentService={paymentService}
-                    onBack={leaveChat}
-                    onOpenBusiness={openBusiness}
-                    onSelectConversation={(id) => void openConversation(id)}
-                    onDeleteConversation={setPendingDelete}
-                  />
-                )}
-              </motion.div>
-            </AnimatePresence>
-          )}
-          {/* Inside the phone, not the page: DialogContent positions itself
+                  )}
+                  {screen === "home" && (
+                    <HomeScreen
+                      profile={profile}
+                      onBusiness={() => setScreen("business")}
+                      onLogout={() => void signOut()}
+                    />
+                  )}
+                  {screen === "business" && (
+                    <BusinessLanding
+                      profile={profile}
+                      businesses={businesses}
+                      businessesLoading={businessesLoading}
+                      conversations={conversations}
+                      initialPrompt={prompt}
+                      onBack={() => setScreen("home")}
+                      onSubmit={startChat}
+                      onResume={(id) => void openConversation(id)}
+                      onDelete={setPendingDelete}
+                      onOpenBusiness={openBusiness}
+                    />
+                  )}
+                  {screen === "business-detail" && (
+                    <BusinessDetailScreen
+                      business={selectedBusiness}
+                      conversations={businessConversations}
+                      conversationsLoading={businessConversationsLoading}
+                      loading={selectedBusinessLoading}
+                      error={selectedBusinessError}
+                      onBack={leaveBusinessDetail}
+                      onNewChat={(businessId) => void startBusinessChat(businessId)}
+                      onOpenChat={(id) => void openConversation(id)}
+                      onShowAllChats={openBusinessChats}
+                      profile={profile}
+                    />
+                  )}
+                  {screen === "business-chats" && (
+                    <BusinessChatsScreen
+                      business={selectedBusiness}
+                      conversations={businessConversations}
+                      loading={businessConversationsLoading}
+                      onBack={() => setScreen("business-detail")}
+                      onNewChat={(businessId) => void startBusinessChat(businessId)}
+                      onOpenChat={(id) => void openConversation(id)}
+                    />
+                  )}
+                  {screen === "chat" && conversation && (
+                    <BusinessChatScreen
+                      business={selectedBusiness}
+                      key={conversation.id}
+                      conversation={conversation}
+                      conversations={
+                        conversation.purpose === "management"
+                          ? businessConversations
+                          : conversations
+                      }
+                      profile={profile}
+                      paymentStatus={paymentStatus}
+                      paymentService={paymentService}
+                      onBack={leaveChat}
+                      onOpenBusiness={openBusiness}
+                      onSelectConversation={(id) => void openConversation(id)}
+                      onDeleteConversation={setPendingDelete}
+                    />
+                  )}
+                </motion.div>
+              </AnimatePresence>
+            )}
+            {/* Inside the phone, not the page: DialogContent positions itself
               against its nearest positioned ancestor, and above the screens
               that is .phone-shell. At the .landing-stage level its sheet spanned
               the whole viewport. */}
-          <ConfirmDialog
-            confirmLabel={pendingDelete?.purpose === "management" ? "Delete chat" : "Delete plan"}
-            description={
-              pendingDelete
-                ? pendingDelete.purpose === "management"
-                  ? `“${pendingDelete.title}” and its messages will be permanently removed. This cannot be undone.`
-                  : `“${pendingDelete.title}” and its messages and payment history will be permanently removed. This cannot be undone.`
-                : ""
-            }
-            onConfirm={() => {
-              if (pendingDelete) void deleteSession(pendingDelete);
-            }}
-            onOpenChange={(next) => {
-              if (!next) setPendingDelete(null);
-            }}
-            open={pendingDelete !== null}
-            title={
-              pendingDelete?.purpose === "management"
-                ? "Delete this business chat?"
-                : "Delete this registration plan?"
-            }
-          />
+            <ConfirmDialog
+              confirmLabel={pendingDelete?.purpose === "management" ? "Delete chat" : "Delete plan"}
+              description={
+                pendingDelete
+                  ? pendingDelete.purpose === "management"
+                    ? `“${pendingDelete.title}” and its messages will be permanently removed. This cannot be undone.`
+                    : `“${pendingDelete.title}” and its messages and payment history will be permanently removed. This cannot be undone.`
+                  : ""
+              }
+              onConfirm={() => {
+                if (pendingDelete) void deleteSession(pendingDelete);
+              }}
+              onOpenChange={(next) => {
+                if (!next) setPendingDelete(null);
+              }}
+              open={pendingDelete !== null}
+              title={
+                pendingDelete?.purpose === "management"
+                  ? "Delete this business chat?"
+                  : "Delete this registration plan?"
+              }
+            />
+          </PhoneFrame>
         </motion.div>
       </div>
     </div>
