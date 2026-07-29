@@ -5,6 +5,7 @@ import {
   createBirSoleProprietorBusinessRecord,
   type FinalizeBirSelfEmployedRegistrationInput,
 } from "@/server/dx/bir-registrations";
+import { buildBir2303Input } from "@/lib/form-generators/bir-2303";
 import type { RegisteredBusiness } from "@/lib/registered-business";
 
 const input: FinalizeBirSelfEmployedRegistrationInput = {
@@ -49,6 +50,12 @@ describe("BIR self-employed business records", () => {
       title: "BIR Form 1901",
       status: "Generated",
     });
+    expect(business.files[1]).toMatchObject({
+      id: "bir-form-2303",
+      title: "BIR Certificate of Registration (Form 2303)",
+      status: "Available",
+      source: "DX",
+    });
     expect(business.taxObligations).toHaveLength(4);
     expect(business.taxObligations[0]).toMatchObject({
       businessType: "Self-employed",
@@ -87,12 +94,39 @@ describe("BIR sole-proprietor business records", () => {
       files: [],
     };
 
-    const business = createBirSoleProprietorBusinessRecord({
-      business: existing,
-      finalizedAt: "2026-07-30T02:00:00.000Z",
-    });
+    const business = createBirSoleProprietorBusinessRecord(
+      {
+        business: existing,
+        finalizedAt: "2026-07-30T02:00:00.000Z",
+      },
+      [
+        {
+          artifactId: "87654321-4321-4123-8123-cba987654321",
+          createdAt: "2026-07-30T01:50:00.000Z",
+          formType: "1901",
+        },
+      ],
+    );
 
     expect(business.finalizedAt).toBe("2026-07-30T02:00:00.000Z");
+    expect(business.records.at(-1)).toMatchObject({
+      agency: "Bureau of Internal Revenue",
+      referenceNumber: birRegistrationReference("87654321-4321-4123-8123-cba987654321"),
+      status: "Active",
+      title: "Taxpayer Registration",
+    });
+    expect(business.files).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "bir-form-2303",
+          title: "BIR Certificate of Registration (Form 2303)",
+          status: "Available",
+        }),
+      ]),
+    );
+    expect(buildBir2303Input(business).ocn).toBe(
+      birRegistrationReference("87654321-4321-4123-8123-cba987654321"),
+    );
     expect(business.taxObligations).toHaveLength(4);
     expect(business.taxObligations[0]).toMatchObject({
       businessType: "Sole proprietor",

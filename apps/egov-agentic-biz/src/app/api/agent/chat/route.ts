@@ -112,6 +112,18 @@ import {
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
+function operationalErrorLabel(error: unknown) {
+  const name = error instanceof Error && error.name ? error.name : "UnknownError";
+  const status =
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    typeof error.status === "number"
+      ? ` (HTTP ${error.status})`
+      : "";
+  return `${name}${status}`;
+}
+
 function readBnrsCatalog() {
   const bnrs = getBnrs();
   return {
@@ -900,9 +912,7 @@ async function emitBir1901Generation(
     });
     writer.write({ type: "text-end", id: textId });
   } catch (error) {
-    console.warn("BIR form artifact generation failed", {
-      name: error instanceof Error ? error.name : "UnknownError",
-    });
+    console.warn(`BIR form artifact generation failed: ${operationalErrorLabel(error)}`);
     writer.write({
       type: "tool-output-error",
       toolCallId,
@@ -1472,6 +1482,7 @@ export async function POST(request: Request) {
     const mention = smsNumberMention(latestPrompt);
     if (mention.kind === "ambiguous")
       return manualResponse(
+        actor.egovUserId,
         conversation.id,
         messages,
         (writer) => {
@@ -1500,6 +1511,7 @@ export async function POST(request: Request) {
       );
       if (selection.kind === "ambiguous" || selection.kind === "not-found")
         return manualResponse(
+          actor.egovUserId,
           conversation.id,
           messages,
           (writer) => {
@@ -1526,6 +1538,7 @@ export async function POST(request: Request) {
       };
     } else if (retryChangesObligation) {
       return manualResponse(
+        actor.egovUserId,
         conversation.id,
         messages,
         (writer) => {
@@ -1550,7 +1563,7 @@ export async function POST(request: Request) {
       ...(suppliedNumber ? { number: suppliedNumber } : {}),
     };
 
-    return manualResponse(conversation.id, messages, async (writer) => {
+    return manualResponse(actor.egovUserId, conversation.id, messages, async (writer) => {
       const toolCallId = crypto.randomUUID();
       writer.write({
         type: "tool-input-available",
@@ -1588,9 +1601,7 @@ export async function POST(request: Request) {
         });
         writer.write({ type: "text-end", id: textId });
       } catch (error) {
-        console.warn("Simulated tax reminder failed", {
-          name: error instanceof Error ? error.name : "UnknownError",
-        });
+        console.warn(`Simulated tax reminder failed: ${operationalErrorLabel(error)}`);
         writer.write({
           type: "tool-output-error",
           toolCallId,
@@ -1617,6 +1628,7 @@ export async function POST(request: Request) {
     const message = extractExplicitSmsMessage(latestPrompt);
     if (!message)
       return manualResponse(
+        actor.egovUserId,
         conversation.id,
         messages,
         (writer) => {
@@ -1636,6 +1648,7 @@ export async function POST(request: Request) {
     const mention = smsNumberMention(latestPrompt);
     if (mention.kind === "ambiguous")
       return manualResponse(
+        actor.egovUserId,
         conversation.id,
         messages,
         (writer) => {
@@ -1660,6 +1673,7 @@ export async function POST(request: Request) {
     });
     if (!parsedSmsInput.success)
       return manualResponse(
+        actor.egovUserId,
         conversation.id,
         messages,
         (writer) => {
@@ -1676,7 +1690,7 @@ export async function POST(request: Request) {
         { resumable: false },
       );
     const smsInput = parsedSmsInput.data;
-    return manualResponse(conversation.id, messages, async (writer) => {
+    return manualResponse(actor.egovUserId, conversation.id, messages, async (writer) => {
       const toolCallId = crypto.randomUUID();
       writer.write({
         type: "tool-input-available",
@@ -1706,9 +1720,7 @@ export async function POST(request: Request) {
         });
         writer.write({ type: "text-end", id: textId });
       } catch (error) {
-        console.warn("SMS send failed", {
-          name: error instanceof Error ? error.name : "UnknownError",
-        });
+        console.warn(`SMS send failed: ${operationalErrorLabel(error)}`);
         writer.write({
           type: "tool-output-error",
           toolCallId,
@@ -1841,6 +1853,7 @@ export async function POST(request: Request) {
           {
             businessId: finalizedBusiness.id,
             businessName: finalizedBusiness.name,
+            certificateOfRegistrationFileId: "bir-form-2303",
             registrationNumber: finalizedBusiness.registrationNumber,
             status: finalizedBusiness.status,
           },
@@ -1851,7 +1864,7 @@ export async function POST(request: Request) {
           type: "text-delta",
           id: textId,
           delta:
-            "Your ₱30 BIR Documentary Stamp Tax payment is verified, so this registration plan is complete. Books and invoices, sector-specific permits, and SSS, PhilHealth, or Pag-IBIG registration remain available as optional follow-ups and do not block completion.",
+            "Your ₱30 BIR Documentary Stamp Tax payment is verified, so this registration plan is complete. BIR generated your Certificate of Registration (Form 2303) and added it to the business record. Books and invoices, sector-specific permits, and SSS, PhilHealth, or Pag-IBIG registration remain available as optional follow-ups and do not block completion.",
         });
         writer.write({ type: "text-end", id: textId });
       });
@@ -2015,6 +2028,7 @@ export async function POST(request: Request) {
         {
           businessId: finalizedBusiness.id,
           businessName: finalizedBusiness.name,
+          certificateOfRegistrationFileId: "bir-form-2303",
           registrationNumber: finalizedBusiness.registrationNumber,
           status: finalizedBusiness.status,
         },
@@ -2024,7 +2038,8 @@ export async function POST(request: Request) {
       writer.write({
         type: "text-delta",
         id: textId,
-        delta: "Your completed registration is now linked to its business record.",
+        delta:
+          "Your completed registration is now linked to its business record, including the BIR Certificate of Registration (Form 2303).",
       });
       writer.write({ type: "text-end", id: textId });
     });
