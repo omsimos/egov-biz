@@ -118,6 +118,7 @@ export type GenerateBirFormOutput = {
 export type FinalizeBusinessRegistrationOutput = {
   businessId: string;
   businessName: string;
+  certificateOfRegistrationFileId: string;
   registrationNumber: string;
   status: "Active";
 };

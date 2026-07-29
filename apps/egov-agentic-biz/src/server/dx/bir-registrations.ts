@@ -1,5 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import { createBirDemoTaxCalendar } from "@repo/dx/bir";
+import { createBir2303FileMetadata } from "@/lib/form-generators/bir-2303";
 import type { BusinessPlan } from "@/lib/questions";
 import type {
   BusinessFile,
@@ -56,6 +57,38 @@ function filesFor(artifacts: Awaited<ReturnType<typeof listBirArtifacts>>): Busi
   }));
 }
 
+function requireBir1901(artifacts: Awaited<ReturnType<typeof listBirArtifacts>>) {
+  const form1901 = artifacts.find((artifact) => artifact.formType === "1901");
+  if (!form1901) throw new Error("BIR Form 1901 was not found for this registration.");
+  return form1901;
+}
+
+function filesWithCertificateOfRegistration(files: BusinessFile[], finalizedAt: string) {
+  const byId = new Map(files.map((file) => [file.id, file]));
+  const certificate = createBir2303FileMetadata(finalizedAt);
+  byId.set(certificate.id, certificate);
+  return [...byId.values()];
+}
+
+function birRegistrationRecord(
+  registrationNumber: string,
+  finalizedAt: string,
+  title: string,
+): BusinessRecord {
+  return {
+    id: `bir-registration-${registrationNumber}`,
+    kind: "registration",
+    agency: "Bureau of Internal Revenue",
+    title,
+    referenceNumber: registrationNumber,
+    status: "Active",
+    issuedAt: finalizedAt,
+    validUntil: null,
+    note: "Fetched from DX BIR after the required documentary stamp tax payment was verified.",
+    source: "DX",
+  };
+}
+
 function businessFromRow(row: BirRegistrationRow): RegisteredBusiness {
   return {
     id: row.id,
@@ -86,8 +119,7 @@ export function createBirSelfEmployedBusinessRecord(
   input: FinalizeBirSelfEmployedRegistrationInput,
   artifacts: Awaited<ReturnType<typeof listBirArtifacts>>,
 ): RegisteredBusiness {
-  const form1901 = artifacts.find((artifact) => artifact.formType === "1901");
-  if (!form1901) throw new Error("BIR Form 1901 was not found for this registration.");
+  const form1901 = requireBir1901(artifacts);
   const registrationNumber = birRegistrationReference(form1901.artifactId);
   return {
     id: `bir-${input.conversationId}`,
@@ -105,39 +137,46 @@ export function createBirSelfEmployedBusinessRecord(
     tinMasked: input.tinMasked,
     finalizedAt: input.finalizedAt,
     records: [
-      {
-        id: `bir-registration-${registrationNumber}`,
-        kind: "registration",
-        agency: "Bureau of Internal Revenue",
-        title: "Self-Employed Taxpayer Registration",
-        referenceNumber: registrationNumber,
-        status: "Active",
-        issuedAt: input.finalizedAt,
-        validUntil: null,
-        note: "Fetched from DX BIR after the required documentary stamp tax payment was verified.",
-        source: "DX",
-      },
+      birRegistrationRecord(
+        registrationNumber,
+        input.finalizedAt,
+        "Self-Employed Taxpayer Registration",
+      ),
     ],
     taxObligations: createBirDemoTaxCalendar({
       businessType: "Self-employed",
       asOf: new Date(input.finalizedAt),
     }),
-    files: filesFor(artifacts),
+    files: filesWithCertificateOfRegistration(filesFor(artifacts), input.finalizedAt),
   };
 }
 
 export function createBirSoleProprietorBusinessRecord(
   input: Pick<FinalizeBirSoleProprietorRegistrationInput, "business" | "finalizedAt">,
+  artifacts: Awaited<ReturnType<typeof listBirArtifacts>>,
 ): RegisteredBusiness {
   if (input.business.type !== "Sole proprietor")
     throw new Error("A sole-proprietor business record is required.");
+  const form1901 = requireBir1901(artifacts);
+  const birReference = birRegistrationReference(form1901.artifactId);
   return {
     ...input.business,
     finalizedAt: input.finalizedAt,
+    records: [
+      ...input.business.records.filter(
+        (record) =>
+          !(record.kind === "registration" && record.agency === "Bureau of Internal Revenue"),
+      ),
+      birRegistrationRecord(birReference, input.finalizedAt, "Taxpayer Registration"),
+    ],
     taxObligations: createBirDemoTaxCalendar({
       businessType: "Sole proprietor",
       asOf: new Date(input.finalizedAt),
     }),
+    files: filesWithCertificateOfRegistration(
+      [...input.business.files, ...filesFor(artifacts)],
+      input.finalizedAt,
+    ),
   };
 }
 
@@ -220,9 +259,13 @@ export async function finalizeBirSelfEmployedRegistration(
 export async function finalizeBirSoleProprietorRegistration(
   input: FinalizeBirSoleProprietorRegistrationInput,
 ) {
+  const artifacts = await listBirArtifacts({
+    conversationId: input.business.conversationId,
+    ownerEgovUserId: input.ownerEgovUserId,
+  });
   return saveBirRegisteredBusiness(
     input.ownerEgovUserId,
-    createBirSoleProprietorBusinessRecord(input),
+    createBirSoleProprietorBusinessRecord(input, artifacts),
   );
 }
 

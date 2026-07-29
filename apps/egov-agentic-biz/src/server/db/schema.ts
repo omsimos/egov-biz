@@ -1,12 +1,5 @@
 import { relations, sql } from "drizzle-orm";
-import {
-  check,
-  index,
-  integer,
-  sqliteTable,
-  text,
-  uniqueIndex,
-} from "drizzle-orm/sqlite-core";
+import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import type { UIMessage } from "ai";
 import type { ConversationPurpose, PaymentServiceType } from "@/lib/business-chat";
 import type { RegisteredBusiness } from "@/lib/registered-business";
