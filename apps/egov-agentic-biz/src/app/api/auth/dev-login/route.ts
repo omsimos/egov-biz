@@ -5,9 +5,9 @@ import { AUTH_COOKIE_NAME, createSession, sessionCookieOptions } from "@/lib/aut
 export const dynamic = "force-dynamic";
 
 // Dev-only shortcut past eGov SSO, so the agent chat can be exercised locally.
-// Real login needs a one-time exchange code minted by the eGov staging portal,
-// which expires quickly and cannot be scripted — that makes the chat flow
-// (the actual product) impractical to review during development.
+// Real login needs an email OTP and MPIN accepted by the eGov staging provider,
+// which then mints a short-lived exchange code — that makes the chat flow (the
+// actual product) impractical to review repeatedly during development.
 //
 // This mints a REAL session: same createSession, same cookie, same TTL, same
 // SQLite row as a genuine login. Nothing downstream is mocked, which is the

@@ -1058,7 +1058,6 @@ export function EgaphBusinessApp({
           </AnimatePresence>
         )}
       </div>
-      <div id="egov-sso-widget-portal" />
       <ConfirmDialog
         confirmLabel="Delete plan"
         description={
