@@ -64,13 +64,8 @@ export function BottomNav({ active = "home" }: { active?: "home" | "business" })
         <NewspaperIcon />
         <span>News</span>
       </div>
-      {/* aria-hidden and no cuelume, unlike the labelled Digital ID orb this
-          replaces. The Landing design draws the centre item as an unlabelled QR
-          orb, and an unlabelled icon with nothing behind it has no name worth
-          announcing — the four items around it already name every destination
-          this shell has. It also stays silent on tap: a click sound is a claim
-          that something happened, which was the one thing the old orb got
-          wrong that dimming it could never have fixed. */}
+      {/* Decoration: nothing behind it, so no name worth announcing and no click
+          sound — a sound would claim something happened. */}
       <div aria-hidden="true">
         <span className="qr-orb">
           <QrCodeIcon weight="fill" />

@@ -24,12 +24,8 @@ type ServiceTile = {
   business?: boolean;
 };
 
-// Four domain tiles, from the Landing design. The eight-tile directory this
-// replaces (NGAs, LGUs, Jobs, Travel, Report, More alongside these) spent a
-// second row on labels with nothing behind them; a tinted chip per domain does
-// the same orienting job in one row. Business is still the only tile wired
-// anywhere, and no longer the only coloured one — the tint is the domain, not a
-// "this one works" marker.
+// The tint marks the domain, not "this one works" — Business is still the only
+// tile wired anywhere.
 const services: ServiceTile[] = [
   { Icon: IdentificationCardIcon, chip: "bg-secondary text-primary", label: "National ID" },
   {
@@ -42,9 +38,8 @@ const services: ServiceTile[] = [
   { chip: "bg-destructive-soft text-[var(--flag-red)]", Icon: ScalesIcon, label: "Legal" },
 ];
 
-// Both open the registration flow, which is where these two tasks are actually
-// carried out — the agent walks the DTI name search and the BIR registration as
-// steps of one plan, so neither needs (or has) a screen of its own to land on.
+// Both open the registration flow: the agent walks the DTI name search and BIR
+// registration as steps of one plan, so neither has a screen of its own.
 const popularServices = [
   {
     description: "Check and reserve your trade name",
@@ -80,12 +75,8 @@ export function HomeScreen({
       >
         <header className="sticky top-0 z-12 flex h-[58px] items-center justify-between bg-white/94 px-5 py-2 backdrop-blur-[8px]">
           <BrandLogo height={23} priority />
-          {/* aria-hidden now, where this was a labelled status indicator. The
-              red unread dot it carried was hardcoded — the app tracks no
-              notification state and has no notifications screen — so the label
-              announced a claim nothing backed. The design draws the bell
-              without the dot, which leaves it as the decoration it always was.
-              Still not a <button>: there is nothing to open. */}
+          {/* Decoration, not a control: the app tracks no notification state, so
+              the old labelled bell and its hardcoded unread dot claimed one. */}
           <span
             aria-hidden="true"
             className="inline-grid size-[38px] shrink-0 place-items-center rounded-full text-primary"
@@ -97,12 +88,8 @@ export function HomeScreen({
         <section className="mt-1.5 flex items-center gap-3 px-5">
           <AccountDialog onLogout={onLogout} profile={profile} />
           <div className="flex flex-col gap-0.5">
-            {/* text-lg (20px), down from --text-xl's 27px. The promo card below
-                is this screen's anchor in the new design and a 27px greeting was
-                competing with it for that job. The mobile number that used to
-                sit underneath is gone from the screen entirely — it is one tap
-                away in the account sheet the avatar opens, which is where you
-                go when you want to check which account you are in. */}
+            {/* Down from --text-xl: the promo card is this screen's anchor, and a
+                27px greeting competed with it. */}
             <strong className="text-lg -tracking-[.4px] text-primary">
               Hi, {profile.firstName}
             </strong>
@@ -110,17 +97,9 @@ export function HomeScreen({
           </div>
         </section>
 
-        {/* No trailing arrow and no drop shadow, both dropped to match the
-            design: flat brand blue against a white screen, with the orange disc
-            bleeding out of the corner, is already the loudest object here. The
-            press response stays — it is the one control on Home that leads
-            anywhere, and cuelume plays a click on it.
-
-            The gutter is the wrapper's padding rather than a margin on the
-            button, and w-full is not decoration: `display: grid` on a <button>
-            still resolves `width: auto` to shrink-to-fit, not stretch, so as a
-            bare `mx-5 grid` element this card sized itself to its own text —
-            which pulled the orange disc in over the title. */}
+        {/* Wrapper padding plus w-full, not mx-5: `display: grid` on a <button>
+            resolves `width: auto` to shrink-to-fit, which sized this card to its
+            own text and pulled the orange disc in over the title. */}
         <div className="mt-[18px] px-5">
           <button
             className={cn(
@@ -160,10 +139,8 @@ export function HomeScreen({
               </span>
             );
             const caption = <span className="text-sm font-bold">{label}</span>;
-            // Only Business is wired to anything. The rest are a service
-            // directory, so they render as plain content — a <button> that does
-            // nothing reads as broken and makes screen readers announce three
-            // dead controls.
+            // Plain content for the unwired tiles: a <button> that does nothing
+            // reads as broken and announces three dead controls.
             return business ? (
               <button
                 className={cn(
@@ -195,10 +172,8 @@ export function HomeScreen({
             <h2 className="text-md -tracking-[.3px]" id="popular-services">
               Popular services
             </h2>
-            {/* Wired, where this was a blue span styled as a link and attached
-                to nothing. Now that both cards below open the registration
-                flow, so does this — it is the same destination, so it can look
-                like the link it is. */}
+            {/* Was a link-styled span attached to nothing; same destination as
+                the two cards below, so now it actually goes there. */}
             <button
               className={cn("text-sm font-extrabold text-primary", FOCUS_RING)}
               data-cuelume-toggle="page"

@@ -85,8 +85,7 @@ export function LoginScreen({
   onBack,
 }: {
   initialError?: string;
-  // Returns to the landing composition. Absent below 760px and in the /preview
-  // sandbox, where this screen is the whole page and there is nothing behind it.
+  // Absent below 760px and in /preview, where this screen is the whole page.
   onBack?: () => void;
 }) {
   const [apiUrl, setApiUrl] = useState("");
@@ -251,12 +250,9 @@ export function LoginScreen({
   return (
     <div className="screen text-foreground">
       <StatusBar />
-      {/* A sibling of <main>, not a child of it. Inside, it was positioned against
-          main's padding box and so needed a negative `left` to reach the design's
-          14px inset — which main's own `overflow-x: hidden` then clipped by 8px.
-          It also scrolled away with the form, and this is frame chrome: it belongs
-          to the phone, not to the content. Positioned against .screen instead, so
-          the inset is the design's plain 14px and it stays put. */}
+      {/* Sibling of <main>, not a child: inside, reaching the design's 14px inset
+          needed a negative `left` that main's `overflow-x: hidden` clipped, and it
+          scrolled away with the form. */}
       {onBack ? (
         <button
           aria-label="Back to eGOVbusiness"

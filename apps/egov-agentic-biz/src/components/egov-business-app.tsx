@@ -52,10 +52,8 @@ import { cn, FOCUS_RING } from "@/lib/utils";
 
 type Screen = "restoring" | "home" | "business" | "business-detail" | "chat";
 
-// The citizen shown in the landing's phone preview, from the design. Nobody is
-// signed in behind that screen, so every field it does not put on glass is
-// blank rather than invented — only the greeting, the avatar and the city are
-// ever read. See the `.landing-preview` subtree, which is inert.
+// The design's sample citizen for the landing's inert phone preview. Only the
+// greeting, avatar and city are ever read; the rest stays blank, not invented.
 const PREVIEW_PROFILE: CitizenProfile = {
   address: "",
   avatarUrl: "/images/mara-reyes.png",
@@ -923,19 +921,13 @@ export function EgaphBusinessApp({
   const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(null);
   const [businessRevision, setBusinessRevision] = useState(0);
   const [pendingDelete, setPendingDelete] = useState<ConversationSummary | null>(null);
-  // Landing → sign-in. Only ever true while signed out; authenticating unmounts
-  // the whole landing, so this never has to be reset on success.
+  // Only true while signed out; authenticating unmounts the landing, so this
+  // never needs resetting on success.
   const [signingIn, setSigningIn] = useState(false);
-  // The copy column's geometry, which both landing slides are derived from.
-  // Measured rather than computed because its width is a min()/clamp() of the
-  // viewport, and both values are 0 below the landing's breakpoint, where the
-  // column is display:none and nothing moves.
   const copyRef = useRef<HTMLDivElement>(null);
   const [copyBox, setCopyBox] = useState({ right: 0, width: 0 });
-  // Only the landing slides, and only above 760px. matchMedia rather than a CSS
-  // class because motion animates inline transforms and cannot read a media
-  // query — the phone must know to stay put on a handset, where the login screen
-  // is the page and there is no preview behind it.
+  // matchMedia rather than a CSS class: motion animates inline transforms and
+  // cannot read a media query.
   const [wide, setWide] = useState(false);
   useEffect(() => {
     const query = window.matchMedia("(min-width: 760px)");
@@ -1134,16 +1126,11 @@ export function EgaphBusinessApp({
     await logout();
     window.location.assign("/");
   };
-  // The landing is the signed-out experience, so it waits until we actually know
-  // the visitor is signed out. Rendering it during `loading` would flash a
-  // marketing page at someone who already has a session.
+  // Waits for a known-signed-out status, so a visitor with a session never sees
+  // the marketing page flash.
   const onLanding = status !== "loading" && !profile;
-  // offsetLeft/offsetWidth rather than a rect: both are layout values that ignore
-  // transforms, so a reading taken mid-slide is still the resting geometry. The
-  // offsetParent is .landing-stage, which spans the viewport, so offsetLeft is
-  // already a viewport coordinate. Re-measured on resize because the column's
-  // max-width is a min() of the viewport, and re-run when the landing mounts so
-  // the first reading is not taken against a column that is not there yet.
+  // offsetLeft/offsetWidth rather than a rect: they ignore transforms, so a
+  // reading taken mid-slide is still the resting geometry.
   useEffect(() => {
     const node = copyRef.current;
     if (!node) {
@@ -1157,13 +1144,11 @@ export function EgaphBusinessApp({
     observer.observe(node);
     return () => observer.disconnect();
   }, [onLanding, wide]);
-  // The copy travels to its own right edge, not merely its own width: it starts
-  // inset from the left of the viewport, so a translate of just the width leaves
-  // that inset — about 225px of headline at 1440 — still on screen.
+  // Right edge, not width: the copy is inset from the left, so travelling only
+  // its width leaves that inset (~225px of headline at 1440) on screen.
   const copySlide = copyBox.right;
-  // The phone travels half the copy's width, because the two are centred as one
-  // group: with the copy beside it, the phone sits W/2 to the right of where it
-  // would sit alone, so that is exactly the distance back to the middle.
+  // Half the copy's width: the pair is centred as one group, so the phone sits
+  // W/2 right of centre and that is the distance back.
   const phoneSlide = wide && signingIn ? -copyBox.width / 2 : 0;
   return (
     <div className="landing-stage">
@@ -1181,7 +1166,6 @@ export function EgaphBusinessApp({
         <motion.div
           animate={{ x: phoneSlide }}
           className="phone-shell"
-          // The phone is where it belongs on arrival; only Get started moves it.
           initial={false}
           transition={LANDING}
         >
@@ -1197,16 +1181,10 @@ export function EgaphBusinessApp({
               <p className="m-0 text-sm font-bold">Restoring your secure session…</p>
             </div>
           ) : !profile ? (
-            // Both halves stay mounted and slide past each other: the Home
-            // preview leaves to the left as the login screen arrives from the
-            // right, each travelling its own full width so neither is ever
-            // visible outside the frame. Below 760px there is no landing to
-            // preview from, so the login screen is simply the page, parked at 0,
-            // and the preview never renders.
+            // Both halves stay mounted and cross, each travelling its own full
+            // width. Below 760px the login screen is simply the page, parked at
+            // 0, and the preview never renders.
             <>
-              {/* A picture of the product, not the product: there is no session
-                  yet, so this is the design's own sample citizen and the whole
-                  subtree is inert. */}
               <motion.div
                 animate={{ x: signingIn ? "-100%" : "0%" }}
                 aria-hidden="true"
@@ -1218,9 +1196,8 @@ export function EgaphBusinessApp({
               </motion.div>
               <motion.div
                 animate={{ x: wide && !signingIn ? "100%" : "0%" }}
-                // pointer-events rather than `hidden`: the screen has to keep its
-                // box through the slide, and only the half on screen may take a
-                // click.
+                // pointer-events, not `hidden`: the screen keeps its box through
+                // the slide, but only the visible half may take a click.
                 className={cn("landing-login", wide && !signingIn && "pointer-events-none")}
                 initial={false}
                 transition={LANDING}
