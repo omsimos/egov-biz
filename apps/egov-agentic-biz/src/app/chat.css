@@ -286,11 +286,16 @@
   overscroll-behavior: contain;
   scroll-behavior: smooth;
 }
+/* A pill, not a bare line. It sits on a tinted ground where 11px grey text read
+   as a stray caption rather than a divider between days. */
 .chat-day {
   width: max-content;
   margin: 0 auto 16px;
-  color: #8590a3;
-  font-size: 11px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--gray-600);
+  font-size: 12px;
   font-weight: 700;
 }
 .chat-message {
@@ -300,9 +305,11 @@
   gap: 7px;
   animation: chat-arrive 0.2s ease-out;
 }
+/* 20% inset rather than a fixed 44px, so the bubble caps at the design's 80%
+   whatever the frame width. */
 .chat-message.user {
   justify-content: flex-end;
-  padding-left: 44px;
+  padding-left: 20%;
 }
 .chat-message.assistant {
   padding-right: 0;
@@ -317,12 +324,13 @@
 .message-bubble {
   width: fit-content;
   max-width: 100%;
-  padding: 9px 12px;
-  border-radius: 16px 16px 5px 16px;
+  padding: 13px 15px;
+  border-radius: 18px 18px 6px 18px;
   color: #fff;
   background: var(--blue);
-  font-size: 14px;
-  line-height: 1.48;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.5;
 }
 .user .message-content {
   flex: 0 1 auto;
@@ -793,11 +801,16 @@
   overscroll-behavior: contain;
   scroll-behavior: smooth;
 }
+/* A pill, not a bare line. It sits on a tinted ground where 11px grey text read
+   as a stray caption rather than a divider between days. */
 .chat-day {
   width: max-content;
   margin: 0 auto 16px;
-  color: #8590a3;
-  font-size: 11px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--gray-600);
+  font-size: 12px;
   font-weight: 700;
 }
 .chat-message {
@@ -807,9 +820,11 @@
   gap: 7px;
   animation: chat-arrive 0.2s ease-out;
 }
+/* 20% inset rather than a fixed 44px, so the bubble caps at the design's 80%
+   whatever the frame width. */
 .chat-message.user {
   justify-content: flex-end;
-  padding-left: 44px;
+  padding-left: 20%;
 }
 .chat-message.assistant {
   padding-right: 0;
@@ -825,12 +840,13 @@
 .message-bubble {
   width: fit-content;
   max-width: 100%;
-  padding: 9px 12px;
-  border-radius: 16px 16px 5px 16px;
+  padding: 13px 15px;
+  border-radius: 18px 18px 6px 18px;
   color: #fff;
   background: var(--blue);
-  font-size: 14px;
-  line-height: 1.48;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.5;
 }
 .user .message-content {
   flex: 0 1 auto;
@@ -1536,4 +1552,31 @@
   .agent-chat-screen [class*="payment-ring"] {
     animation: none;
   }
+}
+
+/* A business chat is a question and an answer, so the answer gets a bubble —
+   the tail on the opposite corner from the citizen's is what makes the pair
+   read as a turn. Registration keeps bare prose: there, the agent is narrating
+   a form it is filling in, not replying, and a bubble around a table or a
+   ten-item list is a box around a document. */
+.management-chat .assistant-prose {
+  width: fit-content;
+  max-width: 100%;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-radius: 18px 18px 18px 6px;
+  background: var(--surface);
+  font-size: 15px;
+  line-height: 1.55;
+}
+.chat-answer-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.chat-answer-source svg {
+  width: 13px;
+  color: var(--success);
 }

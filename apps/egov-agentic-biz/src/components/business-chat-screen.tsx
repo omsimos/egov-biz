@@ -1526,7 +1526,12 @@ function PaymentIsland({
         </span>
         <span className="flex flex-none flex-col items-end gap-0.5">
           <strong className="text-base tabular-nums -tracking-[.3px]">{amount}</strong>
-          <span className={cn("text-xs font-extrabold", paid ? "text-[var(--overlay-success)]" : "text-gray-500")}>
+          <span
+            className={cn(
+              "text-xs font-extrabold",
+              paid ? "text-[var(--overlay-success)]" : "text-gray-500",
+            )}
+          >
             {paid ? "Paid" : "Processing"}
           </span>
         </span>
@@ -1974,7 +1979,7 @@ export function BusinessChatScreen({
   const lastQuestion = questionIndex === questionCount - 1;
 
   return (
-    <div className="screen agent-chat-screen">
+    <div className={cn("screen agent-chat-screen", management && "management-chat")}>
       <StatusBar />
       <PaymentIsland
         amount={paymentRequest?.feeLabel ?? latestDtiForm?.feeLabel ?? ""}
@@ -2180,9 +2185,20 @@ export function BusinessChatScreen({
                       <Markdown>{text}</Markdown>
                     </div>
                   ) : (
-                    <div className="assistant-prose">
-                      <Markdown streaming={streaming}>{text}</Markdown>
-                    </div>
+                    <>
+                      <div className="assistant-prose">
+                        <Markdown streaming={streaming}>{text}</Markdown>
+                      </div>
+                      {/* Under the answer, not in the composer: it is a claim
+                          about where this reply came from, and the composer's
+                          copy of it was a claim about nothing yet written. */}
+                      {management && !streaming && (
+                        <span className="chat-answer-source">
+                          <ShieldCheck weight="fill" />
+                          Answered from this business’s saved records
+                        </span>
+                      )}
+                    </>
                   ))}
                 {message.parts.map((part, index) =>
                   isToolUIPart(part) ? (
