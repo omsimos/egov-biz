@@ -25,6 +25,8 @@ export type BnrsBusinessAddressInput = {
   postalCode: string;
 };
 
+export type BnrsBusinessAddressDetails = Omit<BnrsBusinessAddressInput, "source">;
+
 export type BnrsDescriptor = {
   id: string;
   label: string;
@@ -128,6 +130,7 @@ export type BnrsCertificate = {
   ownerName: string;
   descriptor: string;
   territorialScope: BnrsBusinessScopeId;
+  businessAddress: BnrsBusinessAddressDetails;
   issuedAt: string;
   validUntil: string;
   status: "REGISTERED";
@@ -164,10 +167,10 @@ export type BnrsRegistrationSummary = {
   issuedAt: string;
 };
 
-export type BnrsRegistrationResult = BnrsRegistrationSummary & {
-  ownerDisplayName: string;
-  totalPaid: number;
-  certificate: BnrsCertificate;
+export type BnrsPaymentRegistrationReceipt = {
+  referenceCode: string;
+  certificateNumber: string;
+  issuedAt: string;
 };
 
 export type BnrsRegisteredBusiness = BnrsRegistrationSummary & {
@@ -177,5 +180,5 @@ export type BnrsRegisteredBusiness = BnrsRegistrationSummary & {
 
 export type BnrsPaymentSyncResult = {
   status: BnrsApplicationStatus;
-  registration: BnrsRegistrationResult | null;
+  registration: BnrsPaymentRegistrationReceipt | null;
 };

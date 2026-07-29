@@ -202,26 +202,13 @@ describe("BNRS hosted payments", () => {
     expect(completed.status.state).toBe("COMPLETED");
     expect(completed.registration).toEqual({
       referenceCode: "BNRS-20260729-BBBBBBBB",
-      businessName: "Molar Bear Dental Clinic",
-      descriptor: "DENTAL CLINIC",
-      scope: "NATIONAL",
-      ownerDisplayName: "Genrev Eledia Zapa",
+      certificateNumber: "BNN-20260729-CCCCCCCC",
       issuedAt: NOW.toISOString(),
-      totalPaid: 2_030,
-      certificate: {
-        certificateNumber: "BNN-20260729-CCCCCCCC",
-        issuingAgency: "DTI-BNRS",
-        businessName: "Molar Bear Dental Clinic",
-        ownerName: "Genrev Eledia Zapa",
-        descriptor: "DENTAL CLINIC",
-        territorialScope: "NATIONAL",
-        issuedAt: NOW.toISOString(),
-        validUntil: "2031-07-29T08:30:00.000Z",
-        status: "REGISTERED",
-      },
     });
+    expect(JSON.stringify(completed)).not.toContain("Acacia");
+    expect(JSON.stringify(completed)).not.toContain("Genrev");
     expect(retried.registration?.referenceCode).toBe(completed.registration?.referenceCode);
-    expect(retried.registration?.certificate).toEqual(completed.registration?.certificate);
+    expect(retried.registration?.certificateNumber).toBe(completed.registration?.certificateNumber);
     expect(context.repository.applications.get(applicationId)).toMatchObject({
       certificateNumber: "BNN-20260729-CCCCCCCC",
       validUntil: new Date("2031-07-29T08:30:00.000Z"),
@@ -248,8 +235,8 @@ describe("BNRS hosted payments", () => {
       context.service.syncPaymentStatus({ transactionUuid: checkout.transactionUuid }),
     ]);
 
-    expect(first.registration?.certificate).toEqual(second.registration?.certificate);
-    expect(first.registration?.certificate.certificateNumber).toBe(
+    expect(first.registration).toEqual(second.registration);
+    expect(first.registration?.certificateNumber).toBe(
       context.repository.applications.get(applicationId)?.certificateNumber,
     );
   });

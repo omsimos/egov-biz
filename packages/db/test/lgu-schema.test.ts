@@ -36,6 +36,13 @@ describe("LGU schema", () => {
     expect(config.columns.find(({ name }) => name === "latest_payment_id")).toBeDefined();
     expect(config.columns.find(({ name }) => name === "certificate_number")).toBeDefined();
     expect(config.columns.find(({ name }) => name === "normalized_city")).toBeDefined();
+    expect(config.columns.find(({ name }) => name === "business_address_line_1")?.notNull).toBe(
+      false,
+    );
+    expect(config.columns.find(({ name }) => name === "business_barangay")?.notNull).toBe(false);
+    expect(config.columns.find(({ name }) => name === "business_province")?.notNull).toBe(false);
+    expect(config.columns.find(({ name }) => name === "business_region")?.notNull).toBe(false);
+    expect(config.columns.find(({ name }) => name === "business_postal_code")?.notNull).toBe(false);
     expect(config.checks).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "lgu_certificate_dates_valid" }),

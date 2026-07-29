@@ -20,6 +20,15 @@ const certificate: LguBusinessRegistrationCredentialInput = {
   issuedAt: "2026-07-28T08:30:00.000Z",
   validUntil: "2031-07-28T08:30:00.000Z",
   status: "REGISTERED",
+  businessAddress: {
+    addressLine1: "12 Acacia Street",
+    addressLine2: "Unit 4",
+    barangay: "Poblacion",
+    cityMunicipality: "Makati City",
+    province: "Metro Manila",
+    region: "National Capital Region",
+    postalCode: "1210",
+  },
 };
 
 function setup() {
@@ -41,14 +50,13 @@ async function expectLguError(action: () => Promise<unknown>, code: LguError["co
 }
 
 describe("LGU application workflow", () => {
-  test("starts payment-ready from trusted applicant, certificate, and free-text city", async () => {
+  test("starts payment-ready from the certificate's structured business address", async () => {
     const { actor, applicant, repository, service } = setup();
 
     const status = await service.startOrResumeApplication({
       actor,
       applicant,
       certificate,
-      city: "  Makati   City ",
     });
 
     expect(status).toMatchObject({
@@ -58,6 +66,7 @@ describe("LGU application workflow", () => {
       certificate: {
         certificateNumber: "BN-2026-00001234",
         businessName: "Molar Bear Dental Clinic",
+        businessAddress: certificate.businessAddress,
       },
       payment: null,
       issuedDocuments: null,
@@ -76,13 +85,11 @@ describe("LGU application workflow", () => {
       actor,
       applicant,
       certificate,
-      city: "Makati City",
     });
     const resumed = await service.startOrResumeApplication({
       actor,
       applicant,
       certificate,
-      city: "makati city",
     });
 
     expect(resumed.applicationId).toBe(first.applicationId);
@@ -92,7 +99,18 @@ describe("LGU application workflow", () => {
           actor,
           applicant,
           certificate: { ...certificate, businessName: "Changed Business" },
-          city: "Makati City",
+        }),
+      "APPLICATION_CONFLICT",
+    );
+    await expectLguError(
+      () =>
+        service.startOrResumeApplication({
+          actor,
+          applicant,
+          certificate: {
+            ...certificate,
+            businessAddress: { ...certificate.businessAddress, addressLine1: "88 Narra Avenue" },
+          },
         }),
       "APPLICATION_CONFLICT",
     );
@@ -104,13 +122,19 @@ describe("LGU application workflow", () => {
       actor,
       applicant,
       certificate,
-      city: "Makati City",
     });
     const pasig = await service.startOrResumeApplication({
       actor,
       applicant,
-      certificate,
-      city: "Pasig City",
+      certificate: {
+        ...certificate,
+        businessAddress: {
+          ...certificate.businessAddress,
+          barangay: "San Antonio",
+          cityMunicipality: "Pasig City",
+          postalCode: "1605",
+        },
+      },
     });
 
     expect(pasig.applicationId).not.toBe(makati.applicationId);
@@ -125,7 +149,18 @@ describe("LGU application workflow", () => {
           actor,
           applicant,
           certificate: { ...certificate, issuingAgency: "OTHER" as "DTI-BNRS" },
-          city: "Makati City",
+        }),
+      "INVALID_CERTIFICATE",
+    );
+    await expectLguError(
+      () =>
+        service.startOrResumeApplication({
+          actor,
+          applicant,
+          certificate: {
+            ...certificate,
+            businessAddress: undefined as unknown as typeof certificate.businessAddress,
+          },
         }),
       "INVALID_CERTIFICATE",
     );
@@ -135,7 +170,6 @@ describe("LGU application workflow", () => {
           actor,
           applicant,
           certificate: { ...certificate, validUntil: "2026-07-01T00:00:00.000Z" },
-          city: "Makati City",
         }),
       "INVALID_CERTIFICATE",
     );
@@ -145,9 +179,20 @@ describe("LGU application workflow", () => {
           actor,
           applicant,
           certificate: { ...certificate, ownerName: "Another Owner" },
-          city: "Makati City",
         }),
       "CERTIFICATE_OWNER_MISMATCH",
+    );
+    await expectLguError(
+      () =>
+        service.startOrResumeApplication({
+          actor,
+          applicant,
+          certificate: {
+            ...certificate,
+            businessAddress: { ...certificate.businessAddress, barangay: "" },
+          },
+        }),
+      "INVALID_CERTIFICATE",
     );
   });
 
@@ -157,7 +202,6 @@ describe("LGU application workflow", () => {
       actor,
       applicant,
       certificate,
-      city: "Makati City",
     });
 
     await expectLguError(
@@ -170,13 +214,33 @@ describe("LGU application workflow", () => {
     );
   });
 
+  test("does not present missing legacy address data as a real address", async () => {
+    const { actor, applicant, repository, service } = setup();
+    const application = await service.startOrResumeApplication({
+      actor,
+      applicant,
+      certificate,
+    });
+    Object.assign(repository.applications.get(application.applicationId)!, {
+      businessAddressLine1: null,
+      businessBarangay: null,
+      businessProvince: null,
+      businessRegion: null,
+      businessPostalCode: null,
+    });
+
+    await expectLguError(
+      () => service.getStatus({ actor, applicationId: application.applicationId }),
+      "APPLICATION_CONFLICT",
+    );
+  });
+
   test("abandons an unpaid application and permits a clean replacement", async () => {
     const { actor, applicant, repository, service } = setup();
     const first = await service.startOrResumeApplication({
       actor,
       applicant,
       certificate,
-      city: "Makati City",
     });
     const abandoned = await service.abandonApplication({
       actor,
@@ -186,7 +250,6 @@ describe("LGU application workflow", () => {
       actor,
       applicant,
       certificate,
-      city: "Makati City",
     });
 
     expect(abandoned.state).toBe("ABANDONED");

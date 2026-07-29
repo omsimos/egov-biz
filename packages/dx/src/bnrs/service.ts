@@ -16,6 +16,7 @@ import type {
   BnrsActor,
   BnrsApplicationState,
   BnrsApplicationStatus,
+  BnrsBusinessAddressDetails,
   BnrsBusinessAddressInput,
   BnrsBusinessScope,
   BnrsBusinessScopeId,
@@ -26,9 +27,9 @@ import type {
   BnrsPaymentCheckout,
   BnrsPaymentProvider,
   BnrsPaymentProviderSnapshot,
+  BnrsPaymentRegistrationReceipt,
   BnrsPaymentSyncResult,
   BnrsRegisteredBusiness,
-  BnrsRegistrationResult,
 } from "./types.js";
 
 export interface BnrsServiceOptions {
@@ -166,6 +167,18 @@ function sameBusinessAddress(
     left.region === right.region &&
     left.postalCode === right.postalCode
   );
+}
+
+function certificateBusinessAddress(address: BnrsBusinessAddressInput): BnrsBusinessAddressDetails {
+  return {
+    addressLine1: address.addressLine1,
+    ...(address.addressLine2 === undefined ? {} : { addressLine2: address.addressLine2 }),
+    barangay: address.barangay,
+    cityMunicipality: address.cityMunicipality,
+    province: address.province,
+    region: address.region,
+    postalCode: address.postalCode,
+  };
 }
 
 function descriptorDisplayLabel(label: string): string {
@@ -419,7 +432,11 @@ export function createBnrsService(options: BnrsServiceOptions) {
       !application.validUntil
     )
       return null;
-    const owner = await options.repository.getOwnerInformation(application.id);
+    const [owner, businessAddress] = await Promise.all([
+      options.repository.getOwnerInformation(application.id),
+      options.repository.getBusinessAddress(application.id),
+    ]);
+    if (!businessAddress) return null;
     const ownerName = [owner?.firstName, owner?.middleName, owner?.lastName, owner?.suffix]
       .filter((value): value is string => Boolean(value))
       .join(" ");
@@ -430,36 +447,28 @@ export function createBnrsService(options: BnrsServiceOptions) {
       ownerName,
       descriptor: application.descriptorLabel,
       territorialScope: application.scope,
+      businessAddress: certificateBusinessAddress(businessAddress),
       issuedAt: application.issuedAt.toISOString(),
       validUntil: application.validUntil.toISOString(),
       status: "REGISTERED",
     };
   }
 
-  async function registrationFor(
+  function registrationReceiptFor(
     application: BnrsApplicationRecord,
-    payment: BnrsPaymentRecord,
-  ): Promise<BnrsRegistrationResult | null> {
+  ): BnrsPaymentRegistrationReceipt | null {
     if (
       application.state !== "COMPLETED" ||
       !application.referenceCode ||
+      !application.certificateNumber ||
       !application.issuedAt ||
-      !application.proposedBusinessName ||
-      !application.descriptorLabel ||
-      !application.scope
+      !application.validUntil
     )
       return null;
-    const certificate = await certificateFor(application);
-    if (!certificate) return null;
     return {
       referenceCode: application.referenceCode,
-      businessName: application.proposedBusinessName,
-      descriptor: application.descriptorLabel,
-      scope: application.scope,
-      ownerDisplayName: certificate.ownerName,
+      certificateNumber: application.certificateNumber,
       issuedAt: application.issuedAt.toISOString(),
-      totalPaid: payment.amount,
-      certificate,
     };
   }
 
@@ -475,9 +484,7 @@ export function createBnrsService(options: BnrsServiceOptions) {
       const latestPayment = await options.repository.getLatestPayment(payment.applicationId);
       return {
         status: await statusFor(authoritativeApplication),
-        registration: latestPayment
-          ? await registrationFor(authoritativeApplication, latestPayment)
-          : null,
+        registration: latestPayment ? registrationReceiptFor(authoritativeApplication) : null,
       };
     }
     const transitionNow = now();
@@ -510,7 +517,7 @@ export function createBnrsService(options: BnrsServiceOptions) {
         const latestPayment = await options.repository.getLatestPayment(payment.applicationId);
         return {
           status: await statusFor(refreshed),
-          registration: latestPayment ? await registrationFor(refreshed, latestPayment) : null,
+          registration: latestPayment ? registrationReceiptFor(refreshed) : null,
         };
       }
       return { status: await statusFor(released.application), registration: null };
@@ -538,12 +545,12 @@ export function createBnrsService(options: BnrsServiceOptions) {
       const latestPayment = await options.repository.getLatestPayment(payment.applicationId);
       return {
         status: await statusFor(refreshed),
-        registration: latestPayment ? await registrationFor(refreshed, latestPayment) : null,
+        registration: latestPayment ? registrationReceiptFor(refreshed) : null,
       };
     }
     return {
       status: await statusFor(completed.application),
-      registration: await registrationFor(completed.application, completed.payment),
+      registration: registrationReceiptFor(completed.application),
     };
   }
 

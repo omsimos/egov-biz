@@ -122,6 +122,15 @@ describe("BNRS registration workflow", () => {
       middleName: "Eledia",
       lastName: "Zapa",
     });
+    repository.businessAddresses.set(application.applicationId, {
+      source: "USER_PROVIDED",
+      addressLine1: "12 Acacia Street",
+      barangay: "Poblacion",
+      cityMunicipality: "Makati City",
+      province: "Metro Manila",
+      region: "National Capital Region",
+      postalCode: "1210",
+    });
 
     await expect(
       service.getCertificate({ actor, certificateNumber: "BNN-20260729-BBBBBBBB" }),
@@ -132,6 +141,14 @@ describe("BNRS registration workflow", () => {
       ownerName: "Genrev Eledia Zapa",
       descriptor: "DENTAL CLINIC",
       territorialScope: "NATIONAL",
+      businessAddress: {
+        addressLine1: "12 Acacia Street",
+        barangay: "Poblacion",
+        cityMunicipality: "Makati City",
+        province: "Metro Manila",
+        region: "National Capital Region",
+        postalCode: "1210",
+      },
       issuedAt: "2026-07-29T08:30:00.000Z",
       validUntil: "2031-07-29T08:30:00.000Z",
       status: "REGISTERED",
