@@ -8,7 +8,6 @@ import {
   isToolUIPart,
   stepCountIs,
   streamText,
-  toUIMessageStream,
   tool,
   type UIMessage,
   type UIMessageStreamWriter,
@@ -48,6 +47,22 @@ import {
   profileAddressPreference,
   resolveBusinessFormAddress,
 } from "@/lib/form-prefill";
+import {
+  extractExplicitSmsMessage,
+  hasTaxObligationReference,
+  isExplicitSmsSendRequest,
+  isTaxPaymentReminderRetryRequest,
+  isTaxPaymentReminderSimulationRequest,
+  normalizeSmsNumber,
+  resolveSmsRecipient,
+  selectTaxReminderObligation,
+  sendSmsMessage,
+  sendSmsMessageInputSchema,
+  simulateTaxPaymentReminder,
+  simulateTaxPaymentReminderInputSchema,
+  smsNumberMention,
+  type SimulateTaxPaymentReminderInput,
+} from "@/lib/emessage";
 import type { BusinessPlan, IntakeAnswer, IntakeQuestion } from "@/lib/questions";
 import { isValidChoiceAnswer } from "@/lib/intake-validation";
 import {
@@ -70,6 +85,12 @@ import {
 } from "@/server/payments";
 import { getResumableContext } from "@/server/resumable";
 import { getRegisteredBusiness, upsertRegisteredBusiness } from "@/server/registered-businesses";
+import {
+  dispatchSmsOnce,
+  SmsDispatchRateLimitError,
+  SmsDispatchUncertainError,
+  type SmsDispatchKey,
+} from "@/server/sms-dispatches";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -335,17 +356,38 @@ function questionsForIncompleteDtiForm(
   return questions;
 }
 
-function latestUserText(messages: UIMessage[]) {
-  for (const message of [...messages].reverse()) {
+function latestUserMessage(messages: UIMessage[]) {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index]!;
     if (message.role !== "user") continue;
     const text = message.parts
       .filter((part) => part.type === "text")
       .map((part) => part.text)
       .join("\n")
       .trim();
-    if (text) return text;
+    if (text) return { index, message, text };
   }
-  return "";
+  return null;
+}
+
+function immediatelyFailedTaxReminderInput(
+  messages: BusinessChatMessage[],
+): SimulateTaxPaymentReminderInput | null {
+  const latest = latestUserMessage(messages);
+  if (!latest || latest.index === 0) return null;
+  const previous = messages[latest.index - 1];
+  if (previous?.role !== "assistant") return null;
+  for (const part of [...previous.parts].reverse()) {
+    if (
+      !isToolUIPart(part) ||
+      part.type !== "tool-simulate_tax_payment_reminder" ||
+      part.state !== "output-error"
+    )
+      continue;
+    const parsed = simulateTaxPaymentReminderInputSchema.safeParse(part.input);
+    if (parsed.success) return parsed.data;
+  }
+  return null;
 }
 
 function planAfterBarangayClearance(plan: RegistrationPlan): RegistrationPlan {
@@ -536,8 +578,11 @@ async function managementResponse(
   conversationId: string,
   business: RegisteredBusiness,
   messages: BusinessChatMessage[],
+  profileId: string,
+  profileMobile: string,
 ) {
-  const latestPrompt = latestUserText(messages);
+  const latestUser = latestUserMessage(messages);
+  const latestPrompt = latestUser?.text ?? "";
   if (!process.env.AI_GATEWAY_API_KEY)
     return manualResponse(
       conversationId,
@@ -558,38 +603,59 @@ async function managementResponse(
   const model = createGateway({ apiKey: process.env.AI_GATEWAY_API_KEY }).chat(
     process.env.CHAT_MODEL ?? "google/gemini-2.5-flash-lite",
   );
+  const obligation = business.taxObligations[0];
+  const tools = emessageTools({
+    profileMobile,
+    latestPrompt,
+    allowTaxReminderRetry: Boolean(immediatelyFailedTaxReminderInput(messages)),
+    dispatchKey: {
+      actorId: profileId,
+      conversationId,
+      userMessageId: latestUser?.message.id ?? conversationId,
+    },
+    reminderDefaults: {
+      businessName: business.name,
+      ...(obligation?.title ? { taxTitle: obligation.title } : {}),
+      ...(obligation?.formCode ? { formCode: obligation.formCode } : {}),
+      ...(obligation?.dueDate ? { dueDate: obligation.dueDate } : {}),
+    },
+  });
   const responseMessageId = crypto.randomUUID();
   const result = streamText({
     model,
+    tools,
+    activeTools: ["send_sms_message", "simulate_tax_payment_reminder"],
+    stopWhen: stepCountIs(3),
     system: `You are the post-registration business assistant for one Filipino business. Answer concisely and warmly using the saved business record below. Help with the tax calendar, saved files, registrations, permits, renewals, employer obligations, and remaining operational compliance.
 
 Treat the record as the only source of truth about this business. Never start or continue a new-business registration workflow. Never invent a filing, status, deadline, reference number, document, or completed government action. Say clearly when the record does not contain an answer. All records are demo data: distinguish what the saved record shows from what the citizen must confirm with BIR, the LGU, BFP, or another responsible agency. Prefer short paragraphs and lists; use a table only when comparing three or more records.
 
+Use send_sms_message only when the citizen explicitly asks to send an SMS. Pass a recipient number only when the citizen supplied one in chat; otherwise omit it so the authenticated eGov SSO number is used. Use simulate_tax_payment_reminder only when the citizen explicitly asks to simulate sending a tax payment reminder. Never send a reminder for an ordinary question about tax dates or obligations.
+
 Saved business record:
 ${JSON.stringify(businessManagementContext(business))}`,
     messages: await convertToModelMessages(messages, {
+      tools,
       ignoreIncompleteToolCalls: true,
     }),
     timeout: { totalMs: 110_000 },
-    onEnd: async ({ text }) => {
-      await saveMessages(conversationId, [
-        ...messages,
-        {
-          id: responseMessageId,
-          role: "assistant",
-          parts: [{ type: "text", text }],
-        },
-      ]);
-      await setActiveStream(conversationId, null);
-    },
   });
-  // Keep generating and saving even if the user navigates back while the
-  // response is streaming. Management chat persistence must not depend on
-  // the optional Redis-backed resumable stream service.
-  result.consumeStream();
+  // Consume an independent UI stream so tool parts and text are persisted even
+  // if the user navigates away from the client-facing stream.
+  void result
+    .toUIMessageStream<BusinessChatMessage>({
+      originalMessages: messages,
+      generateMessageId: () => responseMessageId,
+      sendReasoning: false,
+      onEnd: async ({ messages: completeMessages }) => {
+        await saveMessages(conversationId, completeMessages);
+        await setActiveStream(conversationId, null);
+      },
+    })
+    .pipeTo(new WritableStream())
+    .catch((error) => console.error("Business management response persistence failed", error));
   return createUIMessageStreamResponse({
-    stream: toUIMessageStream({
-      stream: result.stream,
+    stream: result.toUIMessageStream<BusinessChatMessage>({
       originalMessages: messages,
       generateMessageId: () => responseMessageId,
       sendReasoning: false,
@@ -1015,6 +1081,85 @@ async function searchOfficialWeb(query: string, numResults = 5) {
   }
 }
 
+type EMessageToolsOptions = {
+  allowTaxReminderRetry: boolean;
+  dispatchKey: Omit<SmsDispatchKey, "recipient" | "toolName">;
+  latestPrompt: string;
+  profileMobile: string;
+  reminderDefaults?: Omit<SimulateTaxPaymentReminderInput, "number">;
+};
+
+function authorizedSmsNumber(inputNumber: string | undefined, latestPrompt: string) {
+  const mention = smsNumberMention(latestPrompt);
+  if (mention.kind === "ambiguous")
+    throw new Error("Provide exactly one recipient mobile number in the latest user message");
+  if (mention.kind === "invalid") throw new Error("The mobile number supplied in chat is invalid");
+  if (!inputNumber) return mention.kind === "valid" ? mention.number : undefined;
+  if (mention.kind !== "valid")
+    throw new Error("A tool-provided mobile number must be present in the latest user message");
+  if (normalizeSmsNumber(inputNumber) !== mention.number)
+    throw new Error("The tool recipient does not match the mobile number supplied in chat");
+  return mention.number;
+}
+
+function emessageTools({
+  allowTaxReminderRetry,
+  dispatchKey,
+  latestPrompt,
+  profileMobile,
+  reminderDefaults,
+}: EMessageToolsOptions) {
+  return {
+    send_sms_message: tool({
+      description:
+        "Send an SMS through eMessage only when the citizen explicitly asks to send a message. Provide number only when the citizen supplied one in chat; otherwise omit it to use their authenticated eGov SSO mobile number.",
+      inputSchema: sendSmsMessageInputSchema,
+      execute: (input, { abortSignal }) => {
+        if (!isExplicitSmsSendRequest(latestPrompt))
+          throw new Error("The latest user message does not authorize sending an SMS");
+        const number = authorizedSmsNumber(input.number, latestPrompt);
+        const recipient = resolveSmsRecipient(number, profileMobile);
+        return dispatchSmsOnce({ ...dispatchKey, recipient, toolName: "send_sms_message" }, () =>
+          sendSmsMessage({ message: input.message, ...(number ? { number } : {}) }, profileMobile, {
+            signal: abortSignal,
+          }),
+        );
+      },
+      toModelOutput: ({ output }) => ({ type: "json", value: output }),
+    }),
+    simulate_tax_payment_reminder: tool({
+      description:
+        "Simulate a tax payment reminder by sending a clearly labeled SMS through eMessage. Invoke only when the citizen's latest message explicitly asks to simulate the tax payment reminder. Omit number to use the authenticated eGov SSO mobile number.",
+      inputSchema: simulateTaxPaymentReminderInputSchema,
+      execute: (input, { abortSignal }) => {
+        const authorized =
+          isTaxPaymentReminderSimulationRequest(latestPrompt) ||
+          (allowTaxReminderRetry && isTaxPaymentReminderRetryRequest(latestPrompt));
+        if (!authorized)
+          throw new Error(
+            "The latest user message does not authorize a simulated tax payment reminder",
+          );
+        const number = authorizedSmsNumber(input.number, latestPrompt);
+        const recipient = resolveSmsRecipient(number, profileMobile);
+        return dispatchSmsOnce(
+          { ...dispatchKey, recipient, toolName: "simulate_tax_payment_reminder" },
+          () =>
+            simulateTaxPaymentReminder(
+              {
+                ...reminderDefaults,
+                ...input,
+                ...(number ? { number } : { number: undefined }),
+              },
+              profileMobile,
+              { signal: abortSignal },
+            ),
+        );
+      },
+      toModelOutput: ({ output }) => ({ type: "json", value: output }),
+    }),
+  };
+}
+
 function agentTools(
   request: Request,
   prompt: string,
@@ -1022,12 +1167,21 @@ function agentTools(
   rawProfile: EgovSsoCitizenProfile,
   userInfo: UserInfoOutput,
   hasUserInfo: boolean,
+  latestPrompt: string,
+  allowTaxReminderRetry: boolean,
+  dispatchKey: Omit<SmsDispatchKey, "recipient" | "toolName">,
   businessCity: string,
   usesProfileAddress: boolean,
   confirmedBusinessAddress: string,
 ) {
   let userInfoReady = hasUserInfo;
   return {
+    ...emessageTools({
+      profileMobile: profile.mobile,
+      latestPrompt,
+      allowTaxReminderRetry,
+      dispatchKey,
+    }),
     user_info: tool({
       description:
         "Report which verified eGov SSO fields are available for server-side form prefilling. Values remain private and are applied by form tools. Call this before preparing a form.",
@@ -1155,15 +1309,291 @@ export async function POST(request: Request) {
   const messages = uniqueMessagesById(parsed.data.messages as BusinessChatMessage[]);
   await saveMessages(conversation.id, messages);
   await setActiveStream(conversation.id, null);
-  if (managementBusiness) return managementResponse(conversation.id, managementBusiness, messages);
   const profile = session.profile;
+  const latestUser = latestUserMessage(messages);
+  const latestPrompt = latestUser?.text || parsed.data.initialPrompt;
+  const failedReminderInput = immediatelyFailedTaxReminderInput(messages);
+  const allowTaxReminderRetry = Boolean(failedReminderInput);
+  const isTaxReminderRetry =
+    allowTaxReminderRetry && isTaxPaymentReminderRetryRequest(latestPrompt);
+  const shouldSendTaxReminder =
+    isTaxPaymentReminderSimulationRequest(latestPrompt) || isTaxReminderRetry;
+  if (!parsed.data.event && shouldSendTaxReminder) {
+    const mention = smsNumberMention(latestPrompt);
+    if (mention.kind === "ambiguous")
+      return manualResponse(
+        conversation.id,
+        messages,
+        (writer) => {
+          const textId = crypto.randomUUID();
+          writer.write({ type: "text-start", id: textId });
+          writer.write({
+            type: "text-delta",
+            id: textId,
+            delta:
+              "I found more than one recipient number in that message, so I didn’t send anything. Please send a new message with exactly one mobile number.",
+          });
+          writer.write({ type: "text-end", id: textId });
+        },
+        { resumable: false },
+      );
+
+    let reminderDefaults: Omit<SimulateTaxPaymentReminderInput, "number"> = {};
+    const retryChangesObligation = isTaxReminderRetry && hasTaxObligationReference(latestPrompt);
+    if (isTaxReminderRetry && failedReminderInput && !retryChangesObligation) {
+      const { number: _failedNumber, ...previousReminder } = failedReminderInput;
+      reminderDefaults = previousReminder;
+    } else if (managementBusiness) {
+      const selection = selectTaxReminderObligation(
+        managementBusiness.taxObligations,
+        latestPrompt,
+      );
+      if (selection.kind === "ambiguous" || selection.kind === "not-found")
+        return manualResponse(
+          conversation.id,
+          messages,
+          (writer) => {
+            const textId = crypto.randomUUID();
+            writer.write({ type: "text-start", id: textId });
+            writer.write({
+              type: "text-delta",
+              id: textId,
+              delta:
+                selection.kind === "not-found"
+                  ? `I couldn’t find **${selection.reference}** in this business’s saved tax calendar, so I didn’t send a reminder.`
+                  : "That message matches more than one saved tax obligation, so I didn’t send a reminder. Please name one BIR form.",
+            });
+            writer.write({ type: "text-end", id: textId });
+          },
+          { resumable: false },
+        );
+      const obligation = selection.kind === "selected" ? selection.obligation : undefined;
+      reminderDefaults = {
+        businessName: managementBusiness.name,
+        ...(obligation?.title ? { taxTitle: obligation.title } : {}),
+        ...(obligation?.formCode ? { formCode: obligation.formCode } : {}),
+        ...(obligation?.dueDate ? { dueDate: obligation.dueDate } : {}),
+      };
+    } else if (retryChangesObligation) {
+      return manualResponse(
+        conversation.id,
+        messages,
+        (writer) => {
+          const textId = crypto.randomUUID();
+          writer.write({ type: "text-start", id: textId });
+          writer.write({
+            type: "text-delta",
+            id: textId,
+            delta:
+              "I couldn’t match that changed tax obligation to a saved business tax calendar, so I didn’t send a reminder.",
+          });
+          writer.write({ type: "text-end", id: textId });
+        },
+        { resumable: false },
+      );
+    }
+
+    const suppliedNumber =
+      mention.kind === "valid" ? mention.number : mention.kind === "invalid" ? mention.value : null;
+    const reminderInput: SimulateTaxPaymentReminderInput = {
+      ...reminderDefaults,
+      ...(suppliedNumber ? { number: suppliedNumber } : {}),
+    };
+
+    return manualResponse(conversation.id, messages, async (writer) => {
+      const toolCallId = crypto.randomUUID();
+      writer.write({
+        type: "tool-input-available",
+        toolCallId,
+        toolName: "simulate_tax_payment_reminder",
+        input: reminderInput,
+      });
+
+      try {
+        const recipient = resolveSmsRecipient(reminderInput.number, profile.mobile);
+        const output = await dispatchSmsOnce(
+          {
+            actorId: profile.id,
+            conversationId: conversation.id,
+            recipient,
+            toolName: "simulate_tax_payment_reminder",
+            userMessageId: latestUser?.message.id ?? conversation.id,
+          },
+          () =>
+            simulateTaxPaymentReminder(reminderInput, profile.mobile, {
+              signal: request.signal,
+            }),
+        );
+        writer.write({
+          type: "tool-output-available",
+          toolCallId,
+          output,
+        });
+        const textId = crypto.randomUUID();
+        writer.write({ type: "text-start", id: textId });
+        writer.write({
+          type: "text-delta",
+          id: textId,
+          delta: `The simulated tax payment reminder was accepted by eMessage for **${output.recipient}**. This confirms provider acceptance, not delivery to the handset.`,
+        });
+        writer.write({ type: "text-end", id: textId });
+      } catch (error) {
+        console.warn("Simulated tax reminder failed", {
+          name: error instanceof Error ? error.name : "UnknownError",
+        });
+        writer.write({
+          type: "tool-output-error",
+          toolCallId,
+          errorText: "The simulated tax reminder could not be sent.",
+        } as never);
+        const textId = crypto.randomUUID();
+        writer.write({ type: "text-start", id: textId });
+        writer.write({
+          type: "text-delta",
+          id: textId,
+          delta:
+            error instanceof SmsDispatchUncertainError
+              ? "A prior reminder attempt may already have been accepted by eMessage, so I did not retry it. Check the handset or start a clearly new reminder request."
+              : error instanceof SmsDispatchRateLimitError
+                ? "The SMS sending limit has been reached, so I didn’t send the reminder. Please try again later."
+                : "I couldn’t send the simulated tax payment reminder through eMessage. Check the verified recipient and eMessage server configuration, then try again.",
+        });
+        writer.write({ type: "text-end", id: textId });
+      }
+    });
+  }
+  const shouldSendSms = !shouldSendTaxReminder && isExplicitSmsSendRequest(latestPrompt);
+  if (!parsed.data.event && shouldSendSms) {
+    const message = extractExplicitSmsMessage(latestPrompt);
+    if (!message)
+      return manualResponse(
+        conversation.id,
+        messages,
+        (writer) => {
+          const textId = crypto.randomUUID();
+          writer.write({ type: "text-start", id: textId });
+          writer.write({
+            type: "text-delta",
+            id: textId,
+            delta:
+              'I didn’t send anything because the exact SMS body wasn’t clear. Please put the message in quotes, for example: `Send an SMS that says "Your filing is ready"`.',
+          });
+          writer.write({ type: "text-end", id: textId });
+        },
+        { resumable: false },
+      );
+
+    const mention = smsNumberMention(latestPrompt);
+    if (mention.kind === "ambiguous")
+      return manualResponse(
+        conversation.id,
+        messages,
+        (writer) => {
+          const textId = crypto.randomUUID();
+          writer.write({ type: "text-start", id: textId });
+          writer.write({
+            type: "text-delta",
+            id: textId,
+            delta:
+              "I found more than one recipient number in that message, so I didn’t send anything. Please send a new message with exactly one recipient number.",
+          });
+          writer.write({ type: "text-end", id: textId });
+        },
+        { resumable: false },
+      );
+
+    const suppliedNumber =
+      mention.kind === "valid" ? mention.number : mention.kind === "invalid" ? mention.value : null;
+    const parsedSmsInput = sendSmsMessageInputSchema.safeParse({
+      message,
+      ...(suppliedNumber ? { number: suppliedNumber } : {}),
+    });
+    if (!parsedSmsInput.success)
+      return manualResponse(
+        conversation.id,
+        messages,
+        (writer) => {
+          const textId = crypto.randomUUID();
+          writer.write({ type: "text-start", id: textId });
+          writer.write({
+            type: "text-delta",
+            id: textId,
+            delta:
+              "I didn’t send anything because the SMS body or recipient is invalid. Keep the quoted message between 1 and 480 characters.",
+          });
+          writer.write({ type: "text-end", id: textId });
+        },
+        { resumable: false },
+      );
+    const smsInput = parsedSmsInput.data;
+    return manualResponse(conversation.id, messages, async (writer) => {
+      const toolCallId = crypto.randomUUID();
+      writer.write({
+        type: "tool-input-available",
+        toolCallId,
+        toolName: "send_sms_message",
+        input: smsInput,
+      });
+      try {
+        const recipient = resolveSmsRecipient(smsInput.number, profile.mobile);
+        const output = await dispatchSmsOnce(
+          {
+            actorId: profile.id,
+            conversationId: conversation.id,
+            recipient,
+            toolName: "send_sms_message",
+            userMessageId: latestUser?.message.id ?? conversation.id,
+          },
+          () => sendSmsMessage(smsInput, profile.mobile, { signal: request.signal }),
+        );
+        writer.write({ type: "tool-output-available", toolCallId, output });
+        const textId = crypto.randomUUID();
+        writer.write({ type: "text-start", id: textId });
+        writer.write({
+          type: "text-delta",
+          id: textId,
+          delta: `The SMS was accepted by eMessage for **${output.recipient}**. This confirms provider acceptance, not delivery to the handset.`,
+        });
+        writer.write({ type: "text-end", id: textId });
+      } catch (error) {
+        console.warn("SMS send failed", {
+          name: error instanceof Error ? error.name : "UnknownError",
+        });
+        writer.write({
+          type: "tool-output-error",
+          toolCallId,
+          errorText: "The SMS could not be sent.",
+        } as never);
+        const textId = crypto.randomUUID();
+        writer.write({ type: "text-start", id: textId });
+        writer.write({
+          type: "text-delta",
+          id: textId,
+          delta:
+            error instanceof SmsDispatchUncertainError
+              ? "A prior SMS attempt may already have been accepted by eMessage, so I did not retry it. Check the handset before starting a clearly new request."
+              : error instanceof SmsDispatchRateLimitError
+                ? "The SMS sending limit has been reached, so I didn’t send the message. Please try again later."
+                : "I couldn’t send the SMS through eMessage. Check the verified recipient and eMessage server configuration, then try again.",
+        });
+        writer.write({ type: "text-end", id: textId });
+      }
+    });
+  }
+  if (managementBusiness)
+    return managementResponse(
+      conversation.id,
+      managementBusiness,
+      messages,
+      profile.id,
+      profile.mobile,
+    );
   const userInfoOutput: UserInfoOutput = {
     availableFields: availableUserInfoFields(profile),
     source: "eGov SSO",
   };
   const conversationText = userText(messages).trim();
   const prompt = conversationText || parsed.data.initialPrompt;
-  const latestPrompt = latestUserText(messages) || parsed.data.initialPrompt;
   const answers = toolAnswers(messages);
   const invalidAnswers = invalidIntakeAnswerIds(messages);
   const birFormConsent = answers.find(
@@ -1197,6 +1627,13 @@ export async function POST(request: Request) {
     session.rawProfile,
     userInfoOutput,
     hasUserInfo,
+    latestPrompt,
+    allowTaxReminderRetry,
+    {
+      actorId: profile.id,
+      conversationId: conversation.id,
+      userMessageId: latestUser?.message.id ?? conversation.id,
+    },
     initialLocation.city,
     preference === "profile",
     confirmedBusinessAddress,
@@ -2043,6 +2480,8 @@ export async function POST(request: Request) {
     activeTools: [
       "user_info",
       "generate_bir_form",
+      "send_sms_message",
+      "simulate_tax_payment_reminder",
       "askUser",
       "webSearch",
       "editDtiBusinessNameForm",
@@ -2060,6 +2499,10 @@ Use updatePlan whenever registration progress changes. Keep the comprehensive 8�
 The user_info tool reports which authenticated eGov SSO fields are available for server-side form prefilling; it never returns their values to the model. It is ${hasUserInfo ? "already loaded in this conversation" : "not loaded yet"}. Call it before a government form tool when it has not already completed.
 
 generate_bir_form creates a BIR PDF artifact from a discriminated input. Use type "1901" with Form 1901 data or type "1905" with Form 1905 data; every data field is optional and omitted identity values may be prefilled from the authenticated profile. Invoke it only when the citizen's latest message explicitly asks to generate, create, prepare, fill, or prefill that BIR form. Never invoke it proactively, for informational questions, or merely because BIR registration is part of the plan. Call user_info in an earlier tool step first when needed.
+
+send_sms_message sends an SMS through eMessage. Invoke it only when the citizen's latest message explicitly asks to send an SMS or text message. Pass number only when the citizen supplied a recipient number in chat; otherwise omit number so the server uses the authenticated eGov SSO mobile number. Provider acceptance does not prove handset delivery.
+
+simulate_tax_payment_reminder sends a clearly labeled simulated tax reminder through eMessage. Invoke it only when the citizen's latest message explicitly asks to simulate the tax payment reminder. Never invoke it for an ordinary question about tax dates, deadlines, filings, or obligations. Use saved business tax details when available; do not invent a tax form or due date.
 
 The resolved business city is ${location.city}. Explicit locations override the profile. Reuse every fact the citizen has already stated and never ask for it again. Do not force registration steps when the latest request is unrelated or exploratory; answer that request directly and only return to the saved plan when the citizen asks. The resolved route is ${JSON.stringify(businessPlan)}.
 

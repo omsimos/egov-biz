@@ -38,9 +38,10 @@ function titleFor(prompt: string, fallback = "New registration plan") {
  */
 export async function deleteConversation(id: string) {
   const database = await getDatabase();
-  const [, , conversation] = await database.batch([
+  const [, , , conversation] = await database.batch([
     database.delete(schema.messages).where(eq(schema.messages.conversationId, id)),
     database.delete(schema.payments).where(eq(schema.payments.conversationId, id)),
+    database.delete(schema.smsDispatches).where(eq(schema.smsDispatches.conversationId, id)),
     database.delete(schema.conversations).where(eq(schema.conversations.id, id)),
   ]);
   return conversation.rowsAffected > 0;

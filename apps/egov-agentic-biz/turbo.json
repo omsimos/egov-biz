@@ -2,7 +2,12 @@
   "extends": ["//"],
   "tasks": {
     "build": {
-      "env": ["EGOVSSO_PARTNER_CODE"],
+      "env": [
+        "EGOVSSO_PARTNER_CODE",
+        "EMESSAGE_BASE_URL",
+        "EMESSAGE_ACCESS_TOKEN",
+        "EMESSAGE_ALLOWED_RECIPIENTS"
+      ],
       "outputs": [".next/**", "!.next/cache/**"]
     }
   }

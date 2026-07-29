@@ -1,5 +1,5 @@
 import { relations, sql } from "drizzle-orm";
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { check, index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import type { UIMessage } from "ai";
 import type { ConversationPurpose, PaymentServiceType } from "@/lib/business-chat";
 import type { RegisteredBusiness } from "@/lib/registered-business";
@@ -78,6 +78,49 @@ export const payments = sqliteTable(
   ],
 );
 
+export const smsDispatches = sqliteTable(
+  "sms_dispatches",
+  {
+    id: text("id").primaryKey(),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    userMessageId: text("user_message_id").notNull(),
+    profileId: text("profile_id"),
+    recipientHash: text("recipient_hash"),
+    toolName: text("tool_name")
+      .$type<"send_sms_message" | "simulate_tax_payment_reminder">()
+      .notNull(),
+    status: text("status").$type<"pending" | "accepted" | "failed">().notNull(),
+    outputJson: text("output_json"),
+    createdAt: isoTimestamp("created_at"),
+    updatedAt: isoTimestamp("updated_at"),
+  },
+  (table) => [
+    index("idx_sms_dispatches_conversation_created").on(table.conversationId, table.createdAt),
+    index("idx_sms_dispatches_profile_created").on(table.profileId, table.createdAt),
+    index("idx_sms_dispatches_recipient_created").on(table.recipientHash, table.createdAt),
+  ],
+);
+
+export const smsQuotaBuckets = sqliteTable(
+  "sms_quota_buckets",
+  {
+    id: text("id").primaryKey(),
+    count: integer("count").notNull(),
+    maxCount: integer("max_count").notNull(),
+    expiresAt: isoTimestamp("expires_at"),
+    createdAt: isoTimestamp("created_at"),
+  },
+  (table) => [
+    check(
+      "sms_quota_count_valid",
+      sql`${table.count} >= 1 AND ${table.count} <= ${table.maxCount}`,
+    ),
+    index("idx_sms_quota_buckets_expires").on(table.expiresAt),
+  ],
+);
+
 export const registeredBusinesses = sqliteTable(
   "registered_businesses",
   {
@@ -123,6 +166,7 @@ export const authSessions = sqliteTable(
 export const conversationsRelations = relations(conversations, ({ many }) => ({
   messages: many(messages),
   payments: many(payments),
+  smsDispatches: many(smsDispatches),
 }));
 
 export const messagesRelations = relations(messages, ({ one }) => ({
@@ -135,6 +179,13 @@ export const messagesRelations = relations(messages, ({ one }) => ({
 export const paymentsRelations = relations(payments, ({ one }) => ({
   conversation: one(conversations, {
     fields: [payments.conversationId],
+    references: [conversations.id],
+  }),
+}));
+
+export const smsDispatchesRelations = relations(smsDispatches, ({ one }) => ({
+  conversation: one(conversations, {
+    fields: [smsDispatches.conversationId],
     references: [conversations.id],
   }),
 }));

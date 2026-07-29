@@ -518,6 +518,60 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.chat-tool-disclosure {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #dfe6f2;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.94);
+}
+.chat-tool-disclosure > summary {
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+  list-style: none;
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.chat-tool-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.chat-tool-disclosure > summary:active {
+  transform: scale(0.98);
+}
+.chat-tool-disclosure[open] > summary span {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.chat-tool-disclosure-caret {
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.chat-tool-disclosure[open] .chat-tool-disclosure-caret {
+  transform: rotate(180deg);
+}
+.chat-tool-disclosure-body {
+  min-width: 0;
+  padding: 9px 11px 11px 41px;
+  border-top: 1px solid #e6ebf4;
+}
+.chat-tool-disclosure-body small {
+  color: #7b879b;
+  font-size: 10px;
+  font-weight: 800;
+}
+.chat-tool-disclosure-body p {
+  min-width: 0;
+  margin: 4px 0 0;
+  color: #33415b;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 .chat-shimmer {
   color: transparent;
   background-image:
