@@ -119,6 +119,17 @@
   overflow: hidden;
 }
 
+/* The ground under every screen past the launcher: lighter where the header
+   sits, settling to --canvas under the content, so a white card has somewhere
+   to sit at the top of the scroller and still separates at the bottom.
+   Two token stops, not the handoff's three literals (#f8faff / #f2f5fc /
+   #eef2fa): its bottom stop is 4 L* points lighter than --canvas, which is the
+   separation the DEPTH block in tokens.css deliberately went the other way on.
+   Compound selector because `.screen` is unlayered too — see the note above. */
+.screen.screen-ground {
+  background: linear-gradient(180deg, var(--gray-50) 0%, var(--canvas) 55%);
+}
+
 /* Linked business record */
 .business-detail-screen {
   background: var(--canvas);

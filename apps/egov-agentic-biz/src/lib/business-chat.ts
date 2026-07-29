@@ -189,7 +189,14 @@ export function isOptionalRegistrationStep(step: Pick<AgentPlanStep, "id" | "opt
 
 // Progress covers required registration checkpoints only. Optional follow-up
 // work stays visible in the plan without preventing its completion state.
-export type PlanProgress = { completed: number; total: number; done: boolean };
+// nextLabel is the step resuming the plan will actually ask for, so a saved
+// plan can say so instead of only counting how far it got.
+export type PlanProgress = {
+  completed: number;
+  total: number;
+  done: boolean;
+  nextLabel: string | null;
+};
 
 export type ConversationPurpose = "registration" | "management";
 
@@ -245,9 +252,17 @@ export function planProgress(plan: RegistrationPlan): PlanProgress {
   const resolved = required.filter(
     (step) => step.status === "completed" || step.status === "skipped",
   ).length;
+  const done = required.length > 0 && resolved === required.length;
+  // in_progress before pending: the agent marks the step it is on, and the
+  // first untouched step is only the answer when it has not marked one yet.
+  const next =
+    required.find((step) => step.status === "in_progress") ??
+    required.find((step) => step.status === "pending") ??
+    null;
   return {
     completed: resolved,
-    done: required.length > 0 && resolved === required.length,
+    done,
+    nextLabel: done ? null : (next?.label ?? null),
     total: required.length,
   };
 }

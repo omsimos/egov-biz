@@ -37,7 +37,11 @@ const previewBusinesses: RegisteredBusiness[] = [
     registrationNumber: "DTI-2026-104382",
     status: "Active",
     finalizedAt: "2026-07-22T00:00:00.000Z",
-    nextTaxDue: null,
+    city: "Makati City",
+    nextTaxDue: "2026-08-10",
+    nextTaxTitle: "Monthly withholding tax return",
+    recordCount: 8,
+    fileCount: 4,
   },
 ];
 
