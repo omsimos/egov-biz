@@ -130,18 +130,15 @@
   background: linear-gradient(180deg, var(--gray-50) 0%, var(--canvas) 55%);
 }
 
-/* Linked business record */
-.business-detail-screen {
-  background: var(--canvas);
-}
-.business-detail-scroll {
-  height: calc(100% - 36px - 58px - 76px);
-  overflow-y: auto;
-  padding: 14px 16px 28px;
-  scrollbar-width: none;
-}
-.business-detail-scroll::-webkit-scrollbar {
-  display: none;
+/* A screen whose fixed rows sit above one scroller — the record's header and
+   tab bar, the chat list's header. A flex column, not the
+   `height: calc(100% - 36px - 58px - 76px)` the record screen used to carry:
+   that sum had to be re-derived by hand every time a row was added above the
+   scroll, and the tab bar is exactly such a row. The bottom nav is absolutely
+   positioned and so stays out of the column; the scroller pads past it. */
+.screen.screen-stack {
+  display: flex;
+  flex-direction: column;
 }
 
 /* Streamdown markdown inside the citizen's blue chat bubble ships Tailwind
@@ -399,6 +396,10 @@ body {
   height: 36px;
   padding: 11px 22px 0;
   display: flex;
+  /* Load-bearing on the flex-column screens (.business-record-screen): without
+     it the bar is a shrinkable flex item and gives up its 36px to a tall
+     scroller. Ignored where .screen is a grid with an explicit 36px track. */
+  flex: none;
   align-items: center;
   justify-content: space-between;
   position: relative;

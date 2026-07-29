@@ -3,18 +3,22 @@
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
+  ArrowUpRightIcon,
   BriefcaseIcon,
   CalendarDotsIcon,
   CaretRightIcon,
   ChatCircleDotsIcon,
-  CheckCircleIcon,
+  ChatCircleTextIcon,
   CoffeeIcon,
+  FilesIcon,
   FileTextIcon,
   FolderIcon,
   FolderOpenIcon,
+  InfoIcon,
   LaptopIcon,
   ListChecksIcon,
   PlusIcon,
+  SealCheckIcon,
   ShieldCheckIcon,
   ShoppingBagOpenIcon,
   SparkleIcon,
@@ -41,7 +45,6 @@ import { ProfileAvatar } from "@/components/profile-avatar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { IconButton } from "@/components/ui/icon-button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -51,17 +54,27 @@ import type {
   PaymentServiceType,
 } from "@/lib/business-chat";
 import type { CitizenProfile, RegisteredBusiness } from "@/lib/citizen-profile";
-import { dueInLabel, formatBusinessDate, shortBusinessDate } from "@/lib/business-dates";
-import type {
-  BusinessFile,
-  RegisteredBusiness as RegisteredBusinessDetail,
-} from "@/lib/registered-business";
+import {
+  businessDateParts,
+  dueInLabel,
+  formatBusinessDate,
+  shortBusinessDate,
+} from "@/lib/business-dates";
+import {
+  fileGlyph,
+  groupRecordsByAgency,
+  recordIcon,
+  statusVariant,
+  TONE_DOT,
+  TONE_TILE,
+} from "@/lib/business-record-view";
+import type { RegisteredBusiness as RegisteredBusinessDetail } from "@/lib/registered-business";
 import { LANDING, SCREEN, SCREEN_DEPTH, SCREEN_VARIANTS } from "@/lib/motion";
 import { useApi } from "@/lib/use-api";
 import { useAuthSession } from "@/lib/use-auth-session";
 import { cn, FOCUS_RING } from "@/lib/utils";
 
-type Screen = "restoring" | "home" | "business" | "business-detail" | "chat";
+type Screen = "restoring" | "home" | "business" | "business-detail" | "business-chats" | "chat";
 
 // The design's sample citizen for the landing's inert phone preview. Only the
 // greeting, avatar and city are ever read; the rest stays blank, not invented.
@@ -105,40 +118,6 @@ const suggestions = [
   },
 ];
 
-function isCertificateOfRegistrationFile(file: BusinessFile) {
-  if (file.id === "bir-form-2303") {
-    return true;
-  }
-
-  if (file.id !== "file-cor") {
-    return false;
-  }
-
-  const haystack = [file.title, file.filename, file.documentType, file.note]
-    .join(" ")
-    .toLowerCase();
-
-  return (
-    haystack.includes("certificate of registration") ||
-    haystack.includes("form 2303") ||
-    haystack.includes("bir 2303") ||
-    /\b2303\b/.test(haystack)
-  );
-}
-
-function getLatestCertificateOfRegistrationFile(files: BusinessFile[]) {
-  return files
-    .filter(isCertificateOfRegistrationFile)
-    .slice()
-    .sort((left, right) => {
-      const leftTime = Date.parse(left.createdAt);
-      const rightTime = Date.parse(right.createdAt);
-      const safeLeft = Number.isFinite(leftTime) ? leftTime : 0;
-      const safeRight = Number.isFinite(rightTime) ? rightTime : 0;
-      return safeRight - safeLeft;
-    })[0];
-}
-
 export function BusinessDetailScreen({
   business,
   conversations,
@@ -148,6 +127,7 @@ export function BusinessDetailScreen({
   onBack,
   onNewChat,
   onOpenChat,
+  onShowAllChats,
   profile,
 }: {
   business: RegisteredBusinessDetail | null;
@@ -158,434 +138,604 @@ export function BusinessDetailScreen({
   onBack: () => void;
   onNewChat: (businessId: string) => void;
   onOpenChat: (conversationId: string) => void;
+  onShowAllChats: (businessId: string) => void;
   profile: CitizenProfile;
 }) {
-  const [tab, setTab] = useState<"overview" | "records" | "files" | "calendar">("overview");
-  const latestCorFile = useMemo(
-    () => (business ? getLatestCertificateOfRegistrationFile(business.files) : undefined),
+  const [tab, setTab] = useState<RecordTab>("overview");
+  const groups = useMemo(
+    () => (business ? groupRecordsByAgency(business.records) : []),
     [business],
   );
+  // The soonest obligation is the only one that states a day count, so it is
+  // also the only one that needs finding — the API returns them in due order.
+  const nextObligation = business?.taxObligations[0];
+
   return (
-    <div className="screen business-detail-screen">
+    <div className="screen screen-stack screen-ground">
       <StatusBar />
-      <Header title="Business record" onBack={onBack} profile={profile} />
-      <div className="business-detail-scroll" id="app-content">
-        {loading ? (
-          <div aria-hidden="true" className="flex flex-col gap-3">
-            <div className="skeleton-card h-[124px] rounded-2xl" />
-            <div className="skeleton-card h-11 rounded-lg" />
-            <div className="flex flex-col gap-2.5">
-              <div className="skeleton-card h-20 rounded-xl" />
-              <div className="skeleton-card h-20 rounded-xl" />
-              <div className="skeleton-card h-20 rounded-xl" />
+      {/* The business is the title. The shipped screen said "Business record"
+          over the *owner's* name, so the one fact the header had room for was
+          the one the citizen already knew. */}
+      <header className="grid shrink-0 grid-cols-[38px_minmax(0,1fr)_34px] items-center gap-2 bg-white px-4 pt-1 pb-2.5">
+        <IconButton
+          aria-label="Go back"
+          className="size-[38px]"
+          data-cuelume-toggle="page"
+          onClick={onBack}
+          variant="plain"
+        >
+          <ArrowLeftIcon className="size-[19px]" weight="bold" />
+        </IconButton>
+        <span className="flex min-w-0 flex-col items-center gap-px">
+          <h1 className="max-w-full truncate text-[16px] font-extrabold -tracking-[.3px]">
+            {business?.name ?? "Business record"}
+          </h1>
+          {business && (
+            <span className="truncate text-meta font-semibold text-muted-foreground">
+              {[business.type, business.tinMasked && `TIN ${business.tinMasked}`]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+          )}
+        </span>
+        <ProfileAvatar
+          className="size-[34px] justify-self-end rounded-full object-cover"
+          profile={profile}
+        />
+      </header>
+
+      {loading || error || !business ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3.5 pb-[96px]" id="app-content">
+          {loading ? (
+            <div aria-hidden="true" className="flex flex-col gap-3">
+              <div className="skeleton-card h-[80px] rounded-[18px]" />
+              <div className="skeleton-card h-[66px] rounded-[15px]" />
+              <div className="skeleton-card h-[220px] rounded-[18px]" />
             </div>
-          </div>
-        ) : error || !business ? (
-          <Alert variant="destructive">
-            <BriefcaseIcon weight="duotone" />
-            <AlertTitle>Business record unavailable</AlertTitle>
-            <AlertDescription>{error ?? "This linked record could not be found."}</AlertDescription>
-          </Alert>
-        ) : (
-          <>
-            <Card className="resolve-in border-transparent bg-[var(--egov-blue-dark)] text-white">
-              <CardContent className="grid grid-cols-[48px_1fr] gap-3">
-                <span className="grid size-12 place-items-center rounded-lg bg-white/10">
-                  <StorefrontIcon className="size-[26px]" weight="duotone" />
-                </span>
-                <div className="min-w-0">
-                  <span className="mb-1 block text-xs font-bold text-white/70">
-                    Linked to {business.tinMasked || "your eGov account"}
-                  </span>
-                  <h1 className="text-lg leading-tight">{business.name}</h1>
-                  <p className="mt-1 text-xs text-white/85">
-                    {business.type} in {business.city}
-                  </p>
-                </div>
-                <Badge className="col-span-2 mt-0.5 w-fit" variant="success">
-                  <CheckCircleIcon weight="fill" /> {business.status}
-                </Badge>
-              </CardContent>
-            </Card>
-            <Tabs
-              className="resolve-in mt-3"
-              onValueChange={(value) =>
-                setTab(value as "overview" | "records" | "files" | "calendar")
-              }
-              value={tab}
-            >
-              <TabsList
-                aria-label="Business record sections"
-                className="sticky -top-3.5 z-10 grid w-full grid-cols-4 gap-1"
+          ) : (
+            <Alert variant="destructive">
+              <BriefcaseIcon weight="duotone" />
+              <AlertTitle>Business record unavailable</AlertTitle>
+              <AlertDescription>
+                {error ?? "This linked record could not be found."}
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
+      ) : (
+        <Tabs
+          className="flex min-h-0 flex-1 flex-col gap-0"
+          onValueChange={(value) => setTab(value as RecordTab)}
+          value={tab}
+        >
+          {/* Four equal pills that do not scroll. Sticky tabs inside the
+              scroller meant the row the citizen was aiming at moved while the
+              panel behind it settled. */}
+          <TabsList
+            aria-label="Business record sections"
+            className="flex shrink-0 gap-1 rounded-none border-b border-[var(--line-soft)] bg-white p-0 px-4 pb-2.5"
+          >
+            {RECORD_TABS.map(([value, label]) => (
+              <TabsTrigger
+                className="flex-1 rounded-[10px] px-1 py-[9px] text-center text-sm font-extrabold data-active:bg-secondary data-active:text-primary data-active:shadow-none"
+                data-cuelume-toggle="toggle"
+                key={value}
+                value={value}
               >
-                <TabsTrigger
-                  className="px-1 text-center text-xs"
-                  data-cuelume-toggle="toggle"
-                  value="overview"
-                >
-                  Overview
-                </TabsTrigger>
-                <TabsTrigger
-                  className="px-1 text-center text-xs"
-                  data-cuelume-toggle="toggle"
-                  value="records"
-                >
-                  Records
-                </TabsTrigger>
-                <TabsTrigger
-                  className="px-1 text-center text-xs"
-                  data-cuelume-toggle="toggle"
-                  value="files"
-                >
-                  Files
-                </TabsTrigger>
-                <TabsTrigger
-                  className="px-1 text-center text-xs"
-                  data-cuelume-toggle="toggle"
-                  value="calendar"
-                >
-                  Tax calendar
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent className="flex flex-col gap-3" value="overview">
-                <Card>
-                  <CardContent className="flex flex-col gap-2">
-                    <h2 className="text-md font-extrabold -tracking-[.2px]">Registration</h2>
-                    <dl className="flex flex-col">
-                      <div className="grid grid-cols-[100px_1fr] items-center gap-2.5 py-1.5">
-                        <dt className="text-xs text-muted-foreground">Registration number</dt>
-                        <dd className="m-0 text-right text-xs font-bold break-words">
-                          {business.registrationNumber}
-                        </dd>
-                      </div>
-                      <div className="grid grid-cols-[100px_1fr] items-center gap-2.5 py-1.5">
-                        <dt className="text-xs text-muted-foreground">Owner</dt>
-                        <dd className="m-0 text-right text-xs font-bold break-words">
-                          {business.ownerName}
-                        </dd>
-                      </div>
-                      <div className="grid grid-cols-[100px_1fr] items-center gap-2.5 py-1.5">
-                        <dt className="text-xs text-muted-foreground">RDO</dt>
-                        <dd className="m-0 text-right text-xs font-bold break-words">
-                          {business.rdo || "Needs confirmation"}
-                        </dd>
-                      </div>
-                      <div className="grid grid-cols-[100px_1fr] items-center gap-2.5 py-1.5">
-                        <dt className="text-xs text-muted-foreground">Completed</dt>
-                        <dd className="m-0 text-right text-xs font-bold break-words">
-                          {formatBusinessDate(business.finalizedAt)}
-                        </dd>
-                      </div>
-                    </dl>
-                    {latestCorFile ? (
-                      <a
-                        className="mt-0.5 inline-flex w-fit items-center text-2xs font-semibold text-primary/75 underline-offset-2 transition-colors hover:text-primary hover:underline"
-                        href={`/api/businesses/${business.id}/files/${latestCorFile.id}`}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        View CoR (2303) →
-                      </a>
-                    ) : null}
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="flex flex-col gap-1.5">
-                    <h2 className="text-md font-extrabold -tracking-[.2px]">Business address</h2>
-                    <p className="m-0 text-sm leading-normal">{business.businessAddress}</p>
-                    <span className="text-xs text-muted-foreground">
-                      {business.businessActivity}
-                    </span>
-                  </CardContent>
-                </Card>
+                {label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3.5 pb-[96px]" id="app-content">
+            <TabsContent className="flex flex-col gap-3" value="overview">
+              {/* One card, one action. An earlier version stacked status chips,
+                  a form line and two buttons here; what a returning owner needs
+                  from the top of this screen is the next deadline. */}
+              {nextObligation ? (
                 <button
                   className={cn(
-                    "grid grid-cols-[40px_1fr_16px] items-center gap-2.5 rounded-xl border border-primary-border bg-secondary p-4 text-left shadow-xs transition",
+                    "grid grid-cols-[48px_minmax(0,1fr)_16px] items-center gap-[13px] rounded-[18px] bg-primary-deep p-4 text-left text-white",
+                    "shadow-[0_12px_26px_-20px_rgba(7,60,170,.6)] transition-transform duration-150 ease-[var(--ease-out)] active:scale-[var(--press-lg)]",
                     FOCUS_RING,
                   )}
                   data-cuelume-toggle="page"
                   onClick={() => setTab("calendar")}
                   type="button"
                 >
-                  <CalendarDotsIcon className="size-[30px] text-primary" weight="duotone" />
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-xs font-bold text-primary">Next tax reminder</span>
-                    <strong className="text-xs">
-                      {business.taxObligations[0]?.title ?? "No reminders scheduled"}
+                  <span className="flex size-12 flex-col items-center justify-center rounded-[14px] bg-white/16">
+                    <strong className="text-md leading-none">
+                      {businessDateParts(nextObligation.dueDate).day}
                     </strong>
-                    <span className="text-2xs text-muted-foreground">
-                      {business.taxObligations[0]
-                        ? formatBusinessDate(business.taxObligations[0].dueDate)
-                        : ""}
+                    <span className="text-xs font-extrabold text-primary-border">
+                      {businessDateParts(nextObligation.dueDate).month}
                     </span>
-                  </div>
-                  <CaretRightIcon className="text-primary" weight="bold" />
+                  </span>
+                  <span className="flex min-w-0 flex-col gap-1">
+                    <span className="text-meta font-extrabold text-primary-border">
+                      Next filing · {dueInLabel(nextObligation.dueDate)}
+                    </span>
+                    <strong className="text-md leading-[1.35] -tracking-[.2px]">
+                      {nextObligation.title}
+                    </strong>
+                  </span>
+                  <CaretRightIcon className="size-3.5 text-white/60" weight="bold" />
                 </button>
-                <Card>
-                  <CardContent className="flex flex-col gap-3">
-                    <header className="flex items-start justify-between gap-3">
-                      <div>
-                        <span className="mb-0.5 block text-xs font-bold text-primary">
-                          Business assistant
-                        </span>
-                        <h2 className="text-md font-extrabold -tracking-[.2px]">Recent chats</h2>
-                        <p className="mt-1 text-2xs leading-normal text-muted-foreground">
-                          Ask about this business’s taxes, files, permits, and next obligations.
-                        </p>
-                      </div>
-                      <IconButton
-                        aria-label={`Start a new chat about ${business.name}`}
-                        className="shrink-0"
-                        data-cuelume-toggle="page"
-                        onClick={() => onNewChat(business.id)}
-                        variant="primary"
-                      >
-                        <PlusIcon weight="bold" />
-                      </IconButton>
-                    </header>
-                    {conversationsLoading ? (
-                      <div className="skeleton-card h-[58px] rounded-lg" />
-                    ) : conversations.length === 0 ? (
-                      <button
+              ) : (
+                <p className="rounded-[18px] border border-border bg-white p-4 text-sm leading-[1.5] text-muted-foreground">
+                  No filing calendar is saved for this record. Confirm tax types and deadlines
+                  directly with BIR.
+                </p>
+              )}
+
+              <div className="flex gap-2">
+                {(
+                  [
+                    ["records", "Records", SealCheckIcon, business.records.length],
+                    ["files", "Files", FilesIcon, business.files.length],
+                    ["calendar", "Filings", CalendarDotsIcon, business.taxObligations.length],
+                  ] as const
+                ).map(([value, label, Icon, count]) => (
+                  <button
+                    className={cn(
+                      "flex flex-1 flex-col gap-[3px] rounded-[15px] border border-border bg-white p-3 text-left",
+                      "transition-colors duration-150 ease-[var(--ease-out)] hover:border-primary-border",
+                      FOCUS_RING,
+                    )}
+                    data-cuelume-toggle="toggle"
+                    key={value}
+                    onClick={() => setTab(value)}
+                    type="button"
+                  >
+                    <span className="inline-flex items-center gap-1.5 text-meta text-muted-foreground">
+                      <Icon className="size-[15px] text-primary" weight="duotone" />
+                      {label}
+                    </span>
+                    <strong className="text-md -tracking-[.4px]">{count}</strong>
+                  </button>
+                ))}
+              </div>
+
+              <section className="rounded-[18px] border border-border bg-white p-4">
+                <h2 className="mb-0.5 text-md font-extrabold -tracking-[.4px]">Registration</h2>
+                <dl className="m-0 flex flex-col">
+                  {(
+                    [
+                      ["Business name", business.name, false],
+                      ["Registration no.", business.registrationNumber, true],
+                      ["Owner", business.ownerName, false],
+                      ["BIR district", business.rdo || "Needs confirmation", false],
+                      ["Line of business", business.businessActivity, false],
+                      ["Address", business.businessAddress, false],
+                      ["Registered", formatBusinessDate(business.finalizedAt), false],
+                    ] as const
+                  ).map(([label, value, mono]) => (
+                    <div
+                      className="grid grid-cols-[118px_minmax(0,1fr)] items-baseline gap-3.5 border-b border-[var(--row-divider)] py-[13px] last:border-b-0"
+                      key={label}
+                    >
+                      <dt className="text-sm text-gray-600">{label}</dt>
+                      <dd
                         className={cn(
-                          "grid min-h-[70px] grid-cols-[38px_1fr_16px] items-center gap-2.5 rounded-lg border border-dashed border-border px-3 py-2.5 text-left transition-[scale,border-color,background-color] duration-150 ease-[var(--ease-out)] hover:border-primary-border hover:bg-gray-50 active:scale-[var(--press-lg)]",
+                          "m-0 text-copy leading-[1.55] font-bold break-words",
+                          mono && "font-mono",
+                        )}
+                      >
+                        {value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+                <DemoRecordsNote className="mt-3" />
+              </section>
+
+              <BusinessAssistantCard
+                business={business}
+                conversations={conversations}
+                loading={conversationsLoading}
+                onNewChat={onNewChat}
+                onOpenChat={onOpenChat}
+                onShowAllChats={onShowAllChats}
+              />
+            </TabsContent>
+
+            <TabsContent className="flex flex-col" value="records">
+              {/* Grouped by issuer, so the agency name is said once per group
+                  instead of on every row — which is what let the rows below drop
+                  to one line of title and one reference. */}
+              {groups.map(({ agency, count, items, tone }) => (
+                <section className="mb-4 flex flex-col" key={agency}>
+                  <div className="flex items-center justify-between gap-2.5 px-0.5 pb-2">
+                    <h2 className="inline-flex items-center gap-[7px] text-copy font-extrabold -tracking-[.3px]">
+                      <span className={cn("size-1.5 rounded-full", TONE_DOT[tone])} />
+                      {agency}
+                    </h2>
+                    <span className="text-meta font-bold text-gray-500">{count}</span>
+                  </div>
+                  <div className="overflow-hidden rounded-2xl border border-border bg-white">
+                    {items.map((record) => {
+                      const Icon = recordIcon(record);
+                      return (
+                        <div
+                          className="grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-[11px] border-t border-[var(--row-divider)] px-3.5 py-[13px] first:border-t-0"
+                          key={record.id}
+                        >
+                          <span
+                            className={cn(
+                              "grid size-[34px] place-items-center rounded-[10px]",
+                              TONE_TILE[tone],
+                            )}
+                          >
+                            <Icon className="size-[17px]" weight="duotone" />
+                          </span>
+                          <span className="flex min-w-0 flex-col gap-[3px]">
+                            <strong className="text-base">{record.title}</strong>
+                            <span className="truncate font-mono text-meta text-gray-600">
+                              {record.referenceNumber}
+                            </span>
+                          </span>
+                          <Badge variant={statusVariant(record.status)}>{record.status}</Badge>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
+              <DemoRecordsNote className="pb-1" />
+            </TabsContent>
+
+            <TabsContent className="flex flex-col" value="files">
+              {business.files.length === 0 ? (
+                <div className="flex flex-col items-center rounded-2xl border border-dashed border-border p-6 text-center text-muted-foreground">
+                  <FileTextIcon className="mb-2 size-[34px] text-primary" weight="duotone" />
+                  <strong className="text-base text-foreground">No files saved yet</strong>
+                  <p className="mt-1 text-meta">
+                    Forms generated by the DX BIR service will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-2xl border border-border bg-white">
+                  {/* The whole row is the link. Splitting the target between a
+                      title and a separate "Open" control gave one destination
+                      two hit areas and made the smaller one the real button. */}
+                  {business.files.map((file) => {
+                    const { Icon, tone } = fileGlyph(file);
+                    return (
+                      <a
+                        className={cn(
+                          "grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-3 border-t border-[var(--row-divider)] p-3.5 first:border-t-0",
+                          "transition-colors duration-150 hover:bg-gray-50",
                           FOCUS_RING,
                         )}
                         data-cuelume-toggle="page"
-                        onClick={() => onNewChat(business.id)}
-                        type="button"
+                        href={`/api/businesses/${encodeURIComponent(business.id)}/files/${encodeURIComponent(file.id)}`}
+                        key={file.id}
+                        rel="noreferrer"
+                        target="_blank"
                       >
-                        <span className="grid size-[38px] place-items-center rounded-lg bg-secondary text-primary">
-                          <ChatCircleDotsIcon className="size-5" weight="duotone" />
-                        </span>
-                        <span className="grid gap-0.5">
-                          <strong className="text-xs">Start your first business chat</strong>
-                          <span className="text-2xs leading-normal text-muted-foreground">
-                            Your conversation will stay linked to this record.
-                          </span>
-                        </span>
-                        <CaretRightIcon className="text-primary" weight="bold" />
-                      </button>
-                    ) : (
-                      <div className="grid gap-1.5">
-                        {conversations.slice(0, 3).map((conversation) => (
-                          <button
-                            className={cn(
-                              "grid min-h-[52px] grid-cols-[34px_1fr_16px] items-center gap-2.5 rounded-lg border border-border px-2.5 py-2 text-left transition-[scale,border-color,background-color] duration-150 ease-[var(--ease-out)] hover:border-primary-border hover:bg-gray-50 active:scale-[var(--press-lg)]",
-                              FOCUS_RING,
-                            )}
-                            data-cuelume-toggle="page"
-                            key={conversation.id}
-                            onClick={() => onOpenChat(conversation.id)}
-                            type="button"
-                          >
-                            <span className="grid size-[34px] place-items-center rounded-md bg-secondary text-primary">
-                              <ChatCircleDotsIcon className="size-[18px]" weight="duotone" />
-                            </span>
-                            <span className="grid min-w-0 gap-0.5">
-                              <strong className="truncate text-xs">{conversation.title}</strong>
-                              <time
-                                className="text-2xs text-muted-foreground"
-                                dateTime={conversation.updatedAt}
-                              >
-                                Updated {formatBusinessDate(conversation.updatedAt)}
-                              </time>
-                            </span>
-                            <CaretRightIcon className="text-primary" weight="bold" />
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-              <TabsContent className="flex flex-col gap-2.5" value="files">
-                <header className="flex items-center justify-between">
-                  <div>
-                    <span className="mb-0.5 block text-xs font-bold text-primary">
-                      Document vault
-                    </span>
-                    <h2 className="text-md font-extrabold -tracking-[.2px]">Business files</h2>
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    {business.files.length} files
-                  </span>
-                </header>
-                {business.files.length === 0 ? (
-                  <div className="flex flex-col items-center rounded-xl border border-dashed border-border p-6 text-center text-muted-foreground">
-                    <FileTextIcon className="mb-2 size-[34px] text-primary" weight="duotone" />
-                    <strong className="text-xs text-foreground">No files saved yet</strong>
-                    <p className="mt-1 text-2xs">
-                      Forms generated by the DX BIR service will appear here.
-                    </p>
-                  </div>
-                ) : (
-                  business.files.map((file) => (
-                    <Card key={file.id}>
-                      <CardContent className="grid grid-cols-[40px_1fr_auto] items-start gap-2.5">
-                        <span className="grid size-10 place-items-center rounded-lg bg-destructive-soft text-destructive-ink">
-                          <FileTextIcon weight="duotone" />
-                        </span>
-                        <div className="flex min-w-0 flex-col gap-0.5">
-                          <span className="text-xs font-bold text-primary">
-                            {file.documentType}
-                          </span>
-                          <strong className="text-xs">{file.title}</strong>
-                          <code className="text-2xs break-words text-muted-foreground">
-                            {file.filename}
-                          </code>
-                          <p className="m-0 text-2xs break-words text-muted-foreground">
-                            {file.note}
-                          </p>
-                          <time
-                            className="text-2xs text-muted-foreground"
-                            dateTime={file.createdAt}
-                          >
-                            {formatBusinessDate(file.createdAt)}
-                          </time>
-                        </div>
-                        <div className="flex flex-col items-end gap-2">
-                          <Badge variant="success">{file.status}</Badge>
-                          <a
-                            className="text-xs font-extrabold text-primary"
-                            href={`/api/businesses/${encodeURIComponent(business.id)}/files/${encodeURIComponent(file.id)}`}
-                            rel="noreferrer"
-                            target="_blank"
-                          >
-                            Open
-                          </a>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
-                )}
-              </TabsContent>
-              <TabsContent className="flex flex-col gap-2.5" value="records">
-                <header className="flex items-center justify-between">
-                  <h2 className="text-md font-extrabold -tracking-[.2px]">
-                    Registrations and permits
-                  </h2>
-                  <span className="text-xs text-muted-foreground">
-                    {business.records.length} records
-                  </span>
-                </header>
-                {business.records.map((record) => (
-                  <Card key={record.id}>
-                    <CardContent className="grid grid-cols-[38px_1fr_auto] items-start gap-2.5">
-                      <span className="grid size-[38px] place-items-center rounded-lg bg-secondary text-primary">
-                        <FileTextIcon weight="duotone" />
-                      </span>
-                      <div className="flex min-w-0 flex-col gap-0.5">
-                        <strong className="text-xs">{record.title}</strong>
-                        <p className="m-0 text-2xs break-words text-muted-foreground">
-                          {record.agency}
-                        </p>
-                        <span className="text-2xs break-words text-muted-foreground">
-                          {record.referenceNumber}
-                        </span>
-                        <span className="mt-0.5 text-2xs break-words text-muted-foreground">
-                          {record.note}
-                        </span>
-                      </div>
-                      <Badge
-                        variant={
-                          record.status === "Not required"
-                            ? "neutral"
-                            : record.status === "Scheduled"
-                              ? "warning"
-                              : "success"
-                        }
-                      >
-                        {record.status}
-                      </Badge>
-                    </CardContent>
-                  </Card>
-                ))}
-              </TabsContent>
-              <TabsContent className="flex flex-col gap-2.5" value="calendar">
-                <header className="flex items-center justify-between px-0.5">
-                  <div>
-                    <span className="mb-0.5 block text-xs font-bold text-primary">
-                      Tax calendar
-                    </span>
-                    <h2 className="text-md font-extrabold -tracking-[.2px]">
-                      Upcoming obligations
-                    </h2>
-                  </div>
-                  <CalendarDotsIcon className="size-[30px] text-primary" weight="duotone" />
-                </header>
-                <p className="mx-0.5 mb-1 text-2xs text-muted-foreground">
-                  {business.taxObligations.length
-                    ? "DX BIR demo reminders are based only on the legal business type. Confirm tax types and filing deadlines directly with BIR."
-                    : "No tax calendar is saved for this record. Confirm tax types and filing deadlines directly with BIR."}
-                </p>
-                {business.taxObligations.map((obligation) => {
-                  const date = new Date(`${obligation.dueDate}T00:00:00Z`);
-                  return (
-                    <Card key={obligation.id}>
-                      <CardContent className="grid grid-cols-[47px_1fr_auto] items-start gap-2.5">
-                        <time
-                          className="flex flex-col items-center rounded-lg bg-secondary py-1.5 text-primary"
-                          dateTime={obligation.dueDate}
+                        <span
+                          className={cn(
+                            "grid size-10 place-items-center rounded-xl",
+                            TONE_TILE[tone],
+                          )}
                         >
-                          <strong className="text-lg leading-none">
-                            {date.toLocaleDateString("en-PH", { day: "2-digit", timeZone: "UTC" })}
-                          </strong>
-                          <span className="mt-0.5 text-2xs font-black">
-                            {date
-                              .toLocaleDateString("en-PH", { month: "short", timeZone: "UTC" })
-                              .toUpperCase()}
+                          <Icon className="size-[21px]" weight="duotone" />
+                        </span>
+                        <span className="flex min-w-0 flex-col gap-0.5">
+                          <strong className="text-base">{file.title}</strong>
+                          <span className="truncate text-meta text-gray-600">
+                            {file.documentType} · {file.filename}
                           </span>
-                        </time>
-                        <div className="flex min-w-0 flex-col gap-0.5">
-                          <span className="text-2xs font-extrabold text-primary">
-                            {obligation.formCode} · {obligation.frequency}
+                        </span>
+                        <span className="flex flex-none flex-col items-end gap-[5px]">
+                          <Badge variant={statusVariant(file.status)}>{file.status}</Badge>
+                          <span className="inline-flex items-center gap-1 text-meta font-extrabold text-primary">
+                            Open
+                            <ArrowUpRightIcon className="size-[11px]" weight="bold" />
                           </span>
-                          <strong className="text-xs">{obligation.title}</strong>
-                          <span className="text-2xs text-muted-foreground">
-                            {obligation.periodLabel}
-                          </span>
-                          <p className="m-0 text-2xs text-muted-foreground">{obligation.note}</p>
-                        </div>
-                        <Badge variant={obligation.status === "Upcoming" ? "warning" : "neutral"}>
-                          {obligation.status}
-                        </Badge>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </TabsContent>
-            </Tabs>
-          </>
-        )}
-      </div>
+                        </span>
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
+              <span className="mt-3 inline-flex items-start gap-[7px] pb-1 text-meta leading-[1.45] text-muted-foreground">
+                <ShieldCheckIcon
+                  className="mt-px size-[13px] flex-none text-success"
+                  weight="fill"
+                />
+                Preview files. Form 1901 still has to be submitted to BIR.
+              </span>
+            </TabsContent>
+
+            <TabsContent className="flex flex-col gap-2.5" value="calendar">
+              {business.taxObligations.map((obligation, index) => {
+                const { day, month } = businessDateParts(obligation.dueDate);
+                // Only the soonest states a day count: four rows each counting
+                // down turned a schedule into four competing alarms.
+                const soonest = index === 0;
+                return (
+                  <article
+                    className={cn(
+                      "grid grid-cols-[48px_minmax(0,1fr)] items-center gap-3 rounded-2xl border bg-white p-3.5",
+                      soonest ? "border-primary-border" : "border-border",
+                    )}
+                    key={obligation.id}
+                  >
+                    <time
+                      className={cn(
+                        "flex size-12 flex-col items-center justify-center rounded-[13px]",
+                        soonest ? "bg-secondary" : "bg-gray-100",
+                      )}
+                      dateTime={obligation.dueDate}
+                    >
+                      <strong
+                        className={cn(
+                          "text-md leading-none",
+                          soonest ? "text-primary" : "text-gray-800",
+                        )}
+                      >
+                        {day}
+                      </strong>
+                      <span
+                        className={cn(
+                          "text-xs font-extrabold",
+                          soonest ? "text-primary/70" : "text-gray-600",
+                        )}
+                      >
+                        {month}
+                      </span>
+                    </time>
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <span
+                        className={cn(
+                          "text-meta font-extrabold",
+                          soonest ? "text-primary" : "text-gray-600",
+                        )}
+                      >
+                        {soonest
+                          ? `${capitalize(dueInLabel(obligation.dueDate))} · ${obligation.status}`
+                          : obligation.status}
+                      </span>
+                      <strong className="text-base leading-[1.3]">{obligation.title}</strong>
+                      <span className="text-meta text-gray-600">
+                        {obligation.formCode} · {obligation.periodLabel}
+                      </span>
+                    </div>
+                  </article>
+                );
+              })}
+              <span className="mt-1 inline-flex items-start gap-[7px] pb-1 text-meta leading-[1.45] text-muted-foreground">
+                <InfoIcon className="mt-px size-[13px] flex-none text-primary" weight="fill" />
+                Sample schedule for a sole proprietor. Confirm registered tax types with BIR.
+              </span>
+            </TabsContent>
+          </div>
+        </Tabs>
+      )}
       <BottomNav active="business" />
     </div>
   );
 }
-// onBack and profile are always provided by this module-private component's
-// single caller (BusinessDetailScreen, whose own props require both), so
-// there is no "no back button" / "no profile" fallback to render here.
-function Header({
-  title,
-  onBack,
-  profile,
+
+const RECORD_TABS = [
+  ["overview", "Overview"],
+  ["records", "Records"],
+  ["files", "Files"],
+  ["calendar", "Tax calendar"],
+] as const;
+
+type RecordTab = (typeof RECORD_TABS)[number][0];
+
+function capitalize(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+// Said once per tab, not once per row. Every records and files row used to carry
+// its own copy of this, which is how eight rows came to repeat one disclaimer
+// eight times.
+function DemoRecordsNote({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-[7px] text-meta text-muted-foreground",
+        className,
+      )}
+    >
+      <ShieldCheckIcon className="size-[13px] text-success" weight="fill" />
+      Demo records — not official agency documents
+    </span>
+  );
+}
+
+function BusinessAssistantCard({
+  business,
+  conversations,
+  loading,
+  onNewChat,
+  onOpenChat,
+  onShowAllChats,
 }: {
-  title?: string;
-  onBack: () => void;
-  profile: CitizenProfile;
+  business: RegisteredBusinessDetail;
+  conversations: ConversationSummary[];
+  loading: boolean;
+  onNewChat: (businessId: string) => void;
+  onOpenChat: (conversationId: string) => void;
+  onShowAllChats: (businessId: string) => void;
 }) {
   return (
-    <header className="grid h-[58px] grid-cols-[40px_1fr_40px] items-center gap-2.5 px-5 pt-1.5 pb-2">
-      <IconButton aria-label="Go back" data-cuelume-toggle="page" onClick={onBack} variant="plain">
-        <ArrowLeftIcon />
-      </IconButton>
-      {title ? <h1 className="text-center text-md -tracking-[.3px]">{title}</h1> : <span />}
-      <ProfileAvatar
-        className="size-9 justify-self-end rounded-full border-2 border-white object-cover shadow-[0_0_0_1px_var(--line)]"
-        profile={profile}
-      />
-    </header>
+    <section className="flex flex-col gap-3.5 rounded-[20px] border-[1.5px] border-primary-border bg-[linear-gradient(155deg,var(--gray-50)_0%,var(--primary-tint)_60%,var(--primary-tint-strong)_100%)] p-[18px]">
+      <div className="grid grid-cols-[46px_minmax(0,1fr)] items-center gap-[13px]">
+        <span className="grid size-[46px] place-items-center rounded-[14px] bg-primary text-white">
+          <ChatCircleDotsIcon className="size-6" weight="fill" />
+        </span>
+        <div className="flex min-w-0 flex-col gap-[3px]">
+          <h2 className="truncate text-[19px] leading-[1.3] font-extrabold -tracking-[.3px] text-primary-ink">
+            Ask about {business.name}
+          </h2>
+          <p className="text-sm leading-[1.55] text-primary-ink/80">
+            Taxes, files, permits, and what’s still open.
+          </p>
+        </div>
+      </div>
+      {loading ? (
+        <div className="skeleton-card h-[46px] rounded-[13px]" />
+      ) : conversations.length > 0 ? (
+        <div className="flex flex-col gap-[7px]">
+          {conversations.slice(0, 3).map((conversation) => (
+            <button
+              className={cn(
+                "grid grid-cols-[minmax(0,1fr)_14px] items-center gap-2.5 rounded-[13px] border border-primary-border bg-white/92 px-[13px] py-3 text-left",
+                "transition-[background-color,scale] duration-150 ease-[var(--ease-out)] hover:bg-white active:scale-[var(--press-lg)]",
+                FOCUS_RING,
+              )}
+              data-cuelume-toggle="page"
+              key={conversation.id}
+              onClick={() => onOpenChat(conversation.id)}
+              type="button"
+            >
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <strong className="truncate text-copy leading-[1.4]">{conversation.title}</strong>
+                <time className="text-meta text-primary-ink/70" dateTime={conversation.updatedAt}>
+                  {formatBusinessDate(conversation.updatedAt)}
+                </time>
+              </span>
+              <CaretRightIcon className="size-[13px] text-primary/50" weight="bold" />
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <div className="flex items-center gap-2">
+        <button
+          className={cn(
+            "flex h-[46px] flex-1 items-center justify-center gap-2 rounded-[13px] bg-primary text-base font-extrabold text-white",
+            "transition-[background-color,scale] duration-150 ease-[var(--ease-out)] hover:bg-[var(--primary-hover)] active:scale-[var(--press-lg)]",
+            FOCUS_RING,
+          )}
+          data-cuelume-toggle="page"
+          onClick={() => onNewChat(business.id)}
+          type="button"
+        >
+          <PlusIcon className="size-[15px]" weight="bold" />
+          New question
+        </button>
+        {conversations.length > 0 && (
+          <button
+            className={cn(
+              "flex h-[46px] flex-none items-center gap-[7px] rounded-[13px] border border-primary-border bg-white/92 px-4 text-base font-extrabold text-primary",
+              "transition-[background-color,scale] duration-150 ease-[var(--ease-out)] hover:bg-white active:scale-[var(--press-lg)]",
+              FOCUS_RING,
+            )}
+            data-cuelume-toggle="page"
+            onClick={() => onShowAllChats(business.id)}
+            type="button"
+          >
+            Show all
+            <ArrowRightIcon className="size-3.5" weight="bold" />
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// Every chat scoped to one business, which is the list the record's "Show all"
+// promises. Rows carry a title and a date and no answer preview: a preview line
+// would mean loading each transcript's last assistant message to render a list.
+export function BusinessChatsScreen({
+  business,
+  conversations,
+  loading,
+  onBack,
+  onNewChat,
+  onOpenChat,
+}: {
+  business: RegisteredBusinessDetail | null;
+  conversations: ConversationSummary[];
+  loading: boolean;
+  onBack: () => void;
+  onNewChat: (businessId: string) => void;
+  onOpenChat: (conversationId: string) => void;
+}) {
+  const name = business?.name ?? "this business";
+  return (
+    <div className="screen screen-stack screen-ground">
+      <StatusBar />
+      <header className="grid shrink-0 grid-cols-[38px_minmax(0,1fr)_34px] items-center gap-2 border-b border-[var(--line-soft)] bg-white px-4 pt-1 pb-3">
+        <IconButton
+          aria-label="Back to business record"
+          className="size-[38px]"
+          data-cuelume-toggle="page"
+          onClick={onBack}
+          variant="plain"
+        >
+          <ArrowLeftIcon className="size-[19px]" weight="bold" />
+        </IconButton>
+        <span className="flex min-w-0 flex-col items-center gap-px">
+          <h1 className="max-w-full truncate text-[16px] leading-[1.3] font-extrabold -tracking-[.2px]">
+            Chats about {name}
+          </h1>
+          <span className="text-meta font-semibold text-muted-foreground">
+            {conversations.length === 1 ? "1 saved chat" : `${conversations.length} saved chats`}
+          </span>
+        </span>
+        {business && (
+          <IconButton
+            aria-label={`Start a new chat about ${name}`}
+            className="size-[34px] justify-self-end"
+            data-cuelume-toggle="page"
+            onClick={() => onNewChat(business.id)}
+            variant="primary"
+          >
+            <PlusIcon className="size-[17px]" weight="bold" />
+          </IconButton>
+        )}
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3.5 pb-6" id="app-content">
+        {loading ? (
+          <div aria-hidden="true" className="skeleton-card h-[200px] rounded-2xl" />
+        ) : conversations.length === 0 ? (
+          <div className="flex flex-col items-center rounded-2xl border border-dashed border-border p-6 text-center">
+            <ChatCircleTextIcon className="mb-2 size-[34px] text-primary" weight="duotone" />
+            <strong className="text-base">No chats about {name} yet</strong>
+            <p className="mt-1 text-meta leading-[1.5] text-muted-foreground">
+              Ask about its taxes, files or permits and the conversation is saved here.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-border bg-white">
+            {conversations.map((conversation) => (
+              <button
+                className={cn(
+                  "grid w-full grid-cols-[36px_minmax(0,1fr)_14px] items-center gap-3 border-t border-[var(--row-divider)] p-3.5 text-left first:border-t-0",
+                  "transition-colors duration-150 hover:bg-gray-50",
+                  FOCUS_RING,
+                )}
+                data-cuelume-toggle="page"
+                key={conversation.id}
+                onClick={() => onOpenChat(conversation.id)}
+                type="button"
+              >
+                <span className="grid size-9 place-items-center rounded-[11px] bg-secondary text-primary">
+                  <ChatCircleTextIcon className="size-[19px]" weight="duotone" />
+                </span>
+                <span className="flex min-w-0 flex-col gap-[3px]">
+                  <strong className="truncate text-base leading-[1.4]">{conversation.title}</strong>
+                  <time className="text-meta text-gray-500" dateTime={conversation.updatedAt}>
+                    {formatBusinessDate(conversation.updatedAt)}
+                  </time>
+                </span>
+                <CaretRightIcon className="size-[13px] text-gray-500" weight="bold" />
+              </button>
+            ))}
+          </div>
+        )}
+        <span className="mt-3 inline-flex items-start gap-[7px] text-meta leading-[1.5] text-muted-foreground">
+          <ShieldCheckIcon className="mt-px size-[13px] flex-none text-success" weight="fill" />
+          Only chats scoped to this business. Other plans live in Business.
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -1200,6 +1350,11 @@ export function EgaphBusinessApp({
     window.history.pushState({}, "", `?business=${encodeURIComponent(id)}`);
     void refreshBusinessConversations(id);
   };
+  const openBusinessChats = (id: string) => {
+    setSelectedBusinessId(id);
+    setScreen("business-chats");
+    void refreshBusinessConversations(id);
+  };
   const leaveBusinessDetail = () => {
     setSelectedBusinessId(null);
     setBusinessConversations([]);
@@ -1375,7 +1530,18 @@ export function EgaphBusinessApp({
                     onBack={leaveBusinessDetail}
                     onNewChat={(businessId) => void startBusinessChat(businessId)}
                     onOpenChat={(id) => void openConversation(id)}
+                    onShowAllChats={openBusinessChats}
                     profile={profile}
+                  />
+                )}
+                {screen === "business-chats" && (
+                  <BusinessChatsScreen
+                    business={selectedBusiness}
+                    conversations={businessConversations}
+                    loading={businessConversationsLoading}
+                    onBack={() => setScreen("business-detail")}
+                    onNewChat={(businessId) => void startBusinessChat(businessId)}
+                    onOpenChat={(id) => void openConversation(id)}
                   />
                 )}
                 {screen === "chat" && conversation && (

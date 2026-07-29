@@ -121,6 +121,10 @@
   /* Handoff values that were used on screen but never named. */
   --input-strong: #cfd9ec; /* emphasised input / outline-button border */
   --line-soft: #edf0f5; /* border on blurred and nav surfaces (lighter than Line) */
+  /* Divider *between* rows inside one bordered card. Lighter than --line-soft,
+     which draws the card's own edge: at the same weight, eight grouped rows
+     read as eight separate cards. */
+  --row-divider: #f2f5fa;
 }
 
 /* ---- typography.css (variables only; NO @import) ---- */

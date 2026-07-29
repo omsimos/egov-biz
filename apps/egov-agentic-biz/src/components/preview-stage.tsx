@@ -247,6 +247,7 @@ export function PreviewStage() {
             onBack={() => setScreen("business")}
             onNewChat={noop}
             onOpenChat={noop}
+            onShowAllChats={noop}
             profile={previewProfile}
           />
         )}

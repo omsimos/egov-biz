@@ -63,13 +63,14 @@ export const SCREEN_VARIANTS = {
 };
 
 // How deep each screen sits, so the direction of any move can be derived rather
-// than threaded through every setScreen call. chat and business-detail are both
-// children of business — moving sideways between them is rare enough that
-// treating it as "no direction" is fine.
+// than threaded through every setScreen call. A chat sits below both the record
+// and the scoped chat list, which is why it shares a depth with the latter:
+// moving sideways between two lists of the same conversations is not a descent.
 export const SCREEN_DEPTH = {
   restoring: 0,
   home: 1,
   business: 2,
   "business-detail": 3,
-  chat: 3,
+  "business-chats": 4,
+  chat: 4,
 } as const;
