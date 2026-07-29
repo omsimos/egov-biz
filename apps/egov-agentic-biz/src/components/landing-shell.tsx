@@ -14,33 +14,23 @@ import { BrandLogo } from "@/components/brand-logo";
 import { LANDING } from "@/lib/motion";
 import { cn, FOCUS_RING } from "@/lib/utils";
 
-// The three claims under the copy. Each colour is the design's, and each maps to
-// a brand token rather than the literal hex.
 const trustPoints = [
   { Icon: ShieldCheckIcon, label: "PhilSys verified", tone: "text-success" },
   { Icon: ClockIcon, label: "Under 15 minutes", tone: "text-primary" },
   { Icon: BuildingsIcon, label: "4 agencies, one flow", tone: "text-[var(--egov-orange)]" },
 ];
 
-// "How it works", "Services" and "Support" are the design's header nav. This
-// landing is one viewport with no sections beneath it, so the design's own
-// `#how` / `#services` / `#support` targets do not exist here either. They
-// render as text, not links: a nav item that looks like a link and resolves to
-// nothing is the failure this codebase already refuses on Home's service tiles.
+// Spans, not links: this landing is one viewport with no sections to target.
 const navItems = ["How it works", "Services", "Support"];
 
 const HEADER_BUTTON = "font-extrabold text-base transition-colors duration-150 disabled:opacity-60";
 
-// Two exports rather than one shell, because the header and the copy do not sit
-// in the same box: the header spans the stage, while the copy is the phone's
-// flex sibling inside .landing-main. Returning both from one component put the
-// copy outside that row, which stacked it above the phone instead of beside it.
+// Two exports, not one shell: the header spans the stage while the copy is the
+// phone's flex sibling inside .landing-main.
 export function LandingHeader({ onStart }: { onStart: () => void }) {
   return (
-    // z-1, not z-5: above .landing-blobs (z-0, and positioned, so it would
-    // otherwise paint over this header's text) but below .landing-main (z-2), so
-    // nothing in the header — least of all the blue Get started button, which sits
-    // nearest the phone at narrow widths — can ever paint over the device.
+    // Above .landing-blobs (z-0, positioned) but below .landing-main (z-2), so
+    // nothing here can paint over the phone at narrow widths.
     <header className="relative z-1 hidden flex-none items-center justify-between gap-8 px-[clamp(20px,4vw,56px)] py-[22px] min-[760px]:flex">
       <BrandLogo height={30} priority />
       <nav aria-label="About eGOVbusiness" className="flex items-center gap-[34px]">
@@ -86,22 +76,16 @@ export function LandingCopy({
 }: {
   collapsed: boolean;
   onStart: () => void;
-  // Measured by the stage, which needs this column's width for the phone's own
-  // offset anyway. Reusing it here keeps one measurement behind both slides.
   ref: Ref<HTMLDivElement>;
   slide: number;
 }) {
   return (
-    // aria-hidden and disabled while collapsed, not just off-screen: a translated
-    // element is still in the accessibility tree and in the tab order, so a
-    // keyboard user would otherwise tab into a headline and two buttons that have
-    // left the viewport. `inert` is the one-attribute version of this once its
-    // support is safe to assume in the browsers this has to run in.
+    // aria-hidden and disabled, not just off-screen: a translated element keeps
+    // its place in the accessibility tree and the tab order.
     <motion.div
       animate={{ x: collapsed ? -slide : 0 }}
       aria-hidden={collapsed}
       className="landing-copy hidden min-[760px]:block"
-      // The copy is already in place on arrival; only leaving is an animation.
       initial={false}
       ref={ref}
       transition={LANDING}
@@ -112,9 +96,6 @@ export function LandingCopy({
         </span>
         New in eGovPH
       </span>
-      {/* The design's own type spec: 900 weight, near-solid leading, and −2.2px
-            tracking, which only holds together at display sizes — hence the
-            clamp floor of 38px rather than a smaller step. */}
       <h1 className="mt-[22px] text-[clamp(38px,5.2vw,70px)] leading-[1.02] font-black tracking-[-2.2px] text-balance">
         Register your business in one conversation.
       </h1>
@@ -136,10 +117,8 @@ export function LandingCopy({
         >
           Get started <ArrowRightIcon className="size-[18px]" weight="bold" />
         </button>
-        {/* There is no demo recording, so this opens sign-in like the primary
-              CTA rather than sitting here inert. It is the one control on this
-              page whose label promises something the app cannot yet deliver —
-              point it at a real asset or drop it, but do not leave it dead. */}
+        {/* No demo recording exists, so this opens sign-in rather than sitting
+            inert. Point it at a real asset or drop it. */}
         <button
           className={cn(
             "flex items-center gap-2.5 rounded-[14px] border-[1.5px] border-gray-300 bg-white px-7 py-[17px] text-lg font-extrabold text-foreground",

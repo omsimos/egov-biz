@@ -3,16 +3,22 @@
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
+  ArrowUpRightIcon,
   BriefcaseIcon,
   CalendarDotsIcon,
   CaretRightIcon,
   ChatCircleDotsIcon,
-  CheckCircleIcon,
+  ChatCircleTextIcon,
   CoffeeIcon,
+  FilesIcon,
   FileTextIcon,
+  FolderIcon,
   FolderOpenIcon,
+  InfoIcon,
   LaptopIcon,
+  ListChecksIcon,
   PlusIcon,
+  SealCheckIcon,
   ShieldCheckIcon,
   ShoppingBagOpenIcon,
   SparkleIcon,
@@ -20,18 +26,25 @@ import {
   TrashIcon,
 } from "@phosphor-icons/react";
 import { AnimatePresence, motion } from "motion/react";
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  FormEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { BusinessChatScreen } from "@/components/business-chat-screen";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { HomeScreen } from "@/components/home-screen";
 import { LandingCopy, LandingHeader } from "@/components/landing-shell";
 import { LoginScreen } from "@/components/login-screen";
-import { BottomNav, StatusBar } from "@/components/phone-chrome";
+import { BottomNav, PhoneFrame, StatusBar } from "@/components/phone-chrome";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { IconButton } from "@/components/ui/icon-button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -41,21 +54,30 @@ import type {
   PaymentServiceType,
 } from "@/lib/business-chat";
 import type { CitizenProfile, RegisteredBusiness } from "@/lib/citizen-profile";
-import type {
-  BusinessFile,
-  RegisteredBusiness as RegisteredBusinessDetail,
-} from "@/lib/registered-business";
+import {
+  businessDateParts,
+  dueInLabel,
+  formatBusinessDate,
+  shortBusinessDate,
+} from "@/lib/business-dates";
+import {
+  fileGlyph,
+  groupRecordsByAgency,
+  recordIcon,
+  statusVariant,
+  TONE_DOT,
+  TONE_TILE,
+} from "@/lib/business-record-view";
+import type { RegisteredBusiness as RegisteredBusinessDetail } from "@/lib/registered-business";
 import { LANDING, SCREEN, SCREEN_DEPTH, SCREEN_VARIANTS } from "@/lib/motion";
 import { useApi } from "@/lib/use-api";
 import { useAuthSession } from "@/lib/use-auth-session";
 import { cn, FOCUS_RING } from "@/lib/utils";
 
-type Screen = "restoring" | "home" | "business" | "business-detail" | "chat";
+type Screen = "restoring" | "home" | "business" | "business-detail" | "business-chats" | "chat";
 
-// The citizen shown in the landing's phone preview, from the design. Nobody is
-// signed in behind that screen, so every field it does not put on glass is
-// blank rather than invented — only the greeting, the avatar and the city are
-// ever read. See the `.landing-preview` subtree, which is inert.
+// The design's sample citizen for the landing's inert phone preview. Only the
+// greeting, avatar and city are ever read; the rest stays blank, not invented.
 const PREVIEW_PROFILE: CitizenProfile = {
   address: "",
   avatarUrl: "/images/mara-reyes.png",
@@ -76,52 +98,25 @@ const PREVIEW_PROFILE: CitizenProfile = {
 
 const noop = () => {};
 
+// Chip label first, prompt second: the chip is what fits on one line of a
+// non-wrapping row, and the prompt is the sentence it writes into the field.
 const suggestions = [
-  { icon: CoffeeIcon, text: "I want to start a coffee subscription business in Makati" },
-  { icon: LaptopIcon, text: "I’m a freelancer and want to register with BIR" },
-  { icon: ShoppingBagOpenIcon, text: "Help me open a small online shop" },
+  {
+    icon: CoffeeIcon,
+    label: "Coffee subscription in Makati",
+    text: "I want to start a coffee subscription business in Makati",
+  },
+  {
+    icon: LaptopIcon,
+    label: "Freelancer with BIR",
+    text: "I’m a freelancer and want to register with BIR",
+  },
+  {
+    icon: ShoppingBagOpenIcon,
+    label: "Small online shop",
+    text: "Help me open a small online shop",
+  },
 ];
-
-function formatBusinessDate(value: string) {
-  return new Date(`${value.length === 10 ? `${value}T00:00:00Z` : value}`).toLocaleDateString(
-    "en-PH",
-    { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Manila" },
-  );
-}
-
-function isCertificateOfRegistrationFile(file: BusinessFile) {
-  if (file.id === "bir-form-2303") {
-    return true;
-  }
-
-  if (file.id !== "file-cor") {
-    return false;
-  }
-
-  const haystack = [file.title, file.filename, file.documentType, file.note]
-    .join(" ")
-    .toLowerCase();
-
-  return (
-    haystack.includes("certificate of registration") ||
-    haystack.includes("form 2303") ||
-    haystack.includes("bir 2303") ||
-    /\b2303\b/.test(haystack)
-  );
-}
-
-function getLatestCertificateOfRegistrationFile(files: BusinessFile[]) {
-  return files
-    .filter(isCertificateOfRegistrationFile)
-    .slice()
-    .sort((left, right) => {
-      const leftTime = Date.parse(left.createdAt);
-      const rightTime = Date.parse(right.createdAt);
-      const safeLeft = Number.isFinite(leftTime) ? leftTime : 0;
-      const safeRight = Number.isFinite(rightTime) ? rightTime : 0;
-      return safeRight - safeLeft;
-    })[0];
-}
 
 export function BusinessDetailScreen({
   business,
@@ -132,6 +127,7 @@ export function BusinessDetailScreen({
   onBack,
   onNewChat,
   onOpenChat,
+  onShowAllChats,
   profile,
 }: {
   business: RegisteredBusinessDetail | null;
@@ -142,434 +138,604 @@ export function BusinessDetailScreen({
   onBack: () => void;
   onNewChat: (businessId: string) => void;
   onOpenChat: (conversationId: string) => void;
+  onShowAllChats: (businessId: string) => void;
   profile: CitizenProfile;
 }) {
-  const [tab, setTab] = useState<"overview" | "records" | "files" | "calendar">("overview");
-  const latestCorFile = useMemo(
-    () => (business ? getLatestCertificateOfRegistrationFile(business.files) : undefined),
+  const [tab, setTab] = useState<RecordTab>("overview");
+  const groups = useMemo(
+    () => (business ? groupRecordsByAgency(business.records) : []),
     [business],
   );
+  // The soonest obligation is the only one that states a day count, so it is
+  // also the only one that needs finding — the API returns them in due order.
+  const nextObligation = business?.taxObligations[0];
+
   return (
-    <div className="screen business-detail-screen">
+    <div className="screen screen-stack screen-ground">
       <StatusBar />
-      <Header title="Business record" onBack={onBack} profile={profile} />
-      <div className="business-detail-scroll" id="app-content">
-        {loading ? (
-          <div aria-hidden="true" className="flex flex-col gap-3">
-            <div className="skeleton-card h-[124px] rounded-2xl" />
-            <div className="skeleton-card h-11 rounded-lg" />
-            <div className="flex flex-col gap-2.5">
-              <div className="skeleton-card h-20 rounded-xl" />
-              <div className="skeleton-card h-20 rounded-xl" />
-              <div className="skeleton-card h-20 rounded-xl" />
+      {/* The business is the title. The shipped screen said "Business record"
+          over the *owner's* name, so the one fact the header had room for was
+          the one the citizen already knew. */}
+      <header className="grid shrink-0 grid-cols-[38px_minmax(0,1fr)_34px] items-center gap-2 bg-white px-4 pt-1 pb-2.5">
+        <IconButton
+          aria-label="Go back"
+          className="size-[38px]"
+          data-cuelume-toggle="page"
+          onClick={onBack}
+          variant="plain"
+        >
+          <ArrowLeftIcon className="size-[19px]" weight="bold" />
+        </IconButton>
+        <span className="flex min-w-0 flex-col items-center gap-px">
+          <h1 className="max-w-full truncate text-[16px] font-extrabold -tracking-[.3px]">
+            {business?.name ?? "Business record"}
+          </h1>
+          {business && (
+            <span className="truncate text-meta font-semibold text-muted-foreground">
+              {[business.type, business.tinMasked && `TIN ${business.tinMasked}`]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+          )}
+        </span>
+        <ProfileAvatar
+          className="size-[34px] justify-self-end rounded-full object-cover"
+          profile={profile}
+        />
+      </header>
+
+      {loading || error || !business ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3.5 pb-[96px]" id="app-content">
+          {loading ? (
+            <div aria-hidden="true" className="flex flex-col gap-3">
+              <div className="skeleton-card h-[80px] rounded-[18px]" />
+              <div className="skeleton-card h-[66px] rounded-[15px]" />
+              <div className="skeleton-card h-[220px] rounded-[18px]" />
             </div>
-          </div>
-        ) : error || !business ? (
-          <Alert variant="destructive">
-            <BriefcaseIcon weight="duotone" />
-            <AlertTitle>Business record unavailable</AlertTitle>
-            <AlertDescription>{error ?? "This linked record could not be found."}</AlertDescription>
-          </Alert>
-        ) : (
-          <>
-            <Card className="resolve-in border-transparent bg-[var(--egov-blue-dark)] text-white">
-              <CardContent className="grid grid-cols-[48px_1fr] gap-3">
-                <span className="grid size-12 place-items-center rounded-lg bg-white/10">
-                  <StorefrontIcon className="size-[26px]" weight="duotone" />
-                </span>
-                <div className="min-w-0">
-                  <span className="mb-1 block text-xs font-bold text-white/70">
-                    Linked to {business.tinMasked || "your eGov account"}
-                  </span>
-                  <h1 className="text-lg leading-tight">{business.name}</h1>
-                  <p className="mt-1 text-xs text-white/85">
-                    {business.type} in {business.city}
-                  </p>
-                </div>
-                <Badge className="col-span-2 mt-0.5 w-fit" variant="success">
-                  <CheckCircleIcon weight="fill" /> {business.status}
-                </Badge>
-              </CardContent>
-            </Card>
-            <Tabs
-              className="resolve-in mt-3"
-              onValueChange={(value) =>
-                setTab(value as "overview" | "records" | "files" | "calendar")
-              }
-              value={tab}
-            >
-              <TabsList
-                aria-label="Business record sections"
-                className="sticky -top-3.5 z-10 grid w-full grid-cols-4 gap-1"
+          ) : (
+            <Alert variant="destructive">
+              <BriefcaseIcon weight="duotone" />
+              <AlertTitle>Business record unavailable</AlertTitle>
+              <AlertDescription>
+                {error ?? "This linked record could not be found."}
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
+      ) : (
+        <Tabs
+          className="flex min-h-0 flex-1 flex-col gap-0"
+          onValueChange={(value) => setTab(value as RecordTab)}
+          value={tab}
+        >
+          {/* Four equal pills that do not scroll. Sticky tabs inside the
+              scroller meant the row the citizen was aiming at moved while the
+              panel behind it settled. */}
+          <TabsList
+            aria-label="Business record sections"
+            className="flex shrink-0 gap-1 rounded-none border-b border-[var(--line-soft)] bg-white p-0 px-4 pb-2.5"
+          >
+            {RECORD_TABS.map(([value, label]) => (
+              <TabsTrigger
+                className="flex-1 rounded-[10px] px-1 py-[9px] text-center text-sm font-extrabold data-active:bg-secondary data-active:text-primary data-active:shadow-none"
+                data-cuelume-toggle="toggle"
+                key={value}
+                value={value}
               >
-                <TabsTrigger
-                  className="px-1 text-center text-xs"
-                  data-cuelume-toggle="toggle"
-                  value="overview"
-                >
-                  Overview
-                </TabsTrigger>
-                <TabsTrigger
-                  className="px-1 text-center text-xs"
-                  data-cuelume-toggle="toggle"
-                  value="records"
-                >
-                  Records
-                </TabsTrigger>
-                <TabsTrigger
-                  className="px-1 text-center text-xs"
-                  data-cuelume-toggle="toggle"
-                  value="files"
-                >
-                  Files
-                </TabsTrigger>
-                <TabsTrigger
-                  className="px-1 text-center text-xs"
-                  data-cuelume-toggle="toggle"
-                  value="calendar"
-                >
-                  Tax calendar
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent className="flex flex-col gap-3" value="overview">
-                <Card>
-                  <CardContent className="flex flex-col gap-2">
-                    <h2 className="text-md font-extrabold -tracking-[.2px]">Registration</h2>
-                    <dl className="flex flex-col">
-                      <div className="grid grid-cols-[100px_1fr] items-center gap-2.5 py-1.5">
-                        <dt className="text-xs text-muted-foreground">Registration number</dt>
-                        <dd className="m-0 text-right text-xs font-bold break-words">
-                          {business.registrationNumber}
-                        </dd>
-                      </div>
-                      <div className="grid grid-cols-[100px_1fr] items-center gap-2.5 py-1.5">
-                        <dt className="text-xs text-muted-foreground">Owner</dt>
-                        <dd className="m-0 text-right text-xs font-bold break-words">
-                          {business.ownerName}
-                        </dd>
-                      </div>
-                      <div className="grid grid-cols-[100px_1fr] items-center gap-2.5 py-1.5">
-                        <dt className="text-xs text-muted-foreground">RDO</dt>
-                        <dd className="m-0 text-right text-xs font-bold break-words">
-                          {business.rdo || "Needs confirmation"}
-                        </dd>
-                      </div>
-                      <div className="grid grid-cols-[100px_1fr] items-center gap-2.5 py-1.5">
-                        <dt className="text-xs text-muted-foreground">Completed</dt>
-                        <dd className="m-0 text-right text-xs font-bold break-words">
-                          {formatBusinessDate(business.finalizedAt)}
-                        </dd>
-                      </div>
-                    </dl>
-                    {latestCorFile ? (
-                      <a
-                        className="mt-0.5 inline-flex w-fit items-center text-2xs font-semibold text-primary/75 underline-offset-2 transition-colors hover:text-primary hover:underline"
-                        href={`/api/businesses/${business.id}/files/${latestCorFile.id}`}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        View CoR (2303) →
-                      </a>
-                    ) : null}
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="flex flex-col gap-1.5">
-                    <h2 className="text-md font-extrabold -tracking-[.2px]">Business address</h2>
-                    <p className="m-0 text-sm leading-normal">{business.businessAddress}</p>
-                    <span className="text-xs text-muted-foreground">
-                      {business.businessActivity}
-                    </span>
-                  </CardContent>
-                </Card>
+                {label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3.5 pb-[96px]" id="app-content">
+            <TabsContent className="flex flex-col gap-3" value="overview">
+              {/* One card, one action. An earlier version stacked status chips,
+                  a form line and two buttons here; what a returning owner needs
+                  from the top of this screen is the next deadline. */}
+              {nextObligation ? (
                 <button
                   className={cn(
-                    "grid grid-cols-[40px_1fr_16px] items-center gap-2.5 rounded-xl border border-primary-border bg-secondary p-4 text-left shadow-xs transition",
+                    "grid grid-cols-[48px_minmax(0,1fr)_16px] items-center gap-[13px] rounded-[18px] bg-primary-deep p-4 text-left text-white",
+                    "shadow-[0_12px_26px_-20px_rgba(7,60,170,.6)] transition-transform duration-150 ease-[var(--ease-out)] active:scale-[var(--press-lg)]",
                     FOCUS_RING,
                   )}
                   data-cuelume-toggle="page"
                   onClick={() => setTab("calendar")}
                   type="button"
                 >
-                  <CalendarDotsIcon className="size-[30px] text-primary" weight="duotone" />
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-xs font-bold text-primary">Next tax reminder</span>
-                    <strong className="text-xs">
-                      {business.taxObligations[0]?.title ?? "No reminders scheduled"}
+                  <span className="flex size-12 flex-col items-center justify-center rounded-[14px] bg-white/16">
+                    <strong className="text-md leading-none">
+                      {businessDateParts(nextObligation.dueDate).day}
                     </strong>
-                    <span className="text-2xs text-muted-foreground">
-                      {business.taxObligations[0]
-                        ? formatBusinessDate(business.taxObligations[0].dueDate)
-                        : ""}
+                    <span className="text-xs font-extrabold text-primary-border">
+                      {businessDateParts(nextObligation.dueDate).month}
                     </span>
-                  </div>
-                  <CaretRightIcon className="text-primary" weight="bold" />
+                  </span>
+                  <span className="flex min-w-0 flex-col gap-1">
+                    <span className="text-meta font-extrabold text-primary-border">
+                      Next filing · {dueInLabel(nextObligation.dueDate)}
+                    </span>
+                    <strong className="text-md leading-[1.35] -tracking-[.2px]">
+                      {nextObligation.title}
+                    </strong>
+                  </span>
+                  <CaretRightIcon className="size-3.5 text-white/60" weight="bold" />
                 </button>
-                <Card>
-                  <CardContent className="flex flex-col gap-3">
-                    <header className="flex items-start justify-between gap-3">
-                      <div>
-                        <span className="mb-0.5 block text-xs font-bold text-primary">
-                          Business assistant
-                        </span>
-                        <h2 className="text-md font-extrabold -tracking-[.2px]">Recent chats</h2>
-                        <p className="mt-1 text-2xs leading-normal text-muted-foreground">
-                          Ask about this business’s taxes, files, permits, and next obligations.
-                        </p>
-                      </div>
-                      <IconButton
-                        aria-label={`Start a new chat about ${business.name}`}
-                        className="shrink-0"
-                        data-cuelume-toggle="page"
-                        onClick={() => onNewChat(business.id)}
-                        variant="primary"
-                      >
-                        <PlusIcon weight="bold" />
-                      </IconButton>
-                    </header>
-                    {conversationsLoading ? (
-                      <div className="skeleton-card h-[58px] rounded-lg" />
-                    ) : conversations.length === 0 ? (
-                      <button
+              ) : (
+                <p className="rounded-[18px] border border-border bg-white p-4 text-sm leading-[1.5] text-muted-foreground">
+                  No filing calendar is saved for this record. Confirm tax types and deadlines
+                  directly with BIR.
+                </p>
+              )}
+
+              <div className="flex gap-2">
+                {(
+                  [
+                    ["records", "Records", SealCheckIcon, business.records.length],
+                    ["files", "Files", FilesIcon, business.files.length],
+                    ["calendar", "Filings", CalendarDotsIcon, business.taxObligations.length],
+                  ] as const
+                ).map(([value, label, Icon, count]) => (
+                  <button
+                    className={cn(
+                      "flex flex-1 flex-col gap-[3px] rounded-[15px] border border-border bg-white p-3 text-left",
+                      "transition-colors duration-150 ease-[var(--ease-out)] hover:border-primary-border",
+                      FOCUS_RING,
+                    )}
+                    data-cuelume-toggle="toggle"
+                    key={value}
+                    onClick={() => setTab(value)}
+                    type="button"
+                  >
+                    <span className="inline-flex items-center gap-1.5 text-meta text-muted-foreground">
+                      <Icon className="size-[15px] text-primary" weight="duotone" />
+                      {label}
+                    </span>
+                    <strong className="text-md -tracking-[.4px]">{count}</strong>
+                  </button>
+                ))}
+              </div>
+
+              <section className="rounded-[18px] border border-border bg-white p-4">
+                <h2 className="mb-0.5 text-md font-extrabold -tracking-[.4px]">Registration</h2>
+                <dl className="m-0 flex flex-col">
+                  {(
+                    [
+                      ["Business name", business.name, false],
+                      ["Registration no.", business.registrationNumber, true],
+                      ["Owner", business.ownerName, false],
+                      ["BIR district", business.rdo || "Needs confirmation", false],
+                      ["Line of business", business.businessActivity, false],
+                      ["Address", business.businessAddress, false],
+                      ["Registered", formatBusinessDate(business.finalizedAt), false],
+                    ] as const
+                  ).map(([label, value, mono]) => (
+                    <div
+                      className="grid grid-cols-[118px_minmax(0,1fr)] items-baseline gap-3.5 border-b border-[var(--row-divider)] py-[13px] last:border-b-0"
+                      key={label}
+                    >
+                      <dt className="text-sm text-gray-600">{label}</dt>
+                      <dd
                         className={cn(
-                          "grid min-h-[70px] grid-cols-[38px_1fr_16px] items-center gap-2.5 rounded-lg border border-dashed border-border px-3 py-2.5 text-left transition-[scale,border-color,background-color] duration-150 ease-[var(--ease-out)] hover:border-primary-border hover:bg-gray-50 active:scale-[var(--press-lg)]",
+                          "m-0 text-copy leading-[1.55] font-bold break-words",
+                          mono && "font-mono",
+                        )}
+                      >
+                        {value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+                <DemoRecordsNote className="mt-3" />
+              </section>
+
+              <BusinessAssistantCard
+                business={business}
+                conversations={conversations}
+                loading={conversationsLoading}
+                onNewChat={onNewChat}
+                onOpenChat={onOpenChat}
+                onShowAllChats={onShowAllChats}
+              />
+            </TabsContent>
+
+            <TabsContent className="flex flex-col" value="records">
+              {/* Grouped by issuer, so the agency name is said once per group
+                  instead of on every row — which is what let the rows below drop
+                  to one line of title and one reference. */}
+              {groups.map(({ agency, count, items, tone }) => (
+                <section className="mb-4 flex flex-col" key={agency}>
+                  <div className="flex items-center justify-between gap-2.5 px-0.5 pb-2">
+                    <h2 className="inline-flex items-center gap-[7px] text-copy font-extrabold -tracking-[.3px]">
+                      <span className={cn("size-1.5 rounded-full", TONE_DOT[tone])} />
+                      {agency}
+                    </h2>
+                    <span className="text-meta font-bold text-gray-500">{count}</span>
+                  </div>
+                  <div className="overflow-hidden rounded-2xl border border-border bg-white">
+                    {items.map((record) => {
+                      const Icon = recordIcon(record);
+                      return (
+                        <div
+                          className="grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-[11px] border-t border-[var(--row-divider)] px-3.5 py-[13px] first:border-t-0"
+                          key={record.id}
+                        >
+                          <span
+                            className={cn(
+                              "grid size-[34px] place-items-center rounded-[10px]",
+                              TONE_TILE[tone],
+                            )}
+                          >
+                            <Icon className="size-[17px]" weight="duotone" />
+                          </span>
+                          <span className="flex min-w-0 flex-col gap-[3px]">
+                            <strong className="text-base">{record.title}</strong>
+                            <span className="truncate font-mono text-meta text-gray-600">
+                              {record.referenceNumber}
+                            </span>
+                          </span>
+                          <Badge variant={statusVariant(record.status)}>{record.status}</Badge>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
+              <DemoRecordsNote className="pb-1" />
+            </TabsContent>
+
+            <TabsContent className="flex flex-col" value="files">
+              {business.files.length === 0 ? (
+                <div className="flex flex-col items-center rounded-2xl border border-dashed border-border p-6 text-center text-muted-foreground">
+                  <FileTextIcon className="mb-2 size-[34px] text-primary" weight="duotone" />
+                  <strong className="text-base text-foreground">No files saved yet</strong>
+                  <p className="mt-1 text-meta">
+                    Forms generated by the DX BIR service will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-2xl border border-border bg-white">
+                  {/* The whole row is the link. Splitting the target between a
+                      title and a separate "Open" control gave one destination
+                      two hit areas and made the smaller one the real button. */}
+                  {business.files.map((file) => {
+                    const { Icon, tone } = fileGlyph(file);
+                    return (
+                      <a
+                        className={cn(
+                          "grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-3 border-t border-[var(--row-divider)] p-3.5 first:border-t-0",
+                          "transition-colors duration-150 hover:bg-gray-50",
                           FOCUS_RING,
                         )}
                         data-cuelume-toggle="page"
-                        onClick={() => onNewChat(business.id)}
-                        type="button"
+                        href={`/api/businesses/${encodeURIComponent(business.id)}/files/${encodeURIComponent(file.id)}`}
+                        key={file.id}
+                        rel="noreferrer"
+                        target="_blank"
                       >
-                        <span className="grid size-[38px] place-items-center rounded-lg bg-secondary text-primary">
-                          <ChatCircleDotsIcon className="size-5" weight="duotone" />
-                        </span>
-                        <span className="grid gap-0.5">
-                          <strong className="text-xs">Start your first business chat</strong>
-                          <span className="text-2xs leading-normal text-muted-foreground">
-                            Your conversation will stay linked to this record.
-                          </span>
-                        </span>
-                        <CaretRightIcon className="text-primary" weight="bold" />
-                      </button>
-                    ) : (
-                      <div className="grid gap-1.5">
-                        {conversations.slice(0, 3).map((conversation) => (
-                          <button
-                            className={cn(
-                              "grid min-h-[52px] grid-cols-[34px_1fr_16px] items-center gap-2.5 rounded-lg border border-border px-2.5 py-2 text-left transition-[scale,border-color,background-color] duration-150 ease-[var(--ease-out)] hover:border-primary-border hover:bg-gray-50 active:scale-[var(--press-lg)]",
-                              FOCUS_RING,
-                            )}
-                            data-cuelume-toggle="page"
-                            key={conversation.id}
-                            onClick={() => onOpenChat(conversation.id)}
-                            type="button"
-                          >
-                            <span className="grid size-[34px] place-items-center rounded-md bg-secondary text-primary">
-                              <ChatCircleDotsIcon className="size-[18px]" weight="duotone" />
-                            </span>
-                            <span className="grid min-w-0 gap-0.5">
-                              <strong className="truncate text-xs">{conversation.title}</strong>
-                              <time
-                                className="text-2xs text-muted-foreground"
-                                dateTime={conversation.updatedAt}
-                              >
-                                Updated {formatBusinessDate(conversation.updatedAt)}
-                              </time>
-                            </span>
-                            <CaretRightIcon className="text-primary" weight="bold" />
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-              <TabsContent className="flex flex-col gap-2.5" value="files">
-                <header className="flex items-center justify-between">
-                  <div>
-                    <span className="mb-0.5 block text-xs font-bold text-primary">
-                      Document vault
-                    </span>
-                    <h2 className="text-md font-extrabold -tracking-[.2px]">Business files</h2>
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    {business.files.length} files
-                  </span>
-                </header>
-                {business.files.length === 0 ? (
-                  <div className="flex flex-col items-center rounded-xl border border-dashed border-border p-6 text-center text-muted-foreground">
-                    <FileTextIcon className="mb-2 size-[34px] text-primary" weight="duotone" />
-                    <strong className="text-xs text-foreground">No files saved yet</strong>
-                    <p className="mt-1 text-2xs">
-                      Forms generated by the DX BIR service will appear here.
-                    </p>
-                  </div>
-                ) : (
-                  business.files.map((file) => (
-                    <Card key={file.id}>
-                      <CardContent className="grid grid-cols-[40px_1fr_auto] items-start gap-2.5">
-                        <span className="grid size-10 place-items-center rounded-lg bg-destructive-soft text-destructive-ink">
-                          <FileTextIcon weight="duotone" />
-                        </span>
-                        <div className="flex min-w-0 flex-col gap-0.5">
-                          <span className="text-xs font-bold text-primary">
-                            {file.documentType}
-                          </span>
-                          <strong className="text-xs">{file.title}</strong>
-                          <code className="text-2xs break-words text-muted-foreground">
-                            {file.filename}
-                          </code>
-                          <p className="m-0 text-2xs break-words text-muted-foreground">
-                            {file.note}
-                          </p>
-                          <time
-                            className="text-2xs text-muted-foreground"
-                            dateTime={file.createdAt}
-                          >
-                            {formatBusinessDate(file.createdAt)}
-                          </time>
-                        </div>
-                        <div className="flex flex-col items-end gap-2">
-                          <Badge variant="success">{file.status}</Badge>
-                          <a
-                            className="text-xs font-extrabold text-primary"
-                            href={`/api/businesses/${encodeURIComponent(business.id)}/files/${encodeURIComponent(file.id)}`}
-                            rel="noreferrer"
-                            target="_blank"
-                          >
-                            Open
-                          </a>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
-                )}
-              </TabsContent>
-              <TabsContent className="flex flex-col gap-2.5" value="records">
-                <header className="flex items-center justify-between">
-                  <h2 className="text-md font-extrabold -tracking-[.2px]">
-                    Registrations and permits
-                  </h2>
-                  <span className="text-xs text-muted-foreground">
-                    {business.records.length} records
-                  </span>
-                </header>
-                {business.records.map((record) => (
-                  <Card key={record.id}>
-                    <CardContent className="grid grid-cols-[38px_1fr_auto] items-start gap-2.5">
-                      <span className="grid size-[38px] place-items-center rounded-lg bg-secondary text-primary">
-                        <FileTextIcon weight="duotone" />
-                      </span>
-                      <div className="flex min-w-0 flex-col gap-0.5">
-                        <strong className="text-xs">{record.title}</strong>
-                        <p className="m-0 text-2xs break-words text-muted-foreground">
-                          {record.agency}
-                        </p>
-                        <span className="text-2xs break-words text-muted-foreground">
-                          {record.referenceNumber}
-                        </span>
-                        <span className="mt-0.5 text-2xs break-words text-muted-foreground">
-                          {record.note}
-                        </span>
-                      </div>
-                      <Badge
-                        variant={
-                          record.status === "Not required"
-                            ? "neutral"
-                            : record.status === "Scheduled"
-                              ? "warning"
-                              : "success"
-                        }
-                      >
-                        {record.status}
-                      </Badge>
-                    </CardContent>
-                  </Card>
-                ))}
-              </TabsContent>
-              <TabsContent className="flex flex-col gap-2.5" value="calendar">
-                <header className="flex items-center justify-between px-0.5">
-                  <div>
-                    <span className="mb-0.5 block text-xs font-bold text-primary">
-                      Tax calendar
-                    </span>
-                    <h2 className="text-md font-extrabold -tracking-[.2px]">
-                      Upcoming obligations
-                    </h2>
-                  </div>
-                  <CalendarDotsIcon className="size-[30px] text-primary" weight="duotone" />
-                </header>
-                <p className="mx-0.5 mb-1 text-2xs text-muted-foreground">
-                  {business.taxObligations.length
-                    ? "DX BIR demo reminders are based only on the legal business type. Confirm tax types and filing deadlines directly with BIR."
-                    : "No tax calendar is saved for this record. Confirm tax types and filing deadlines directly with BIR."}
-                </p>
-                {business.taxObligations.map((obligation) => {
-                  const date = new Date(`${obligation.dueDate}T00:00:00Z`);
-                  return (
-                    <Card key={obligation.id}>
-                      <CardContent className="grid grid-cols-[47px_1fr_auto] items-start gap-2.5">
-                        <time
-                          className="flex flex-col items-center rounded-lg bg-secondary py-1.5 text-primary"
-                          dateTime={obligation.dueDate}
+                        <span
+                          className={cn(
+                            "grid size-10 place-items-center rounded-xl",
+                            TONE_TILE[tone],
+                          )}
                         >
-                          <strong className="text-lg leading-none">
-                            {date.toLocaleDateString("en-PH", { day: "2-digit", timeZone: "UTC" })}
-                          </strong>
-                          <span className="mt-0.5 text-2xs font-black">
-                            {date
-                              .toLocaleDateString("en-PH", { month: "short", timeZone: "UTC" })
-                              .toUpperCase()}
+                          <Icon className="size-[21px]" weight="duotone" />
+                        </span>
+                        <span className="flex min-w-0 flex-col gap-0.5">
+                          <strong className="text-base">{file.title}</strong>
+                          <span className="truncate text-meta text-gray-600">
+                            {file.documentType} · {file.filename}
                           </span>
-                        </time>
-                        <div className="flex min-w-0 flex-col gap-0.5">
-                          <span className="text-2xs font-extrabold text-primary">
-                            {obligation.formCode} · {obligation.frequency}
+                        </span>
+                        <span className="flex flex-none flex-col items-end gap-[5px]">
+                          <Badge variant={statusVariant(file.status)}>{file.status}</Badge>
+                          <span className="inline-flex items-center gap-1 text-meta font-extrabold text-primary">
+                            Open
+                            <ArrowUpRightIcon className="size-[11px]" weight="bold" />
                           </span>
-                          <strong className="text-xs">{obligation.title}</strong>
-                          <span className="text-2xs text-muted-foreground">
-                            {obligation.periodLabel}
-                          </span>
-                          <p className="m-0 text-2xs text-muted-foreground">{obligation.note}</p>
-                        </div>
-                        <Badge variant={obligation.status === "Upcoming" ? "warning" : "neutral"}>
-                          {obligation.status}
-                        </Badge>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </TabsContent>
-            </Tabs>
-          </>
-        )}
-      </div>
+                        </span>
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
+              <span className="mt-3 inline-flex items-start gap-[7px] pb-1 text-meta leading-[1.45] text-muted-foreground">
+                <ShieldCheckIcon
+                  className="mt-px size-[13px] flex-none text-success"
+                  weight="fill"
+                />
+                Preview files. Form 1901 still has to be submitted to BIR.
+              </span>
+            </TabsContent>
+
+            <TabsContent className="flex flex-col gap-2.5" value="calendar">
+              {business.taxObligations.map((obligation, index) => {
+                const { day, month } = businessDateParts(obligation.dueDate);
+                // Only the soonest states a day count: four rows each counting
+                // down turned a schedule into four competing alarms.
+                const soonest = index === 0;
+                return (
+                  <article
+                    className={cn(
+                      "grid grid-cols-[48px_minmax(0,1fr)] items-center gap-3 rounded-2xl border bg-white p-3.5",
+                      soonest ? "border-primary-border" : "border-border",
+                    )}
+                    key={obligation.id}
+                  >
+                    <time
+                      className={cn(
+                        "flex size-12 flex-col items-center justify-center rounded-[13px]",
+                        soonest ? "bg-secondary" : "bg-gray-100",
+                      )}
+                      dateTime={obligation.dueDate}
+                    >
+                      <strong
+                        className={cn(
+                          "text-md leading-none",
+                          soonest ? "text-primary" : "text-gray-800",
+                        )}
+                      >
+                        {day}
+                      </strong>
+                      <span
+                        className={cn(
+                          "text-xs font-extrabold",
+                          soonest ? "text-primary/70" : "text-gray-600",
+                        )}
+                      >
+                        {month}
+                      </span>
+                    </time>
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <span
+                        className={cn(
+                          "text-meta font-extrabold",
+                          soonest ? "text-primary" : "text-gray-600",
+                        )}
+                      >
+                        {soonest
+                          ? `${capitalize(dueInLabel(obligation.dueDate))} · ${obligation.status}`
+                          : obligation.status}
+                      </span>
+                      <strong className="text-base leading-[1.3]">{obligation.title}</strong>
+                      <span className="text-meta text-gray-600">
+                        {obligation.formCode} · {obligation.periodLabel}
+                      </span>
+                    </div>
+                  </article>
+                );
+              })}
+              <span className="mt-1 inline-flex items-start gap-[7px] pb-1 text-meta leading-[1.45] text-muted-foreground">
+                <InfoIcon className="mt-px size-[13px] flex-none text-primary" weight="fill" />
+                Sample schedule for a sole proprietor. Confirm registered tax types with BIR.
+              </span>
+            </TabsContent>
+          </div>
+        </Tabs>
+      )}
       <BottomNav active="business" />
     </div>
   );
 }
-// onBack and profile are always provided by this module-private component's
-// single caller (BusinessDetailScreen, whose own props require both), so
-// there is no "no back button" / "no profile" fallback to render here.
-function Header({
-  title,
-  onBack,
-  profile,
+
+const RECORD_TABS = [
+  ["overview", "Overview"],
+  ["records", "Records"],
+  ["files", "Files"],
+  ["calendar", "Tax calendar"],
+] as const;
+
+type RecordTab = (typeof RECORD_TABS)[number][0];
+
+function capitalize(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+// Said once per tab, not once per row. Every records and files row used to carry
+// its own copy of this, which is how eight rows came to repeat one disclaimer
+// eight times.
+function DemoRecordsNote({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-[7px] text-meta text-muted-foreground",
+        className,
+      )}
+    >
+      <ShieldCheckIcon className="size-[13px] text-success" weight="fill" />
+      Demo records — not official agency documents
+    </span>
+  );
+}
+
+function BusinessAssistantCard({
+  business,
+  conversations,
+  loading,
+  onNewChat,
+  onOpenChat,
+  onShowAllChats,
 }: {
-  title?: string;
-  onBack: () => void;
-  profile: CitizenProfile;
+  business: RegisteredBusinessDetail;
+  conversations: ConversationSummary[];
+  loading: boolean;
+  onNewChat: (businessId: string) => void;
+  onOpenChat: (conversationId: string) => void;
+  onShowAllChats: (businessId: string) => void;
 }) {
   return (
-    <header className="grid h-[58px] grid-cols-[40px_1fr_40px] items-center gap-2.5 px-5 pt-1.5 pb-2">
-      <IconButton aria-label="Go back" data-cuelume-toggle="page" onClick={onBack} variant="plain">
-        <ArrowLeftIcon />
-      </IconButton>
-      {title ? <h1 className="text-center text-md -tracking-[.3px]">{title}</h1> : <span />}
-      <ProfileAvatar
-        className="size-9 justify-self-end rounded-full border-2 border-white object-cover shadow-[0_0_0_1px_var(--line)]"
-        profile={profile}
-      />
-    </header>
+    <section className="flex flex-col gap-3.5 rounded-[20px] border-[1.5px] border-primary-border bg-[linear-gradient(155deg,var(--gray-50)_0%,var(--primary-tint)_60%,var(--primary-tint-strong)_100%)] p-[18px]">
+      <div className="grid grid-cols-[46px_minmax(0,1fr)] items-center gap-[13px]">
+        <span className="grid size-[46px] place-items-center rounded-[14px] bg-primary text-white">
+          <ChatCircleDotsIcon className="size-6" weight="fill" />
+        </span>
+        <div className="flex min-w-0 flex-col gap-[3px]">
+          <h2 className="truncate text-[19px] leading-[1.3] font-extrabold -tracking-[.3px] text-primary-ink">
+            Ask about {business.name}
+          </h2>
+          <p className="text-sm leading-[1.55] text-primary-ink/80">
+            Taxes, files, permits, and what’s still open.
+          </p>
+        </div>
+      </div>
+      {loading ? (
+        <div className="skeleton-card h-[46px] rounded-[13px]" />
+      ) : conversations.length > 0 ? (
+        <div className="flex flex-col gap-[7px]">
+          {conversations.slice(0, 3).map((conversation) => (
+            <button
+              className={cn(
+                "grid grid-cols-[minmax(0,1fr)_14px] items-center gap-2.5 rounded-[13px] border border-primary-border bg-white/92 px-[13px] py-3 text-left",
+                "transition-[background-color,scale] duration-150 ease-[var(--ease-out)] hover:bg-white active:scale-[var(--press-lg)]",
+                FOCUS_RING,
+              )}
+              data-cuelume-toggle="page"
+              key={conversation.id}
+              onClick={() => onOpenChat(conversation.id)}
+              type="button"
+            >
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <strong className="truncate text-copy leading-[1.4]">{conversation.title}</strong>
+                <time className="text-meta text-primary-ink/70" dateTime={conversation.updatedAt}>
+                  {formatBusinessDate(conversation.updatedAt)}
+                </time>
+              </span>
+              <CaretRightIcon className="size-[13px] text-primary/50" weight="bold" />
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <div className="flex items-center gap-2">
+        <button
+          className={cn(
+            "flex h-[46px] flex-1 items-center justify-center gap-2 rounded-[13px] bg-primary text-base font-extrabold text-white",
+            "transition-[background-color,scale] duration-150 ease-[var(--ease-out)] hover:bg-[var(--primary-hover)] active:scale-[var(--press-lg)]",
+            FOCUS_RING,
+          )}
+          data-cuelume-toggle="page"
+          onClick={() => onNewChat(business.id)}
+          type="button"
+        >
+          <PlusIcon className="size-[15px]" weight="bold" />
+          New question
+        </button>
+        {conversations.length > 0 && (
+          <button
+            className={cn(
+              "flex h-[46px] flex-none items-center gap-[7px] rounded-[13px] border border-primary-border bg-white/92 px-4 text-base font-extrabold text-primary",
+              "transition-[background-color,scale] duration-150 ease-[var(--ease-out)] hover:bg-white active:scale-[var(--press-lg)]",
+              FOCUS_RING,
+            )}
+            data-cuelume-toggle="page"
+            onClick={() => onShowAllChats(business.id)}
+            type="button"
+          >
+            Show all
+            <ArrowRightIcon className="size-3.5" weight="bold" />
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// Every chat scoped to one business, which is the list the record's "Show all"
+// promises. Rows carry a title and a date and no answer preview: a preview line
+// would mean loading each transcript's last assistant message to render a list.
+export function BusinessChatsScreen({
+  business,
+  conversations,
+  loading,
+  onBack,
+  onNewChat,
+  onOpenChat,
+}: {
+  business: RegisteredBusinessDetail | null;
+  conversations: ConversationSummary[];
+  loading: boolean;
+  onBack: () => void;
+  onNewChat: (businessId: string) => void;
+  onOpenChat: (conversationId: string) => void;
+}) {
+  const name = business?.name ?? "this business";
+  return (
+    <div className="screen screen-stack screen-ground">
+      <StatusBar />
+      <header className="grid shrink-0 grid-cols-[38px_minmax(0,1fr)_34px] items-center gap-2 border-b border-[var(--line-soft)] bg-white px-4 pt-1 pb-3">
+        <IconButton
+          aria-label="Back to business record"
+          className="size-[38px]"
+          data-cuelume-toggle="page"
+          onClick={onBack}
+          variant="plain"
+        >
+          <ArrowLeftIcon className="size-[19px]" weight="bold" />
+        </IconButton>
+        <span className="flex min-w-0 flex-col items-center gap-px">
+          <h1 className="max-w-full truncate text-[16px] leading-[1.3] font-extrabold -tracking-[.2px]">
+            Chats about {name}
+          </h1>
+          <span className="text-meta font-semibold text-muted-foreground">
+            {conversations.length === 1 ? "1 saved chat" : `${conversations.length} saved chats`}
+          </span>
+        </span>
+        {business && (
+          <IconButton
+            aria-label={`Start a new chat about ${name}`}
+            className="size-[34px] justify-self-end"
+            data-cuelume-toggle="page"
+            onClick={() => onNewChat(business.id)}
+            variant="primary"
+          >
+            <PlusIcon className="size-[17px]" weight="bold" />
+          </IconButton>
+        )}
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3.5 pb-6" id="app-content">
+        {loading ? (
+          <div aria-hidden="true" className="skeleton-card h-[200px] rounded-2xl" />
+        ) : conversations.length === 0 ? (
+          <div className="flex flex-col items-center rounded-2xl border border-dashed border-border p-6 text-center">
+            <ChatCircleTextIcon className="mb-2 size-[34px] text-primary" weight="duotone" />
+            <strong className="text-base">No chats about {name} yet</strong>
+            <p className="mt-1 text-meta leading-[1.5] text-muted-foreground">
+              Ask about its taxes, files or permits and the conversation is saved here.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-border bg-white">
+            {conversations.map((conversation) => (
+              <button
+                className={cn(
+                  "grid w-full grid-cols-[36px_minmax(0,1fr)_14px] items-center gap-3 border-t border-[var(--row-divider)] p-3.5 text-left first:border-t-0",
+                  "transition-colors duration-150 hover:bg-gray-50",
+                  FOCUS_RING,
+                )}
+                data-cuelume-toggle="page"
+                key={conversation.id}
+                onClick={() => onOpenChat(conversation.id)}
+                type="button"
+              >
+                <span className="grid size-9 place-items-center rounded-[11px] bg-secondary text-primary">
+                  <ChatCircleTextIcon className="size-[19px]" weight="duotone" />
+                </span>
+                <span className="flex min-w-0 flex-col gap-[3px]">
+                  <strong className="truncate text-base leading-[1.4]">{conversation.title}</strong>
+                  <time className="text-meta text-gray-500" dateTime={conversation.updatedAt}>
+                    {formatBusinessDate(conversation.updatedAt)}
+                  </time>
+                </span>
+                <CaretRightIcon className="size-[13px] text-gray-500" weight="bold" />
+              </button>
+            ))}
+          </div>
+        )}
+        <span className="mt-3 inline-flex items-start gap-[7px] text-meta leading-[1.5] text-muted-foreground">
+          <ShieldCheckIcon className="mt-px size-[13px] flex-none text-success" weight="fill" />
+          Only chats scoped to this business. Other plans live in Business.
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -608,171 +774,206 @@ export function BusinessLanding({
   // list is still loading, assume they are returning: showing the first-run
   // hero and then reshuffling once data arrives is worse than either order.
   const returning = businessesLoading || (businesses?.length ?? 0) > 0 || conversations.length > 0;
-
-  const submitButton = (
-    <IconButton
-      aria-label="Continue"
-      data-cuelume-toggle="page"
-      disabled={!prompt.trim()}
-      type="submit"
-      variant="primary"
-    >
-      <ArrowRightIcon weight="bold" />
-    </IconButton>
-  );
+  // The handoff's threshold, not `.trim()`: three characters is not a business
+  // description, and lighting the field up for "cof" promises the agent can do
+  // something with it.
+  const ready = prompt.trim().length > 3;
 
   const composer = (
     <form
       className={cn(
-        "rounded-2xl border-[1.5px] border-input-strong bg-white transition-[border-color,box-shadow] focus-within:border-primary focus-within:shadow-[0_12px_32px_rgba(7,85,233,0.11)]",
-        returning
-          ? "flex items-center gap-2.5 py-2.5 pr-2.5 pl-[15px] shadow-sm"
-          : "p-[15px] shadow-md",
+        "rounded-[20px] border-[1.5px] bg-white p-1.5 transition-[border-color] duration-200 focus-within:border-primary",
+        ready ? "border-primary" : "border-input-strong",
       )}
       onSubmit={submit}
     >
-      <Textarea
-        aria-label="Describe your business idea"
-        className={cn(
-          "min-h-0 resize-none border-0 bg-transparent p-0 text-base leading-[1.45] shadow-none focus:border-transparent focus:ring-0",
-          returning && "self-center py-1",
-        )}
-        onChange={(event) => setPrompt(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-            event.preventDefault();
-            event.currentTarget.form?.requestSubmit();
-          }
-        }}
-        placeholder="Describe your business idea…"
-        ref={inputRef}
-        rows={returning ? 1 : 3}
-        value={prompt}
-      />
-      {returning ? (
-        submitButton
-      ) : (
-        <div className="mt-2.5 flex items-center justify-between">
-          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-primary">
-            <ShieldCheckIcon className="size-[13px]" weight="fill" />
-            Your details stay private
-          </span>
-          {submitButton}
-        </div>
-      )}
+      <div className="flex items-center gap-2 py-1.5 pr-1.5 pl-3">
+        <Textarea
+          aria-label="Describe your business idea"
+          className="min-h-0 resize-none self-center border-0 bg-transparent p-0 text-base leading-[1.45] font-semibold shadow-none focus:border-transparent focus:ring-0"
+          onChange={(event) => setPrompt(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              event.currentTarget.form?.requestSubmit();
+            }
+          }}
+          placeholder="A coffee cart, a sari-sari store, freelance work…"
+          ref={inputRef}
+          rows={1}
+          value={prompt}
+        />
+        {/* A rounded square, not the circle IconButton draws by default: it is
+            paired with the field's own 20px radius rather than standing alone,
+            and the disabled fill is stated because opacity-50 on brand blue
+            still reads as an available primary action. */}
+        <IconButton
+          aria-label="Continue"
+          className={cn(
+            "size-10 rounded-[13px]",
+            ready ? "" : "bg-muted text-gray-500 shadow-none",
+          )}
+          data-cuelume-toggle="page"
+          disabled={!ready}
+          type="submit"
+          variant="primary"
+        >
+          <ArrowRightIcon className="size-[18px]" weight="bold" />
+        </IconButton>
+      </div>
+      {/* One non-wrapping row that scrolls. Stacked, these three read as a menu
+          of three products; in a row they read as what they are — examples of
+          the sentence the field wants. */}
+      <div className="flex gap-1.5 overflow-x-auto px-1.5 pt-0.5 pb-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {suggestions.map(({ icon: Icon, label, text }) => (
+          <button
+            className={cn(
+              "inline-flex shrink-0 items-center gap-1.5 rounded-full bg-gray-100 px-3 py-2 text-sm font-bold whitespace-nowrap text-gray-800",
+              // scale, not transform — see the note on optionCard in
+              // business-chat-screen.tsx for why a hand-written transition list
+              // has to name it.
+              "transition-[scale,background-color,color] duration-150 ease-[var(--ease-out)] hover:bg-primary-tint hover:text-primary active:scale-[var(--press-md)]",
+              FOCUS_RING,
+            )}
+            data-cuelume-toggle="toggle"
+            key={label}
+            onClick={() => {
+              setPrompt(text);
+              inputRef.current?.focus();
+            }}
+            type="button"
+          >
+            <Icon className="size-[14px] text-primary" />
+            {label}
+          </button>
+        ))}
+      </div>
     </form>
   );
 
-  // These write into the textarea and focus it, so they belong under the field
-  // rather than below the saved plans. No trailing arrow — nothing navigates —
-  // and 62px rows at 15px overstated what amounts to placeholder text.
-  const prompts = (
-    <div className="mt-2.5 flex flex-col gap-1.5">
-      {suggestions.map(({ icon: Icon, text }) => (
-        <button
-          className={cn(
-            "grid w-full grid-cols-[22px_1fr] items-center gap-2.5 rounded-md border border-border bg-white px-3 py-2.5 text-left text-sm leading-[1.35] font-semibold text-foreground",
-            // These write into the textarea rather than navigating, so the
-            // press is the whole confirmation the user gets that the tap landed
-            // on the row they aimed at.
-            // scale, not transform — see the note on optionCard in
-            // business-chat-screen.tsx for why a hand-written transition list
-            // has to name it.
-            "transition-[scale,border-color,background-color] duration-150 ease-[var(--ease-out)] hover:border-input-strong hover:bg-gray-50 active:scale-[var(--press-lg)]",
-            FOCUS_RING,
-          )}
-          data-cuelume-toggle="toggle"
-          key={text}
-          onClick={() => {
-            setPrompt(text);
-            inputRef.current?.focus();
-          }}
-          type="button"
-        >
-          <Icon className="size-[15px] text-primary" />
-          {text}
-        </button>
-      ))}
+  // 17px/800 with its meta on the same baseline, not a 20px title over an
+  // all-caps eyebrow: three of these stack on one screen, and an eyebrow each
+  // spends a line saying what the heading beside it already says.
+  const sectionHeading = (title: string, meta?: ReactNode) => (
+    <div className="flex items-baseline justify-between gap-3">
+      <h2 className="text-md font-extrabold -tracking-[.2px]">{title}</h2>
+      {meta}
     </div>
   );
 
   const plansSection = conversations.length > 0 && (
-    <section className="mt-7">
-      <div className="mb-3">
-        {/* Deliberately not "In progress": ConversationSummary carries only
-            id/title/initialPrompt/activeStreamId/createdAt/updatedAt, so this
-            screen cannot tell a finished plan from an abandoned one. Saying
-            otherwise is a claim the data does not support. Per-plan status wants
-            the summary to carry the latest plan's step counts. */}
-        <small className="mb-0.5 block text-xs font-bold text-primary">Saved sessions</small>
-        <h2 className="text-lg -tracking-[.5px]">Registration plans</h2>
-      </div>
-      <div className="flex flex-col gap-2">
-        {/* The press lives on the row, not on either button inside it. :active
-            propagates to ancestors, so pressing resume or delete dips the whole
-            row as one object — scaling only the resume half would shear it away
-            from the delete column it shares a border with. */}
-        {conversations.map((conversation) => (
-          <div
-            className="grid grid-cols-[minmax(0,1fr)_34px] overflow-hidden rounded-lg border border-border bg-white transition-transform duration-150 ease-[var(--ease-out)] active:scale-[var(--press-lg)]"
-            key={conversation.id}
-          >
-            <button
-              className={cn(
-                "grid min-h-[58px] min-w-0 grid-cols-[minmax(0,1fr)_18px] items-center gap-2.5 px-3 py-2.5 text-left transition-colors duration-150 hover:bg-gray-50",
-                FOCUS_RING,
-              )}
-              data-cuelume-toggle="page"
-              onClick={() => onResume(conversation.id)}
-              type="button"
+    <section className="mt-[22px]">
+      {sectionHeading(
+        "In progress",
+        <span className="text-meta font-bold text-gray-600">
+          {conversations.length === 1 && conversations[0].progress
+            ? `${conversations[0].progress.completed} of ${conversations[0].progress.total} steps`
+            : `${conversations.length} plans`}
+        </span>,
+      )}
+      <div className="mt-2.5 flex flex-col gap-2.5">
+        {/* Quiet on purpose. This is the row that must not outshine a registered
+            business above it: the resume action is text, not a button, and the
+            card carries a border rather than a shadow. */}
+        {conversations.map((conversation) => {
+          const progress = conversation.progress;
+          const complete = Boolean(progress?.done);
+          return (
+            <div
+              className="rounded-xl border border-border bg-white p-3.5 transition-colors duration-150 ease-[var(--ease-out)] hover:border-primary-border"
+              key={conversation.id}
             >
-              <span className="grid min-w-0 gap-[3px]">
-                <strong className="truncate text-sm">{conversation.title}</strong>
-                <small className="text-2xs text-muted-foreground">
-                  {conversation.progress
-                    ? `${
-                        conversation.progress.done
-                          ? "Complete"
-                          : `${conversation.progress.completed} of ${conversation.progress.total} steps`
-                      } · `
-                    : null}
-                  Updated {new Date(conversation.updatedAt).toLocaleDateString()}
-                </small>
-              </span>
-              <ArrowRightIcon className="size-4 text-primary" />
-            </button>
-            {/* Quiet by default. A divider plus destructive ink gave deleting the
-                same billing as resuming, on the row that represents work in
-                progress — and the confirm dialog is what makes it safe, not the
-                colour. */}
-            <button
-              aria-label={`Delete ${conversation.title}`}
-              className={cn(
-                "grid place-items-center text-gray-500 transition-colors hover:bg-destructive-soft hover:text-destructive-ink",
-                FOCUS_RING,
+              <div className="grid grid-cols-[36px_minmax(0,1fr)_auto_24px] items-center gap-2">
+                <span className="grid size-9 place-items-center rounded-[11px] bg-secondary text-primary">
+                  <ListChecksIcon className="size-[19px]" weight="duotone" />
+                </span>
+                <button
+                  className={cn(
+                    "grid min-w-0 gap-0.5 rounded-md text-left",
+                    "transition-transform duration-150 ease-[var(--ease-out)] active:scale-[var(--press-lg)]",
+                    FOCUS_RING,
+                  )}
+                  data-cuelume-toggle="page"
+                  onClick={() => onResume(conversation.id)}
+                  type="button"
+                >
+                  <strong className="truncate text-base leading-[1.4]">{conversation.title}</strong>
+                  <span className="truncate text-meta text-muted-foreground">
+                    {complete
+                      ? "Plan complete"
+                      : progress?.nextLabel
+                        ? `Next: ${progress.nextLabel}`
+                        : `Updated ${formatBusinessDate(conversation.updatedAt)}`}
+                  </span>
+                </button>
+                <button
+                  className={cn(
+                    "inline-flex shrink-0 items-center gap-[5px] rounded-md text-sm font-extrabold text-primary",
+                    FOCUS_RING,
+                  )}
+                  data-cuelume-toggle="page"
+                  onClick={() => onResume(conversation.id)}
+                  type="button"
+                >
+                  {complete ? "Open plan" : "Continue plan"}
+                  <ArrowRightIcon className="size-[13px]" weight="bold" />
+                </button>
+                {/* Quiet by default. A divider plus destructive ink gave deleting
+                    the same billing as resuming, on the row that represents work
+                    in progress — and the confirm dialog is what makes it safe,
+                    not the colour. Not in the handoff, which draws no way to
+                    remove a plan; dropping the only one there is is not a design
+                    decision this screen gets to make. */}
+                <button
+                  aria-label={`Delete ${conversation.title}`}
+                  className={cn(
+                    "grid size-6 place-items-center justify-self-end rounded-md text-gray-400 transition-colors hover:text-destructive-ink",
+                    FOCUS_RING,
+                  )}
+                  data-cuelume-toggle="droplet"
+                  onClick={() => onDelete(conversation)}
+                  type="button"
+                >
+                  <TrashIcon className="size-[15px]" />
+                </button>
+              </div>
+              {progress && progress.total > 0 && (
+                <div
+                  aria-label={`${progress.completed} of ${progress.total} steps done`}
+                  className="mt-[11px] flex gap-1"
+                  role="img"
+                >
+                  {Array.from({ length: progress.total }, (_, step) => (
+                    <span
+                      className={cn(
+                        "h-1 flex-1 rounded-full transition-colors duration-300",
+                        step < progress.completed ? "bg-primary" : "bg-primary-border",
+                      )}
+                      key={step}
+                    />
+                  ))}
+                </div>
               )}
-              data-cuelume-toggle="droplet"
-              onClick={() => onDelete(conversation)}
-              type="button"
-            >
-              <TrashIcon className="size-[15px]" />
-            </button>
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
     </section>
   );
 
   const businessesSection = (
-    <section className="mt-7">
-      <div className="mb-[13px]">
-        <small className="mb-0.5 block text-xs font-bold text-primary">Linked to your TIN</small>
-        <h2 className="text-lg -tracking-[.5px]">Your businesses</h2>
-      </div>
+    <section className="mt-3.5">
+      {sectionHeading(
+        "Your businesses",
+        <span className="inline-flex items-center gap-1.5 text-meta font-semibold text-muted-foreground">
+          <ShieldCheckIcon className="size-3 text-success" weight="fill" />
+          Linked to your TIN
+        </span>,
+      )}
       {businessesLoading ? (
-        <div className="skeleton-card h-[82px] rounded-xl" />
+        <div className="skeleton-card mt-2.5 h-[118px] rounded-[18px]" />
       ) : businesses?.length === 0 ? (
-        <div className="resolve-in flex min-h-[82px] items-center gap-3 rounded-xl border border-dashed border-gray-300 bg-white p-3.5 text-muted-foreground">
+        <div className="resolve-in mt-2.5 flex min-h-[82px] items-center gap-3 rounded-[18px] border border-dashed border-gray-300 bg-white p-3.5 text-muted-foreground">
           <BriefcaseIcon className="size-[30px] shrink-0 text-primary" weight="duotone" />
           <div className="flex flex-col gap-[3px]">
             <strong className="text-base text-foreground">No linked businesses yet</strong>
@@ -782,56 +983,21 @@ export function BusinessLanding({
           </div>
         </div>
       ) : (
-        <>
-          <div className="resolve-in flex flex-col gap-2.5">
-            {businesses?.map((business) => (
-              <button
-                className={cn(
-                  "group block w-full rounded-xl text-left",
-                  "transition-transform duration-150 ease-[var(--ease-out)] active:scale-[var(--press-lg)]",
-                  FOCUS_RING,
-                )}
-                data-cuelume-toggle="page"
-                key={business.id}
-                onClick={() => onOpenBusiness(business.id)}
-                type="button"
-              >
-                {/* Hover lifts the card's own shadow rather than tinting it: the
-                    card is white on a white-ish ground, so a background change
-                    reads as a colour bug where depth reads as "this opens". */}
-                <Card className="transition-shadow duration-150 group-hover:shadow-md">
-                  <CardContent className="grid grid-cols-[44px_1fr_auto] items-center gap-[11px]">
-                    <span className="grid size-11 place-items-center rounded-lg bg-secondary text-primary">
-                      <BriefcaseIcon className="size-[23px]" weight="duotone" />
-                    </span>
-                    <div className="flex min-w-0 flex-col">
-                      <strong className="truncate text-base">{business.name}</strong>
-                      <span className="text-sm text-muted-foreground">{business.type}</span>
-                      <small className="text-sm text-muted-foreground">
-                        {business.registrationNumber}
-                      </small>
-                    </div>
-                    <Badge variant="success">{business.status}</Badge>
-                  </CardContent>
-                </Card>
-              </button>
-            ))}
-          </div>
-          {/* A caption, not an Alert. It confirms something about the card right
-              above it; the full-width success banner was the treatment a real
-              warning gets, and it used to render over the empty state too,
-              claiming a match to nothing. */}
-          <span className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-            <ShieldCheckIcon className="size-[13px] text-success" weight="fill" />
-            Matched to your eGovPH account
-          </span>
-        </>
+        <div className="resolve-in mt-2.5 flex flex-col gap-2.5">
+          {businesses?.map((business) => (
+            <BusinessCard
+              business={business}
+              key={business.id}
+              onOpen={() => onOpenBusiness(business.id)}
+            />
+          ))}
+        </div>
       )}
     </section>
   );
 
   return (
-    <div className="screen">
+    <div className="screen screen-ground">
       <StatusBar />
       <header className="grid h-[58px] grid-cols-[40px_1fr_40px] items-center gap-2.5 px-5 pt-1.5 pb-2">
         <IconButton aria-label="Go back" onClick={onBack} variant="plain">
@@ -840,7 +1006,7 @@ export function BusinessLanding({
         <h1 className="text-center text-md -tracking-[.3px]">Business</h1>
         {profile && (
           <Avatar
-            className="justify-self-end border-2 border-white shadow-[0_0_0_1px_var(--line)]"
+            className="size-[34px] justify-self-end border-2 border-white shadow-[0_0_0_1px_var(--line)]"
             size="md"
           >
             {profile.avatarUrl && (
@@ -856,12 +1022,18 @@ export function BusinessLanding({
       >
         {returning ? (
           <>
+            {/* The order is the point of the redesign: what the citizen came
+                back for, then what is unfinished, then — below a rule, because
+                it is a different job — the invitation to start another. */}
             {businessesSection}
             {plansSection}
-            <section className="mt-7">
-              <h2 className="mb-3 text-lg -tracking-[.5px]">Start something new</h2>
-              {composer}
-              {prompts}
+            <div className="mt-6 h-px bg-line-soft" />
+            <section className="mt-[22px]">
+              <h2 className="text-md font-extrabold -tracking-[.2px]">Register another business</h2>
+              <p className="mt-[7px] text-sm leading-[1.6] text-muted-foreground">
+                Describe it in your own words — the agent turns it into a step-by-step plan.
+              </p>
+              <div className="mt-3">{composer}</div>
             </section>
           </>
         ) : (
@@ -882,13 +1054,82 @@ export function BusinessLanding({
               </p>
             </section>
             {composer}
-            {prompts}
             {businessesSection}
           </>
         )}
       </div>
       <BottomNav active="business" />
     </div>
+  );
+}
+
+function BusinessCard({ business, onOpen }: { business: RegisteredBusiness; onOpen: () => void }) {
+  const nextFiling = business.nextTaxDue;
+  const onFile =
+    business.recordCount === null || business.fileCount === null
+      ? null
+      : `${business.recordCount} records · ${business.fileCount} files`;
+  return (
+    <button
+      className={cn(
+        "relative block w-full overflow-hidden rounded-[18px] border border-border bg-white text-left",
+        "transition-[border-color,scale] duration-150 ease-[var(--ease-out)] hover:border-primary-border active:scale-[var(--press-lg)]",
+        FOCUS_RING,
+      )}
+      data-cuelume-toggle="page"
+      onClick={onOpen}
+      type="button"
+    >
+      {/* A wash, not a shadow: cards on this screen are separated by their
+          border, and the one card that opens the record gets warmth instead of
+          height so it does not read as floating over the others. */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute -top-[42px] -right-[30px] size-[118px] rounded-full bg-[radial-gradient(circle_at_40%_55%,rgba(7,85,233,.09),rgba(7,85,233,0)_70%)]"
+      />
+      <div className="relative grid grid-cols-[44px_minmax(0,1fr)_auto_14px] items-center gap-3 px-3.5 pt-[15px] pb-3.5">
+        <span className="grid size-11 place-items-center rounded-[14px] bg-[linear-gradient(145deg,var(--primary-lift)_0%,var(--primary-deep)_100%)] text-white shadow-[0_8px_16px_-10px_rgba(7,71,194,.9)]">
+          <StorefrontIcon className="size-[23px]" weight="duotone" />
+        </span>
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <strong className="truncate text-md leading-[1.3] -tracking-[.2px]">
+            {business.name}
+          </strong>
+          <span className="truncate text-sm text-muted-foreground">
+            {[business.type, business.city].filter(Boolean).join(" · ")}
+          </span>
+        </span>
+        <Badge className="text-meta" variant="success">
+          <span className="size-1.5 rounded-full bg-success" />
+          {business.status}
+        </Badge>
+        <CaretRightIcon className="size-3.5 text-gray-500" weight="bold" />
+      </div>
+      {(nextFiling || onFile) && (
+        <div className="relative grid grid-cols-2 gap-3 border-t border-[var(--line-soft)] bg-[linear-gradient(90deg,var(--gray-50)_0%,var(--surface)_60%)] px-3.5 py-[11px]">
+          {nextFiling && (
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="inline-flex items-center gap-[5px] text-xs text-gray-600">
+                <CalendarDotsIcon className="size-3 text-primary" weight="fill" />
+                Next filing
+              </span>
+              <strong className="truncate text-sm">
+                {shortBusinessDate(nextFiling)} · {dueInLabel(nextFiling)}
+              </strong>
+            </span>
+          )}
+          {onFile && (
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="inline-flex items-center gap-[5px] text-xs text-gray-600">
+                <FolderIcon className="size-3 text-primary" weight="fill" />
+                On file
+              </span>
+              <strong className="truncate text-sm">{onFile}</strong>
+            </span>
+          )}
+        </div>
+      )}
+    </button>
   );
 }
 
@@ -923,19 +1164,16 @@ export function EgaphBusinessApp({
   const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(null);
   const [businessRevision, setBusinessRevision] = useState(0);
   const [pendingDelete, setPendingDelete] = useState<ConversationSummary | null>(null);
-  // Landing → sign-in. Only ever true while signed out; authenticating unmounts
-  // the whole landing, so this never has to be reset on success.
+  // Only true while signed out; authenticating unmounts the landing, so this
+  // never needs resetting on success.
   const [signingIn, setSigningIn] = useState(false);
-  // The copy column's geometry, which both landing slides are derived from.
-  // Measured rather than computed because its width is a min()/clamp() of the
-  // viewport, and both values are 0 below the landing's breakpoint, where the
-  // column is display:none and nothing moves.
   const copyRef = useRef<HTMLDivElement>(null);
+  // State, not a ref: DialogContent reads this during render to pick its portal
+  // container, so the frame mounting has to cause a re-render.
+  const [phoneFrame, setPhoneFrame] = useState<HTMLElement | null>(null);
   const [copyBox, setCopyBox] = useState({ right: 0, width: 0 });
-  // Only the landing slides, and only above 760px. matchMedia rather than a CSS
-  // class because motion animates inline transforms and cannot read a media
-  // query — the phone must know to stay put on a handset, where the login screen
-  // is the page and there is no preview behind it.
+  // matchMedia rather than a CSS class: motion animates inline transforms and
+  // cannot read a media query.
   const [wide, setWide] = useState(false);
   useEffect(() => {
     const query = window.matchMedia("(min-width: 760px)");
@@ -1117,6 +1355,11 @@ export function EgaphBusinessApp({
     window.history.pushState({}, "", `?business=${encodeURIComponent(id)}`);
     void refreshBusinessConversations(id);
   };
+  const openBusinessChats = (id: string) => {
+    setSelectedBusinessId(id);
+    setScreen("business-chats");
+    void refreshBusinessConversations(id);
+  };
   const leaveBusinessDetail = () => {
     setSelectedBusinessId(null);
     setBusinessConversations([]);
@@ -1136,16 +1379,11 @@ export function EgaphBusinessApp({
     await logout();
     window.location.assign("/");
   };
-  // The landing is the signed-out experience, so it waits until we actually know
-  // the visitor is signed out. Rendering it during `loading` would flash a
-  // marketing page at someone who already has a session.
+  // Waits for a known-signed-out status, so a visitor with a session never sees
+  // the marketing page flash.
   const onLanding = status !== "loading" && !profile;
-  // offsetLeft/offsetWidth rather than a rect: both are layout values that ignore
-  // transforms, so a reading taken mid-slide is still the resting geometry. The
-  // offsetParent is .landing-stage, which spans the viewport, so offsetLeft is
-  // already a viewport coordinate. Re-measured on resize because the column's
-  // max-width is a min() of the viewport, and re-run when the landing mounts so
-  // the first reading is not taken against a column that is not there yet.
+  // offsetLeft/offsetWidth rather than a rect: they ignore transforms, so a
+  // reading taken mid-slide is still the resting geometry.
   useEffect(() => {
     const node = copyRef.current;
     if (!node) {
@@ -1159,13 +1397,11 @@ export function EgaphBusinessApp({
     observer.observe(node);
     return () => observer.disconnect();
   }, [onLanding, wide]);
-  // The copy travels to its own right edge, not merely its own width: it starts
-  // inset from the left of the viewport, so a translate of just the width leaves
-  // that inset — about 225px of headline at 1440 — still on screen.
+  // Right edge, not width: the copy is inset from the left, so travelling only
+  // its width leaves that inset (~225px of headline at 1440) on screen.
   const copySlide = copyBox.right;
-  // The phone travels half the copy's width, because the two are centred as one
-  // group: with the copy beside it, the phone sits W/2 to the right of where it
-  // would sit alone, so that is exactly the distance back to the middle.
+  // Half the copy's width: the pair is centred as one group, so the phone sits
+  // W/2 right of centre and that is the distance back.
   const phoneSlide = wide && signingIn ? -copyBox.width / 2 : 0;
   return (
     <div className="landing-stage">
@@ -1183,182 +1419,199 @@ export function EgaphBusinessApp({
         <motion.div
           animate={{ x: phoneSlide }}
           className="phone-shell"
-          // The phone is where it belongs on arrival; only Get started moves it.
           initial={false}
+          ref={setPhoneFrame}
           transition={LANDING}
         >
-          {status === "loading" ? (
-            <div
-              aria-live="polite"
-              className="screen grid place-content-center justify-items-center gap-4 bg-canvas! text-muted-foreground"
-              role="status"
-            >
-              <div className="grid size-[58px] animate-[auth-pulse_1.2s_ease-in-out_infinite_alternate] place-items-center rounded-[19px] bg-primary text-white motion-reduce:animate-none!">
-                <ShieldCheckIcon className="size-[30px]" weight="duotone" />
+          <PhoneFrame element={phoneFrame}>
+            {status === "loading" ? (
+              <div
+                aria-live="polite"
+                className="screen grid place-content-center justify-items-center gap-4 bg-canvas! text-muted-foreground"
+                role="status"
+              >
+                <div className="grid size-[58px] animate-[auth-pulse_1.2s_ease-in-out_infinite_alternate] place-items-center rounded-[19px] bg-primary text-white motion-reduce:animate-none!">
+                  <ShieldCheckIcon className="size-[30px]" weight="duotone" />
+                </div>
+                <p className="m-0 text-sm font-bold">Restoring your secure session…</p>
               </div>
-              <p className="m-0 text-sm font-bold">Restoring your secure session…</p>
-            </div>
-          ) : !profile ? (
-            // Both halves stay mounted and slide past each other: the Home
-            // preview leaves to the left as the login screen arrives from the
-            // right, each travelling its own full width so neither is ever
-            // visible outside the frame. Below 760px there is no landing to
-            // preview from, so the login screen is simply the page, parked at 0,
-            // and the preview never renders.
-            <>
-              {/* A picture of the product, not the product: there is no session
-                  yet, so this is the design's own sample citizen and the whole
-                  subtree is inert. */}
-              <motion.div
-                animate={{ x: signingIn ? "-100%" : "0%" }}
-                aria-hidden="true"
-                className="landing-preview hidden min-[760px]:block"
-                initial={false}
-                transition={LANDING}
-              >
-                <HomeScreen onBusiness={noop} onLogout={noop} profile={PREVIEW_PROFILE} />
-              </motion.div>
-              <motion.div
-                animate={{ x: wide && !signingIn ? "100%" : "0%" }}
-                // pointer-events rather than `hidden`: the screen has to keep its
-                // box through the slide, and only the half on screen may take a
-                // click.
-                className={cn("landing-login", wide && !signingIn && "pointer-events-none")}
-                initial={false}
-                transition={LANDING}
-              >
-                <LoginScreen
-                  initialError={authError}
-                  onBack={signingIn ? () => setSigningIn(false) : undefined}
-                />
-              </motion.div>
-            </>
-          ) : (
-            // One keyed wrapper per screen instead of five loose conditionals, so
-            // the outgoing screen stays mounted long enough to leave. Each is
-            // absolutely positioned because both halves have to occupy the same
-            // box during the swap; .phone-shell is already `position: relative;
-            // overflow: hidden`, which is what clips the 24px of travel.
-            // initial={false} stops the first screen animating in on load — that
-            // is an arrival, not a navigation.
-            <AnimatePresence custom={goingBack} initial={false}>
-              <motion.div
-                animate="animate"
-                className="absolute inset-0"
-                custom={goingBack}
-                exit="exit"
-                initial="initial"
-                key={screen}
-                transition={SCREEN}
-                variants={SCREEN_VARIANTS}
-              >
-                {screen === "restoring" && (
-                  <div className="screen bg-canvas!">
-                    <StatusBar />
-                    <div
-                      className="flex h-[calc(100%-36px)] flex-col items-center justify-center px-[38px] text-center"
-                      role="status"
-                    >
-                      <div className="relative grid size-[62px] animate-[soft-pulse_1.8s_infinite] rotate-[-4deg] place-items-center rounded-[22px] bg-primary text-white shadow-[0_12px_28px_rgba(7,85,233,0.24)] motion-reduce:animate-none!">
-                        <FolderOpenIcon className="size-[29px]" weight="fill" />
-                      </div>
-                      <h1 className="mt-7 mb-2 text-[25px] leading-[1.15] tracking-[-0.8px]">
-                        Opening your saved plan
-                      </h1>
-                      <p className="m-0 text-[14px] text-muted-foreground">
-                        Restoring the conversation…
-                      </p>
-                      <div aria-hidden="true" className="mt-6 flex gap-[5px]">
-                        <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary motion-reduce:animate-none!" />
-                        <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary [animation-delay:0.2s] motion-reduce:animate-none!" />
-                        <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary [animation-delay:0.4s] motion-reduce:animate-none!" />
+            ) : !profile ? (
+              // Both halves stay mounted and cross, each travelling its own full
+              // width. Below 760px the login screen is simply the page, parked at
+              // 0, and the preview never renders.
+              <>
+                <motion.div
+                  animate={{ x: signingIn ? "-100%" : "0%" }}
+                  aria-hidden="true"
+                  className="landing-preview hidden min-[760px]:block"
+                  initial={false}
+                  transition={LANDING}
+                >
+                  {/* Business is live even here: it is the one thing on the
+                    launcher this product does, and tapping it before signing in
+                    means the same thing as pressing Get started. The screen
+                    stays aria-hidden — Get started is the labelled path, and
+                    this is a picture of where you land. Logging out of a
+                    session that does not exist stays a no-op. */}
+                  <HomeScreen
+                    onBusiness={() => setSigningIn(true)}
+                    onLogout={noop}
+                    profile={PREVIEW_PROFILE}
+                  />
+                </motion.div>
+                <motion.div
+                  animate={{ x: wide && !signingIn ? "100%" : "0%" }}
+                  // pointer-events, not `hidden`: the screen keeps its box through
+                  // the slide, but only the visible half may take a click.
+                  className={cn("landing-login", wide && !signingIn && "pointer-events-none")}
+                  initial={false}
+                  transition={LANDING}
+                >
+                  <LoginScreen
+                    initialError={authError}
+                    onBack={signingIn ? () => setSigningIn(false) : undefined}
+                  />
+                </motion.div>
+              </>
+            ) : (
+              // One keyed wrapper per screen instead of five loose conditionals, so
+              // the outgoing screen stays mounted long enough to leave. Each is
+              // absolutely positioned because both halves have to occupy the same
+              // box during the swap; .phone-shell is already `position: relative;
+              // overflow: hidden`, which is what clips the 24px of travel.
+              // initial={false} stops the first screen animating in on load — that
+              // is an arrival, not a navigation.
+              <AnimatePresence custom={goingBack} initial={false}>
+                <motion.div
+                  animate="animate"
+                  className="absolute inset-0"
+                  custom={goingBack}
+                  exit="exit"
+                  initial="initial"
+                  key={screen}
+                  transition={SCREEN}
+                  variants={SCREEN_VARIANTS}
+                >
+                  {screen === "restoring" && (
+                    <div className="screen bg-canvas!">
+                      <StatusBar />
+                      <div
+                        className="flex h-[calc(100%-36px)] flex-col items-center justify-center px-[38px] text-center"
+                        role="status"
+                      >
+                        <div className="relative grid size-[62px] animate-[soft-pulse_1.8s_infinite] rotate-[-4deg] place-items-center rounded-[22px] bg-primary text-white shadow-[0_12px_28px_rgba(7,85,233,0.24)] motion-reduce:animate-none!">
+                          <FolderOpenIcon className="size-[29px]" weight="fill" />
+                        </div>
+                        <h1 className="mt-7 mb-2 text-[25px] leading-[1.15] tracking-[-0.8px]">
+                          Opening your saved plan
+                        </h1>
+                        <p className="m-0 text-[14px] text-muted-foreground">
+                          Restoring the conversation…
+                        </p>
+                        <div aria-hidden="true" className="mt-6 flex gap-[5px]">
+                          <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary motion-reduce:animate-none!" />
+                          <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary [animation-delay:0.2s] motion-reduce:animate-none!" />
+                          <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary [animation-delay:0.4s] motion-reduce:animate-none!" />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
-                {screen === "home" && (
-                  <HomeScreen
-                    profile={profile}
-                    onBusiness={() => setScreen("business")}
-                    onLogout={() => void signOut()}
-                  />
-                )}
-                {screen === "business" && (
-                  <BusinessLanding
-                    profile={profile}
-                    businesses={businesses}
-                    businessesLoading={businessesLoading}
-                    conversations={conversations}
-                    initialPrompt={prompt}
-                    onBack={() => setScreen("home")}
-                    onSubmit={startChat}
-                    onResume={(id) => void openConversation(id)}
-                    onDelete={setPendingDelete}
-                    onOpenBusiness={openBusiness}
-                  />
-                )}
-                {screen === "business-detail" && (
-                  <BusinessDetailScreen
-                    business={selectedBusiness}
-                    conversations={businessConversations}
-                    conversationsLoading={businessConversationsLoading}
-                    loading={selectedBusinessLoading}
-                    error={selectedBusinessError}
-                    onBack={leaveBusinessDetail}
-                    onNewChat={(businessId) => void startBusinessChat(businessId)}
-                    onOpenChat={(id) => void openConversation(id)}
-                    profile={profile}
-                  />
-                )}
-                {screen === "chat" && conversation && (
-                  <BusinessChatScreen
-                    business={selectedBusiness}
-                    key={conversation.id}
-                    conversation={conversation}
-                    conversations={
-                      conversation.purpose === "management" ? businessConversations : conversations
-                    }
-                    profile={profile}
-                    paymentStatus={paymentStatus}
-                    paymentService={paymentService}
-                    onBack={leaveChat}
-                    onNewConversation={() => {
-                      if (conversation.purpose === "management" && conversation.businessId)
-                        void startBusinessChat(conversation.businessId);
-                      else leaveChat();
-                    }}
-                    onOpenBusiness={openBusiness}
-                    onSelectConversation={(id) => void openConversation(id)}
-                    onDeleteConversation={setPendingDelete}
-                  />
-                )}
-              </motion.div>
-            </AnimatePresence>
-          )}
+                  )}
+                  {screen === "home" && (
+                    <HomeScreen
+                      profile={profile}
+                      onBusiness={() => setScreen("business")}
+                      onLogout={() => void signOut()}
+                    />
+                  )}
+                  {screen === "business" && (
+                    <BusinessLanding
+                      profile={profile}
+                      businesses={businesses}
+                      businessesLoading={businessesLoading}
+                      conversations={conversations}
+                      initialPrompt={prompt}
+                      onBack={() => setScreen("home")}
+                      onSubmit={startChat}
+                      onResume={(id) => void openConversation(id)}
+                      onDelete={setPendingDelete}
+                      onOpenBusiness={openBusiness}
+                    />
+                  )}
+                  {screen === "business-detail" && (
+                    <BusinessDetailScreen
+                      business={selectedBusiness}
+                      conversations={businessConversations}
+                      conversationsLoading={businessConversationsLoading}
+                      loading={selectedBusinessLoading}
+                      error={selectedBusinessError}
+                      onBack={leaveBusinessDetail}
+                      onNewChat={(businessId) => void startBusinessChat(businessId)}
+                      onOpenChat={(id) => void openConversation(id)}
+                      onShowAllChats={openBusinessChats}
+                      profile={profile}
+                    />
+                  )}
+                  {screen === "business-chats" && (
+                    <BusinessChatsScreen
+                      business={selectedBusiness}
+                      conversations={businessConversations}
+                      loading={businessConversationsLoading}
+                      onBack={() => setScreen("business-detail")}
+                      onNewChat={(businessId) => void startBusinessChat(businessId)}
+                      onOpenChat={(id) => void openConversation(id)}
+                    />
+                  )}
+                  {screen === "chat" && conversation && (
+                    <BusinessChatScreen
+                      business={selectedBusiness}
+                      key={conversation.id}
+                      conversation={conversation}
+                      conversations={
+                        conversation.purpose === "management"
+                          ? businessConversations
+                          : conversations
+                      }
+                      profile={profile}
+                      paymentStatus={paymentStatus}
+                      paymentService={paymentService}
+                      onBack={leaveChat}
+                      onOpenBusiness={openBusiness}
+                      onSelectConversation={(id) => void openConversation(id)}
+                      onDeleteConversation={setPendingDelete}
+                    />
+                  )}
+                </motion.div>
+              </AnimatePresence>
+            )}
+            {/* Inside the phone, not the page: DialogContent positions itself
+              against its nearest positioned ancestor, and above the screens
+              that is .phone-shell. At the .landing-stage level its sheet spanned
+              the whole viewport. */}
+            <ConfirmDialog
+              confirmLabel={pendingDelete?.purpose === "management" ? "Delete chat" : "Delete plan"}
+              description={
+                pendingDelete
+                  ? pendingDelete.purpose === "management"
+                    ? `“${pendingDelete.title}” and its messages will be permanently removed. This cannot be undone.`
+                    : `“${pendingDelete.title}” and its messages and payment history will be permanently removed. This cannot be undone.`
+                  : ""
+              }
+              onConfirm={() => {
+                if (pendingDelete) void deleteSession(pendingDelete);
+              }}
+              onOpenChange={(next) => {
+                if (!next) setPendingDelete(null);
+              }}
+              open={pendingDelete !== null}
+              title={
+                pendingDelete?.purpose === "management"
+                  ? "Delete this business chat?"
+                  : "Delete this registration plan?"
+              }
+            />
+          </PhoneFrame>
         </motion.div>
       </div>
-      <ConfirmDialog
-        confirmLabel={pendingDelete?.purpose === "management" ? "Delete chat" : "Delete plan"}
-        description={
-          pendingDelete
-            ? pendingDelete.purpose === "management"
-              ? `“${pendingDelete.title}” and its messages will be permanently removed. This cannot be undone.`
-              : `“${pendingDelete.title}” and its messages and payment history will be permanently removed. This cannot be undone.`
-            : ""
-        }
-        onConfirm={() => {
-          if (pendingDelete) void deleteSession(pendingDelete);
-        }}
-        onOpenChange={(next) => {
-          if (!next) setPendingDelete(null);
-        }}
-        open={pendingDelete !== null}
-        title={
-          pendingDelete?.purpose === "management"
-            ? "Delete this business chat?"
-            : "Delete this registration plan?"
-        }
-      />
     </div>
   );
 }

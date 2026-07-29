@@ -89,14 +89,24 @@
   --primary-border-strong: #a9bde9;
   --primary-ink: #183f8f;
 
+  /* Deep-blue ramp *below* --primary, for the gradient hero surfaces (launcher
+     announcement, business tile, next-filing card). The brand names one dark
+     blue, --egov-blue-dark (#073caa), and it is a hover/press ink: a single
+     stop, chosen against white. A gradient needs three, and reusing the ink as
+     a stop made every hero card read as a flat press state. */
+  --primary-lift: #0a5cf0;
+  --primary-deep: #0747c2;
+  --primary-deeper: #093a9e;
+
+  /* The "New in eGovPH" tag. --egov-gold (#f5b400) is a flat accent with no
+     surface step light enough to carry 11px ink at contrast. */
+  --gold-soft: #ffd75e;
+
   --success-border: #bfe4d6;
   --success-ink: #236348;
 
-  /* Orange tint family. Distinct from --warning-* below, which is the brand's
-     yellow (#fff4cc / #866000): the brand names orange only as the flat accent
-     --egov-orange, with no surface or ink step, so Home's amber quick-action
-     chip had no pair to reach for. These two are the Landing design's own
-     values, not an interpolation of an anchor. */
+  /* Not --warning-*, which is the brand's yellow. --egov-orange is a flat accent
+     with no surface or ink step, so Home's amber chip had no pair to reach for. */
   --orange-soft: #fff4e0;
   --orange-ink: #c07a00;
 
@@ -111,6 +121,17 @@
   /* Handoff values that were used on screen but never named. */
   --input-strong: #cfd9ec; /* emphasised input / outline-button border */
   --line-soft: #edf0f5; /* border on blurred and nav surfaces (lighter than Line) */
+  /* The phone's own chrome: the Dynamic Island cutout, and the payment panel
+     that expands out of it. --ink (#17233b) is body text and reads blue-grey at
+     that size — this has to read as a hole in the screen. --overlay-success is
+     the one green that holds contrast on it. */
+  --overlay-ink: #0b0e14;
+  --overlay-success: #5ecf8f;
+
+  /* Divider *between* rows inside one bordered card. Lighter than --line-soft,
+     which draws the card's own edge: at the same weight, eight grouped rows
+     read as eight separate cards. */
+  --row-divider: #f2f5fa;
 }
 
 /* ---- typography.css (variables only; NO @import) ---- */
@@ -120,7 +141,17 @@
 
   --text-2xs: 0.625rem; /* 10px */
   --text-xs: 0.6875rem; /* 11px */
+  /* 12px and 14px are the screen-overhaul handoff's, not the brand's. The
+     shipped ramp steps 11 -> 13 -> 15, and the handoff sets secondary meta
+     (chips, footnotes, row captions) at 12 and in-card body copy at 14 — so
+     every one of those landed on 11 or 13 and read either cramped or oversized
+     against the 15px value it labelled. Named rather than written inline
+     because between them they cover most text on the record and draft screens.
+     --text-meta, not --text-2sm: the ramp's names are relative, and a step
+     inserted between two of them cannot be. */
+  --text-meta: 0.75rem; /* 12px */
   --text-sm: 0.8125rem; /* 13px */
+  --text-copy: 0.875rem; /* 14px */
   --text-base: 0.9375rem; /* 15px */
   --text-md: 1.0625rem; /* 17px */
   --text-lg: 1.25rem; /* 20px */

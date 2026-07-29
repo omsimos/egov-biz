@@ -30,13 +30,8 @@ export const SCRIM_OUT: Transition = { duration: 0.16, ease: EASE_OUT };
 // to feel like waiting for it.
 export const SCREEN: Transition = { duration: 0.22, ease: EASE_OUT };
 
-// The landing's one hero move: pressing Get started slides the marketing copy
-// out of frame while the phone glides to the middle of the viewport and the login
-// screen slides in over the Home preview. Slower than SCREEN because this is the
-// page recomposing itself rather than a navigation inside it — SCREEN's 220ms
-// ceiling is about not being kept waiting between screens, which is a different
-// job from this one. A slide is all it is: no fade and no scale, so no part of it
-// reads as a zoom.
+// Landing → sign-in. Slower than SCREEN because this is the page recomposing
+// itself, not a navigation inside it. Slide only, so nothing reads as a zoom.
 export const LANDING: Transition = { duration: 0.65, ease: EASE_OUT };
 
 // Screens slide along the axis of travel: going deeper, the new screen enters
@@ -68,13 +63,14 @@ export const SCREEN_VARIANTS = {
 };
 
 // How deep each screen sits, so the direction of any move can be derived rather
-// than threaded through every setScreen call. chat and business-detail are both
-// children of business — moving sideways between them is rare enough that
-// treating it as "no direction" is fine.
+// than threaded through every setScreen call. A chat sits below both the record
+// and the scoped chat list, which is why it shares a depth with the latter:
+// moving sideways between two lists of the same conversations is not a descent.
 export const SCREEN_DEPTH = {
   restoring: 0,
   home: 1,
   business: 2,
   "business-detail": 3,
-  chat: 3,
+  "business-chats": 4,
+  chat: 4,
 } as const;

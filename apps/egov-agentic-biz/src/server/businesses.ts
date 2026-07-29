@@ -153,6 +153,9 @@ export async function listBusinesses(owner: BusinessOwner): Promise<RegisteredBu
     listBirRegisteredBusinesses(owner.actor.egovUserId),
   ]);
   const savedBusinessIds = new Set(birBusinesses.map(({ id }) => id));
+  // A BNRS registration that never reached BIR has a name certificate and no
+  // filing calendar, records or files of its own, so its card shows neither
+  // rather than a fabricated zero.
   const bnrsBusinesses = registrations
     .filter(({ applicationId }) => !savedBusinessIds.has(applicationId))
     .map((registration) => ({
@@ -162,7 +165,11 @@ export async function listBusinesses(owner: BusinessOwner): Promise<RegisteredBu
       registrationNumber: registration.certificateNumber,
       status: "Active" as const,
       finalizedAt: registration.issuedAt,
+      city: null,
       nextTaxDue: null,
+      nextTaxTitle: null,
+      recordCount: null,
+      fileCount: null,
     }));
   return [...bnrsBusinesses, ...birBusinesses].sort((left, right) =>
     right.finalizedAt.localeCompare(left.finalizedAt),

@@ -1177,6 +1177,14 @@ function makeDtiForm(
     ...(businessAddressDetails ? { businessAddressDetails } : {}),
     city: plan.city,
     feeLabel: scope ? formatPeso(scope.totalFee) : "",
+    ...(scope
+      ? {
+          feeBreakdown: {
+            documentaryStamp: formatPeso(scope.documentaryStampTax),
+            registration: formatPeso(scope.registrationFee),
+          },
+        }
+      : {}),
     termsAndConditions: catalog.termsAndConditions,
     businessNameRequirements: catalog.nameRequirements.reminders,
     termsAccepted,
@@ -1415,6 +1423,10 @@ function agentTools(
           businessAddressDetails: bnrsAddress,
           city: businessCity,
           feeLabel: formatPeso(scope.totalFee),
+          feeBreakdown: {
+            documentaryStamp: formatPeso(scope.documentaryStampTax),
+            registration: formatPeso(scope.registrationFee),
+          },
           termsAndConditions: catalog.termsAndConditions,
           businessNameRequirements: [...catalog.nameRequirements.reminders],
           termsAccepted,

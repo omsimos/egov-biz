@@ -2,13 +2,44 @@
 
 import {
   BellSlashIcon,
+  FileTextIcon,
   HouseIcon,
+  IdentificationCardIcon,
   NewspaperIcon,
   QrCodeIcon,
+  ScanIcon,
+  SquaresFourIcon,
   UserIcon,
   WalletIcon,
 } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
+import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
+
+/**
+ * The phone frame element that sheets portal into. Base UI requires a
+ * `Dialog.Portal`, and portalled to `<body>` a sheet escapes the device: on a
+ * desktop viewport it spans the window and centres on the page rather than on
+ * the phone. Pointing the portal at `.phone-shell` — which is
+ * `position: relative; overflow: hidden` — puts every sheet inside the frame
+ * and lets `DialogContent` position itself with `absolute`.
+ *
+ * Null until the frame mounts, and in any tree without one; `DialogPortal`
+ * falls back to `<body>` there rather than failing to render.
+ */
+const PhoneFrameContext = createContext<HTMLElement | null>(null);
+
+export function PhoneFrame({
+  children,
+  element,
+}: {
+  children: ReactNode;
+  element: HTMLElement | null;
+}) {
+  return <PhoneFrameContext.Provider value={element}>{children}</PhoneFrameContext.Provider>;
+}
+
+export function usePhoneFrame() {
+  return useContext(PhoneFrameContext);
+}
 
 export function StatusBar() {
   const [time, setTime] = useState<string | null>(null);
@@ -23,6 +54,11 @@ export function StatusBar() {
   }, []);
   return (
     <div className="status-bar" aria-hidden="true">
+      {/* The phone's Dynamic Island. Hardware, not app UI, so it belongs to the
+          frame and appears on every screen. Nothing has to coordinate with the
+          payment island: that one shares this origin and is larger on both
+          axes, so it covers this exactly rather than sitting beside it. */}
+      <span className="dynamic-island" />
       <span className="status-left">
         {time ?? "9:41"}
         <BellSlashIcon weight="fill" />
@@ -44,46 +80,53 @@ export function StatusBar() {
   );
 }
 
+// Two shells, one bar. The launcher is the eGovPH app itself and carries its
+// nav (Scan, Digital ID, History, Account); everything under Business carries
+// the product's own (News, QR, Wallet, Me). `active` already told them apart at
+// every call site, so it selects the item set too rather than a second prop.
+const NAV_ITEMS = {
+  home: [
+    { Icon: ScanIcon, label: "Scan" },
+    { Icon: FileTextIcon, label: "History" },
+    { Icon: SquaresFourIcon, label: "Account" },
+  ],
+  business: [
+    { Icon: NewspaperIcon, label: "News" },
+    { Icon: WalletIcon, label: "Wallet" },
+    { Icon: UserIcon, label: "Me" },
+  ],
+} as const;
+
 export function BottomNav({ active = "home" }: { active?: "home" | "business" }) {
   // Only Home ever lights up — there is no dedicated Business tab, and the
   // other four items are a placeholder nav shell with nothing behind them
   // yet, so a <button> that does nothing reads as broken and makes screen
   // readers announce five dead controls (mirrors HomeScreen's service tiles).
-  const homeActive = active === "home" || active === "business";
+  const [first, ...rest] = NAV_ITEMS[active];
+  const Orb = active === "home" ? IdentificationCardIcon : QrCodeIcon;
   return (
     <nav className="bottom-nav" aria-label="Primary navigation">
-      <div
-        aria-current={homeActive ? "page" : undefined}
-        className={homeActive ? "active" : ""}
-        data-cuelume-toggle="tick"
-      >
-        <HouseIcon weight={homeActive ? "fill" : "regular"} />
+      <div aria-current="page" className="active" data-cuelume-toggle="tick">
+        <HouseIcon weight="fill" />
         <span>Home</span>
       </div>
       <div className="unbuilt" data-cuelume-toggle="tick">
-        <NewspaperIcon />
-        <span>News</span>
+        <first.Icon />
+        <span>{first.label}</span>
       </div>
-      {/* aria-hidden and no cuelume, unlike the labelled Digital ID orb this
-          replaces. The Landing design draws the centre item as an unlabelled QR
-          orb, and an unlabelled icon with nothing behind it has no name worth
-          announcing — the four items around it already name every destination
-          this shell has. It also stays silent on tap: a click sound is a claim
-          that something happened, which was the one thing the old orb got
-          wrong that dimming it could never have fixed. */}
+      {/* Decoration: nothing behind it, so no name worth announcing and no click
+          sound — a sound would claim something happened. */}
       <div aria-hidden="true">
         <span className="qr-orb">
-          <QrCodeIcon weight="fill" />
+          <Orb weight="fill" />
         </span>
       </div>
-      <div className="unbuilt" data-cuelume-toggle="tick">
-        <WalletIcon />
-        <span>Wallet</span>
-      </div>
-      <div className="unbuilt" data-cuelume-toggle="tick">
-        <UserIcon />
-        <span>Me</span>
-      </div>
+      {rest.map(({ Icon, label }) => (
+        <div className="unbuilt" data-cuelume-toggle="tick" key={label}>
+          <Icon />
+          <span>{label}</span>
+        </div>
+      ))}
     </nav>
   );
 }

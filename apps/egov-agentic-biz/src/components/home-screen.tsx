@@ -1,64 +1,52 @@
 "use client";
 
 import {
-  BellSimpleIcon,
+  AirplaneTiltIcon,
+  BankIcon,
   BriefcaseIcon,
-  FileTextIcon,
+  BuildingsIcon,
+  CloudSunIcon,
   HeartbeatIcon,
   type Icon as PhosphorIcon,
-  IdentificationCardIcon,
-  ReceiptIcon,
-  ScalesIcon,
+  MagnifyingGlassIcon,
+  MoonIcon,
   StorefrontIcon,
 } from "@phosphor-icons/react";
+import { useEffect, useState } from "react";
 import { AccountDialog } from "@/components/account-dialog";
-import { BrandLogo } from "@/components/brand-logo";
+import { EGovLogo } from "@/components/egov-logo";
 import { BottomNav, StatusBar } from "@/components/phone-chrome";
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import { cn, FOCUS_RING } from "@/lib/utils";
 
-type ServiceTile = {
-  Icon: PhosphorIcon;
-  chip: string;
-  label: string;
-  business?: boolean;
-};
-
-// Four domain tiles, from the Landing design. The eight-tile directory this
-// replaces (NGAs, LGUs, Jobs, Travel, Report, More alongside these) spent a
-// second row on labels with nothing behind them; a tinted chip per domain does
-// the same orienting job in one row. Business is still the only tile wired
-// anywhere, and no longer the only coloured one — the tint is the domain, not a
-// "this one works" marker.
-const services: ServiceTile[] = [
-  { Icon: IdentificationCardIcon, chip: "bg-secondary text-primary", label: "National ID" },
-  {
-    business: true,
-    chip: "bg-orange-soft text-orange-ink",
-    Icon: BriefcaseIcon,
-    label: "Business",
-  },
-  { chip: "bg-success-soft text-success", Icon: HeartbeatIcon, label: "Health" },
-  { chip: "bg-destructive-soft text-[var(--flag-red)]", Icon: ScalesIcon, label: "Legal" },
+// Business is the one service this app builds, so it is the one tile that is a
+// control. The other four are the real eGovPH launcher's neighbours, recessed
+// rather than omitted: without them the row loses the context that makes
+// Business read as one service among many. Plain content, not disabled
+// <button>s — a control that does nothing reads as broken and announces four
+// dead destinations.
+const services: { Icon: PhosphorIcon; label: string }[] = [
+  { Icon: BuildingsIcon, label: "NGAs" },
+  { Icon: BankIcon, label: "LGUs" },
+  { Icon: AirplaneTiltIcon, label: "Travel" },
+  { Icon: HeartbeatIcon, label: "Health" },
 ];
 
-// Both open the registration flow, which is where these two tasks are actually
-// carried out — the agent walks the DTI name search and the BIR registration as
-// steps of one plan, so neither needs (or has) a screen of its own to land on.
-const popularServices = [
-  {
-    description: "Check and reserve your trade name",
-    Icon: FileTextIcon,
-    tone: "text-primary",
-    title: "DTI name search",
-  },
-  {
-    description: "Get your TIN and COR in-app",
-    Icon: ReceiptIcon,
-    tone: "text-[var(--egov-orange)]",
-    title: "BIR registration",
-  },
-];
+function useLauncherDate() {
+  // Rendered on the client only: the server and the phone are rarely in the
+  // same timezone, and a greeting strip that changes on hydration is worse
+  // than one that arrives a frame late (same reason as StatusBar's clock).
+  const [date, setDate] = useState<string | null>(null);
+  useEffect(() => {
+    const now = new Date();
+    const parts = (options: Intl.DateTimeFormatOptions) =>
+      now.toLocaleDateString("en-PH", { timeZone: "Asia/Manila", ...options });
+    setDate(
+      `${parts({ weekday: "short" })} · ${parts({ day: "numeric", month: "short", year: "numeric" })}`,
+    );
+  }, []);
+  return date;
+}
 
 export function HomeScreen({
   profile,
@@ -69,165 +57,143 @@ export function HomeScreen({
   onBusiness: () => void;
   onLogout: () => void;
 }) {
+  const date = useLauncherDate();
   return (
     <div className="screen">
       <StatusBar />
       <div
         // pb clears the QR orb, which is 52px at margin-top:-16px and so floats
         // 4px over this scroller's last line.
-        className="h-[calc(100%-36px-76px)] overflow-y-auto overscroll-contain pb-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="h-[calc(100%-36px-76px)] overflow-y-auto overscroll-contain px-[18px] pt-3.5 pb-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         id="app-content"
       >
-        <header className="sticky top-0 z-12 flex h-[58px] items-center justify-between bg-white/94 px-5 py-2 backdrop-blur-[8px]">
-          <BrandLogo height={23} priority />
-          {/* aria-hidden now, where this was a labelled status indicator. The
-              red unread dot it carried was hardcoded — the app tracks no
-              notification state and has no notifications screen — so the label
-              announced a claim nothing backed. The design draws the bell
-              without the dot, which leaves it as the decoration it always was.
-              Still not a <button>: there is nothing to open. */}
-          <span
-            aria-hidden="true"
-            className="inline-grid size-[38px] shrink-0 place-items-center rounded-full text-primary"
-          >
-            <BellSimpleIcon className="size-5" weight="fill" />
-          </span>
+        <header className="flex items-center justify-between gap-3">
+          <EGovLogo priority size={26} />
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="flex flex-col items-end gap-px">
+              <strong className="text-base font-extrabold -tracking-[.3px] text-primary">
+                Mabuhay, {profile.firstName.toUpperCase()}
+              </strong>
+              <span className="text-meta text-gray-800">Welcome to eGovPH</span>
+            </span>
+            <AccountDialog
+              avatarClassName="size-[38px] bg-primary text-base font-black text-white"
+              onLogout={onLogout}
+              profile={profile}
+              size="md"
+            />
+          </div>
         </header>
 
-        <section className="mt-1.5 flex items-center gap-3 px-5">
-          <AccountDialog onLogout={onLogout} profile={profile} />
-          <div className="flex flex-col gap-0.5">
-            {/* text-lg (20px), down from --text-xl's 27px. The promo card below
-                is this screen's anchor in the new design and a 27px greeting was
-                competing with it for that job. The mobile number that used to
-                sit underneath is gone from the screen entirely — it is one tap
-                away in the account sheet the avatar opens, which is where you
-                go when you want to check which account you are in. */}
-            <strong className="text-lg -tracking-[.4px] text-primary">
-              Hi, {profile.firstName}
-            </strong>
-            <span className="text-sm text-muted-foreground">Welcome back</span>
-          </div>
-        </section>
+        <div className="mt-3.5 flex items-center justify-between gap-2.5 rounded-lg bg-gray-100 px-3.5 py-[11px]">
+          <span className="inline-flex items-center gap-2 text-sm font-semibold">
+            <MoonIcon className="size-4 text-gray-800" />
+            {profile.city || "Metro Manila"}
+          </span>
+          {/* Reserved rather than conditional: the strip is one row and letting
+              it collapse to a single item for a frame moves the city label. */}
+          <span className="text-sm font-semibold text-gray-800">{date ?? " "}</span>
+        </div>
 
-        {/* No trailing arrow and no drop shadow, both dropped to match the
-            design: flat brand blue against a white screen, with the orange disc
-            bleeding out of the corner, is already the loudest object here. The
-            press response stays — it is the one control on Home that leads
-            anywhere, and cuelume plays a click on it.
+        {/* Search belongs to the eGovPH shell, which this app does not build.
+            Drawn because the row above and the tiles below only read as the
+            launcher with it there, and hidden from AT because there is nothing
+            to search. */}
+        <div
+          aria-hidden="true"
+          className="mt-2.5 flex items-center justify-between gap-2.5 rounded-lg border border-border px-[15px] py-[13px]"
+        >
+          <span className="text-copy text-gray-600">
+            Search Services like <strong className="text-gray-800">Philhealth</strong>
+          </span>
+          <MagnifyingGlassIcon className="size-[17px] text-primary" weight="bold" />
+        </div>
 
-            The gutter is the wrapper's padding rather than a margin on the
-            button, and w-full is not decoration: `display: grid` on a <button>
-            still resolves `width: auto` to shrink-to-fit, not stretch, so as a
-            bare `mx-5 grid` element this card sized itself to its own text —
-            which pulled the orange disc in over the title. */}
-        <div className="mt-[18px] px-5">
+        <nav aria-label="eGovPH services" className="mt-5 grid grid-cols-5 gap-1">
+          {services.map(({ Icon, label }) => (
+            <span className="flex flex-col items-center gap-[7px]" key={label}>
+              <span className="grid size-[52px] place-items-center rounded-full bg-muted text-gray-400">
+                <Icon className="size-[25px]" weight="duotone" />
+              </span>
+              <span className="text-meta font-bold text-gray-500">{label}</span>
+            </span>
+          ))}
           <button
-            className={cn(
-              "relative grid w-full grid-cols-[46px_1fr] items-center gap-[13px] overflow-hidden rounded-[20px] bg-primary p-[18px] text-left text-primary-foreground",
-              "transition-transform duration-150 ease-[var(--ease-out)] active:scale-[var(--press-lg)]",
-              FOCUS_RING,
-            )}
+            className={cn("group flex flex-col items-center gap-[7px] rounded-2xl", FOCUS_RING)}
             data-cuelume-toggle="page"
             onClick={onBusiness}
             type="button"
           >
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute -top-[58px] -right-[56px] size-[110px] rounded-full bg-[var(--egov-orange)]"
-            />
-            <span className="relative z-10 grid size-[46px] place-items-center rounded-[14px] bg-white text-primary">
-              <StorefrontIcon className="size-[27px]" weight="duotone" />
-            </span>
-            <span className="relative z-10 flex flex-col gap-px">
-              <small className="text-xs font-extrabold text-primary-border">NEW IN eGOVPH</small>
-              <strong className="text-md -tracking-[.3px]">Register a business</strong>
-            </span>
-          </button>
-        </div>
-
-        <nav aria-label="eGovPH services" className="mt-5 grid grid-cols-4 gap-x-1 px-5">
-          {services.map(({ Icon, business, chip, label }) => {
-            const glyph = (
-              <span
-                className={cn(
-                  "grid size-[56px] place-items-center rounded-[18px]",
-                  chip,
-                  business && "transition-transform group-active:scale-[.93]",
-                )}
-              >
-                <Icon className="size-[27px]" weight="duotone" />
+            <span className="relative grid size-[52px] place-items-center rounded-full bg-secondary text-primary transition-transform duration-150 ease-[var(--ease-out)] group-active:scale-[var(--press-sm)]">
+              <BriefcaseIcon className="size-[25px]" weight="duotone" />
+              <span className="absolute -top-[7px] -right-[9px] rounded-[7px] border-2 border-white bg-destructive px-1.5 py-0.5 text-2xs font-black text-destructive-foreground">
+                New
               </span>
-            );
-            const caption = <span className="text-sm font-bold">{label}</span>;
-            // Only Business is wired to anything. The rest are a service
-            // directory, so they render as plain content — a <button> that does
-            // nothing reads as broken and makes screen readers announce three
-            // dead controls.
-            return business ? (
-              <button
-                className={cn(
-                  "group flex flex-col items-center gap-[7px] rounded-2xl text-center text-foreground",
-                  FOCUS_RING,
-                )}
-                data-cuelume-toggle="page"
-                key={label}
-                onClick={onBusiness}
-                type="button"
-              >
-                {glyph}
-                {caption}
-              </button>
-            ) : (
-              <div
-                className="flex flex-col items-center gap-[7px] text-center text-foreground"
-                key={label}
-              >
-                {glyph}
-                {caption}
-              </div>
-            );
-          })}
+            </span>
+            <span className="text-meta font-extrabold">Business</span>
+          </button>
         </nav>
 
-        <section aria-labelledby="popular-services" className="mt-6 px-5">
-          <div className="mb-3 flex items-end justify-between">
-            <h2 className="text-md -tracking-[.3px]" id="popular-services">
-              Popular services
-            </h2>
-            {/* Wired, where this was a blue span styled as a link and attached
-                to nothing. Now that both cards below open the registration
-                flow, so does this — it is the same destination, so it can look
-                like the link it is. */}
-            <button
-              className={cn("text-sm font-extrabold text-primary", FOCUS_RING)}
-              data-cuelume-toggle="page"
-              onClick={onBusiness}
-              type="button"
-            >
-              See all
-            </button>
+        {/* The launcher's promoted slide. w-full and a wrapper-free grid, not
+            mx-auto: `display: grid` on a <button> resolves `width: auto` to
+            shrink-to-fit, which sizes the card to its own longest line. */}
+        <button
+          className={cn(
+            "mt-[22px] grid w-full grid-cols-[1fr_78px] items-center gap-3 rounded-xl bg-[linear-gradient(140deg,var(--primary-lift)_0%,var(--primary-deep)_60%,var(--primary-deeper)_100%)] p-[18px] text-left text-white",
+            "transition-transform duration-150 ease-[var(--ease-out)] active:scale-[var(--press-lg)]",
+            FOCUS_RING,
+          )}
+          data-cuelume-toggle="page"
+          onClick={onBusiness}
+          type="button"
+        >
+          <span className="flex min-w-0 flex-col gap-[9px]">
+            <span className="self-start rounded-[6px] bg-gold-soft px-2 py-[3px] text-xs font-black text-primary-ink">
+              New in eGovPH
+            </span>
+            <strong className="text-[18px] leading-[1.35] font-extrabold -tracking-[.3px]">
+              Register a business without leaving the app
+            </strong>
+            <span className="text-sm leading-[1.6] text-primary-border">
+              DTI, barangay, mayor’s permit and BIR in one guided plan.
+            </span>
+          </span>
+
+          <span className="grid size-[78px] place-items-center justify-self-end rounded-[20px] bg-white/16">
+            <StorefrontIcon className="size-10" weight="duotone" />
+          </span>
+        </button>
+
+        {/* Position within the launcher's carousel, which has one real slide. */}
+        <div aria-hidden="true" className="mt-3 flex items-center justify-center gap-[5px]">
+          <span className="h-1.5 w-[18px] rounded-full bg-primary" />
+          {[0, 1, 2, 3].map((dot) => (
+            <span className="size-1.5 rounded-full bg-gray-300" key={dot} />
+          ))}
+        </div>
+
+        {/* Placeholders for the launcher's PAGASA, eTrabaho and eGov AI slots.
+            Greyed because none of the three is wired here, and drawn at all
+            because the promoted card above needs something below it to be
+            promoted over. */}
+        <div aria-hidden="true" className="mt-[18px] grid grid-cols-2 gap-2.5">
+          <div className="flex flex-col gap-1.5 rounded-xl bg-gray-100 p-[15px] text-gray-600">
+            <CloudSunIcon className="size-[26px] text-gray-400" weight="duotone" />
+            <strong className="text-[26px] leading-none -tracking-[1px]">25°C</strong>
+            <span className="text-copy font-bold">Taguig</span>
+            <span className="text-meta text-gray-500">Partly cloudy</span>
           </div>
-          <div className="grid grid-cols-2 gap-2.5">
-            {popularServices.map(({ description, Icon, title, tone }) => (
-              <button
-                className={cn(
-                  "flex min-h-[120px] flex-col items-start gap-1.5 rounded-[17px] border border-border p-[15px] text-left",
-                  "transition-transform duration-150 ease-[var(--ease-out)] active:scale-[var(--press-md)]",
-                  FOCUS_RING,
-                )}
-                data-cuelume-toggle="page"
-                key={title}
-                onClick={onBusiness}
-                type="button"
+          <div className="flex flex-col gap-2.5">
+            {["eTrabaho", "eGov AI"].map((tile) => (
+              <div
+                className="grid flex-1 place-items-center rounded-xl bg-gray-100 p-[15px] text-base font-extrabold text-gray-500"
+                key={tile}
               >
-                <Icon className={cn("size-[26px]", tone)} weight="duotone" />
-                <strong className="text-base -tracking-[.2px]">{title}</strong>
-                <span className="text-sm leading-[1.4] text-muted-foreground">{description}</span>
-              </button>
+                {tile}
+              </div>
             ))}
           </div>
-        </section>
+        </div>
       </div>
       <BottomNav active="home" />
     </div>

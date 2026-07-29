@@ -76,7 +76,7 @@ describe("completeRegistrationPlan", () => {
       "pending",
       "completed",
     ]);
-    expect(planProgress(result)).toEqual({ completed: 2, done: true, total: 2 });
+    expect(planProgress(result)).toEqual({ completed: 2, done: true, nextLabel: null, total: 2 });
   });
 });
 
@@ -93,6 +93,6 @@ describe("planProgress", () => {
           { id: "launch-renewals", label: "Launch", status: "completed" },
         ],
       }),
-    ).toEqual({ completed: 2, done: true, total: 2 });
+    ).toEqual({ completed: 2, done: true, nextLabel: null, total: 2 });
   });
 });

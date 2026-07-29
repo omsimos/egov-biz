@@ -6,19 +6,23 @@ import {
   ArrowRight,
   ArrowRightIcon,
   ArrowSquareOut,
+  ArrowUpRightIcon,
+  ArrowUUpLeftIcon,
   CheckCircle,
   CheckCircleIcon,
   CheckIcon,
+  CalendarDotsIcon,
+  CircleIcon,
   CircleNotch,
   Buildings,
   DownloadSimple,
   FilePdf,
   FileText,
-  FlagCheckeredIcon,
+  FolderOpenIcon,
   GlobeHemisphereWestIcon,
-  Headset,
   InfoIcon,
   ListChecksIcon,
+  LockSimpleIcon,
   MagnifyingGlassIcon,
   MinusIcon,
   PaperPlaneRightIcon,
@@ -28,9 +32,9 @@ import {
   SparkleIcon,
   Storefront,
   StopCircle,
-  Plus,
   CaretDown,
   CaretDownIcon,
+  CaretUpIcon,
   Trash,
   X,
   XIcon,
@@ -43,15 +47,12 @@ import { Streamdown } from "streamdown";
 import { StatusBar } from "@/components/phone-chrome";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { FieldHint, FieldLabel } from "@/components/ui/field";
+import { FieldHint } from "@/components/ui/field";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
-import { PulseDot } from "@/components/ui/pulse-dot";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { cn } from "@/lib/utils";
+import { cn, FOCUS_RING } from "@/lib/utils";
 import { POPOVER_IN, POPOVER_OUT, SCRIM_IN, SCRIM_OUT, SHEET_IN, SHEET_OUT } from "@/lib/motion";
 import type { BirFormArtifact } from "@/lib/bir-form/artifact";
 import {
@@ -84,6 +85,12 @@ export type PaymentRequest = {
   proposedName: string;
   feeLabel: string;
   serviceReference?: string;
+  /**
+   * The fee broken into the lines the issuing service actually quotes, when it
+   * quotes more than one. Absent means one line — never a split invented so the
+   * sheet has more to show.
+   */
+  feeLines?: { label: string; amount: string }[];
 };
 
 function displayedIntakeOption(questionId: string, option: IntakeOption): IntakeOption {
@@ -260,193 +267,176 @@ function Markdown({ children, streaming = false }: { children: string; streaming
   );
 }
 
-function PlanDock({
-  plan,
-  active,
-  collapseKey,
+/**
+ * The screen's one progress system, in the header. It used to be two: a
+ * "Current task 0/10" dock stacked on the composer *and* a "Question 2 of 5"
+ * line inside the question card, with the plan total disagreeing between
+ * screens. Whichever is live gets the bar — the questions while a batch is
+ * being answered, the plan the rest of the time — so there is never more than
+ * one count on screen.
+ */
+function ProgressRow({
+  completed,
+  expandable,
+  expanded,
+  onToggle,
+  total,
 }: {
-  plan: RegistrationPlan;
-  active: boolean;
-  // Tool call id of the question currently being asked, if any. The dock and
-  // the question form are siblings inside .chat-composer-shell, which caps at
-  // min(76dvh, 680px) — so an expanded plan (list capped at min(28dvh, 260px))
-  // eats height the question then can't have, and the composer clips it.
-  // Yielding on each new question keeps the task visible; the user can reopen
-  // the plan and it stays open until the next one arrives.
-  collapseKey?: string;
+  completed: number;
+  expandable?: boolean;
+  expanded?: boolean;
+  onToggle?: () => void;
+  total: number;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  useEffect(() => {
-    if (collapseKey) setExpanded(false);
-  }, [collapseKey]);
-  const required = plan.steps.filter((step) => !isOptionalRegistrationStep(step));
-  const completed = required.filter(
-    (step) => step.status === "completed" || step.status === "skipped",
-  ).length;
-  const allResolved =
-    required.length > 0 &&
-    required.every((step) => step.status === "completed" || step.status === "skipped");
-  const current =
-    required.find((step) => step.status === "in_progress") ??
-    required.find((step) => step.status === "pending") ??
-    plan.steps.find((step) => step.status === "in_progress") ??
-    plan.steps.find((step) => step.status === "pending") ??
-    plan.steps.at(-1);
-  const currentLabel = allResolved
-    ? "Registration plan complete"
-    : (current?.label ?? "Preparing your registration plan");
-
-  return (
-    <Card
-      role="region"
-      aria-label="Registration plan"
-      className={cn(
-        "min-w-0 shadow-xs",
-        active ? "border-primary-border-strong" : "border-gray-300",
-      )}
-    >
-      <button
-        className="grid min-h-[54px] w-full grid-cols-[32px_minmax(0,1fr)_auto_20px] items-center gap-2 bg-white px-2.5 py-2 text-left transition-colors duration-150 hover:bg-gray-50"
-        data-cuelume-toggle={expanded ? "droplet" : "bloom"}
-        type="button"
-        aria-expanded={expanded}
-        aria-controls="registration-plan-items"
-        onClick={() => setExpanded((open) => !open)}
-      >
-        <span
-          className={cn(
-            "grid size-8 place-items-center rounded-md",
-            allResolved || current?.status === "completed"
-              ? "bg-success text-white"
-              : current?.status === "in_progress"
-                ? "bg-secondary text-primary"
-                : "bg-muted text-muted-foreground",
-          )}
-        >
-          {allResolved || current?.status === "completed" ? (
-            <CheckIcon className="size-4" weight="bold" />
-          ) : current?.status === "in_progress" ? (
-            <PulseDot className="size-4" />
-          ) : (
-            <ListChecksIcon className="size-4" weight="duotone" />
-          )}
-        </span>
-        <span className="grid min-w-0 gap-0.5">
-          <small className="text-xs font-bold text-muted-foreground">
-            {expanded ? "Registration plan" : "Current task"}
-          </small>
-          <strong className="truncate text-xs leading-[1.35]">
-            {expanded ? plan.title : currentLabel}
-          </strong>
-        </span>
-        <span
-          className="rounded-sm bg-muted px-[7px] py-1 text-2xs font-extrabold tabular-nums text-muted-foreground"
-          aria-label={`${completed} of ${required.length} required tasks resolved`}
-        >
-          {completed}/{required.length}
-        </span>
-        <CaretDownIcon
-          className={cn(
-            "size-[15px] text-muted-foreground transition-transform duration-200 ease-[var(--ease-out)] motion-reduce:transition-none",
-            expanded && "rotate-180",
-          )}
-          weight="bold"
+  const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+  const bar = (
+    <>
+      <div className="h-[5px] flex-1 overflow-hidden rounded-full bg-gray-200">
+        <div
+          className="h-[5px] rounded-full bg-primary transition-[width] duration-[400ms] ease-[var(--ease-out)] motion-reduce:transition-none"
+          style={{ width: `${percent}%` }}
         />
-      </button>
-      <div
-        className={cn(
-          // motion-reduce:transition-none is load-bearing now that the global
-          // reduced-motion rule no longer clamps every transition to 0.01ms:
-          // this one animates a row size, which is movement, so it is one of the
-          // handful that has to opt out by hand.
-          "grid transition-[grid-template-rows] duration-300 ease-[var(--ease-out)] motion-reduce:transition-none",
-          expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-        )}
-        id="registration-plan-items"
-        aria-hidden={!expanded}
-      >
-        <div className="min-h-0 overflow-hidden">
-          <ol className="m-0 max-h-[min(28dvh,260px)] list-none overflow-y-auto border-t border-gray-200 px-2.5 pt-[5px] pb-2">
-            {plan.steps.map((step, index) => {
-              const finishLine = index === plan.steps.length - 1;
-              return (
-                <li
-                  className={cn(
-                    "grid min-h-9 grid-cols-[22px_minmax(0,1fr)] items-start gap-2 py-1.5 text-xs leading-[1.4]",
-                    step.status === "in_progress"
-                      ? "font-extrabold text-foreground"
-                      : step.status === "completed"
-                        ? "text-gray-800"
-                        : step.status === "skipped"
-                          ? "text-gray-500"
-                          : "text-gray-700",
-                  )}
-                  key={step.id}
-                  aria-current={step.status === "in_progress" ? "step" : undefined}
-                  aria-label={step.status === "skipped" ? `${step.label} — skipped` : undefined}
-                >
-                  <span
-                    className={cn(
-                      "grid size-[18px] place-items-center rounded-sm border-[1.5px]",
-                      finishLine
-                        ? "border-0 bg-transparent"
-                        : step.status === "completed"
-                          ? "border-success bg-success text-white"
-                          : step.status === "in_progress"
-                            ? "border-primary-border-strong bg-secondary text-primary"
-                            : step.status === "skipped"
-                              ? "border-gray-300 bg-gray-100 text-gray-600"
-                              : "border-gray-400 bg-white text-white",
-                    )}
-                    aria-hidden="true"
-                  >
-                    {step.status === "skipped" ? (
-                      <MinusIcon className="size-[11px]" weight="bold" />
-                    ) : finishLine ? (
-                      <FlagCheckeredIcon
-                        className={cn(
-                          "size-[17px]",
-                          step.status === "completed"
-                            ? "text-success"
-                            : step.status === "in_progress"
-                              ? "text-primary"
-                              : "text-gray-600",
-                        )}
-                        weight={step.status === "completed" ? "fill" : "duotone"}
-                      />
-                    ) : step.status === "completed" ? (
-                      <CheckIcon className="size-[11px]" weight="bold" />
-                    ) : step.status === "in_progress" ? (
-                      <PulseDot className="size-[11px]" />
-                    ) : null}
-                  </span>
-                  <span>
-                    {step.label}
-                    {isOptionalRegistrationStep(step) && (
-                      <small className="italic text-gray-500"> (optional)</small>
-                    )}
-                    {step.status === "skipped" && (
-                      <small className="italic text-gray-500"> (skipped)</small>
-                    )}
-                  </span>
-                </li>
-              );
-            })}
-          </ol>
-        </div>
       </div>
-    </Card>
+      <span className="flex-none text-meta font-extrabold tabular-nums text-muted-foreground">
+        {completed} of {total}
+      </span>
+    </>
+  );
+  if (!expandable)
+    return (
+      <div
+        aria-label={`${completed} of ${total} answered`}
+        className="flex items-center gap-2.5"
+        role="img"
+      >
+        {bar}
+      </div>
+    );
+  return (
+    <button
+      aria-controls="registration-plan-items"
+      aria-expanded={expanded}
+      className={cn("flex w-full items-center gap-2.5 rounded-md", FOCUS_RING)}
+      data-cuelume-toggle={expanded ? "droplet" : "bloom"}
+      onClick={onToggle}
+      type="button"
+    >
+      {bar}
+      {expanded ? (
+        <CaretUpIcon className="size-3.5 flex-none text-gray-600" weight="bold" />
+      ) : (
+        <CaretDownIcon className="size-3.5 flex-none text-gray-600" weight="bold" />
+      )}
+    </button>
   );
 }
 
-function QuestionComposer({
-  pending,
+/**
+ * The full plan, opened from the progress row above it. Optional steps are
+ * labelled rather than hidden: the count in the header covers required
+ * checkpoints only, so a ten-row list against "2 of 7" has to say which three
+ * rows are the difference.
+ */
+function PlanChecklist({ plan }: { plan: RegistrationPlan }) {
+  const current =
+    plan.steps.find((step) => step.status === "in_progress") ??
+    plan.steps.find((step) => step.status === "pending");
+  return (
+    <div
+      className="flex max-h-[340px] flex-col gap-0.5 overflow-y-auto border-y border-[var(--line-soft)] bg-white px-4 py-3.5"
+      id="registration-plan-items"
+    >
+      <span className="px-0.5 pb-[9px] text-copy font-extrabold -tracking-[.3px]">
+        {plan.title}
+      </span>
+      <ol className="m-0 flex list-none flex-col gap-0.5 p-0">
+        {plan.steps.map((step) => {
+          const done = step.status === "completed";
+          const skipped = step.status === "skipped";
+          const now = step === current;
+          return (
+            <li
+              aria-current={now ? "step" : undefined}
+              className={cn(
+                "grid grid-cols-[26px_minmax(0,1fr)_auto] items-center gap-[11px] rounded-[10px] px-1 py-[9px]",
+                now && "bg-[var(--gray-50)]",
+              )}
+              key={step.id}
+            >
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "grid size-[22px] place-items-center rounded-full border-[1.5px]",
+                  done
+                    ? "border-success bg-success text-white"
+                    : skipped
+                      ? "border-gray-300 bg-gray-100 text-gray-600"
+                      : now
+                        ? "border-primary bg-secondary text-primary"
+                        : "border-input-strong bg-white",
+                )}
+              >
+                {done ? (
+                  <CheckIcon className="size-3" weight="bold" />
+                ) : skipped ? (
+                  <MinusIcon className="size-[11px]" weight="bold" />
+                ) : now ? (
+                  <CircleIcon className="size-[7px]" weight="fill" />
+                ) : null}
+              </span>
+              <span
+                className={cn(
+                  "text-copy leading-[1.35]",
+                  now
+                    ? "font-extrabold"
+                    : done
+                      ? "font-semibold text-muted-foreground"
+                      : "font-semibold text-gray-600",
+                )}
+              >
+                {step.label}
+                {isOptionalRegistrationStep(step) && (
+                  <small className="text-gray-500 italic"> (optional)</small>
+                )}
+                {skipped && <small className="text-gray-500 italic"> (skipped)</small>}
+              </span>
+              {now && (
+                <span className="flex-none rounded-full bg-primary px-[9px] py-[3px] text-xs font-extrabold text-white">
+                  Now
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+/**
+ * One question, as a card in the thread with its own sticky footer — not a form
+ * crammed into the composer. The composer had to cap at min(76dvh, 680px) and
+ * scroll itself, which is why a five-option question with help text used to
+ * clip its own buttons off the bottom.
+ *
+ * `index` is lifted so the header can draw the count and `onValidityChange`
+ * so the footer can disable Next: the bar, the question and the button have to
+ * agree, and the way for them to disagree is for each to keep its own copy.
+ */
+function QuestionCard({
   disabled,
+  index,
   onAnswer,
+  onIndexChange,
+  onValidityChange,
+  pending,
 }: {
-  pending: PendingQuestion;
   disabled: boolean;
+  index: number;
   onAnswer: (answers: { questionId: string; value: string | string[]; labels: string[] }[]) => void;
+  onIndexChange: (index: number) => void;
+  onValidityChange: (valid: boolean) => void;
+  pending: PendingQuestion;
 }) {
   const [values, setValues] = useState<Record<string, string | string[]>>(() =>
     Object.fromEntries(
@@ -454,8 +444,7 @@ function QuestionComposer({
     ),
   );
   const [custom, setCustom] = useState<Record<string, string>>({});
-  const [questionIndex, setQuestionIndex] = useState(0);
-  const question = pending.questions[questionIndex];
+  const question = pending.questions[index];
   const complete = (question: IntakeQuestion) => {
     const value = values[question.id];
     const text =
@@ -477,13 +466,17 @@ function QuestionComposer({
   };
 
   const canContinue = complete(question);
-  const lastQuestion = questionIndex === pending.questions.length - 1;
+  const lastQuestion = index === pending.questions.length - 1;
+  const allAnswered = pending.questions.every(complete);
+  useEffect(() => {
+    onValidityChange(canContinue);
+  }, [canContinue, onValidityChange]);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!canContinue || disabled) return;
     if (!lastQuestion) {
       play("page");
-      setQuestionIndex((current) => current + 1);
+      onIndexChange(index + 1);
       return;
     }
     onAnswer(
@@ -503,203 +496,213 @@ function QuestionComposer({
     );
   };
 
+  const value = values[question.id];
+  const selected = Array.isArray(value) ? value : value ? [value] : [];
+  const enteredText = typeof value === "string" ? value.trim() : "";
+  const savedOptions = (question.options ?? []).map((option) =>
+    displayedIntakeOption(question.id, option),
+  );
+  const options =
+    question.type === "single" && question.allowOther !== false
+      ? [
+          ...savedOptions,
+          {
+            id: "__other__",
+            label: "Other — type your answer",
+            description: "Enter a different answer",
+          },
+        ]
+      : savedOptions;
+
+  // 56px min-height and a 1.5px border, because these rows are the single
+  // most-tapped control in the product — every answer the agent needs comes
+  // through one. The press dip happens while the finger is still down; a colour
+  // change alone lands after it has lifted.
+  // `scale`, not `transform`, in the transition list: Tailwind v4 compiles
+  // scale-* to the standalone `scale:` property, so transition-[transform,…]
+  // names a property that never changes and the dip snaps.
+  const optionRow = (checked: boolean) =>
+    cn(
+      "flex min-h-[56px] cursor-pointer items-center gap-[13px] rounded-[14px] border-[1.5px] px-[15px] py-[13px]",
+      "transition-[scale,border-color,background-color] duration-150 ease-[var(--ease-out)] active:scale-[var(--press-lg)]",
+      checked
+        ? "border-primary bg-secondary"
+        : "border-border bg-white hover:border-primary-border-strong",
+    );
+  const optionCopy = (label: string, description?: string) => (
+    <span className="flex min-w-0 flex-col gap-0.5">
+      <strong className="text-[16px] font-semibold">{label}</strong>
+      {description && <span className="text-sm text-gray-600">{description}</span>}
+    </span>
+  );
+
   return (
-    // chat-arrive is the keyframe every message in the thread already enters
-    // with, so the question card arrives in the app's existing handwriting
-    // rather than a second one invented for it. Before this, the composer was
-    // the only region on the screen that swapped in a single frame — and it is
-    // the one the user has to act on.
-    <form
-      className="grid min-h-0 animate-[chat-arrive_0.2s_ease-out] gap-4 overflow-y-auto pt-1 pr-1 motion-reduce:animate-none!"
-      onSubmit={submit}
-    >
-      <div className="flex items-start gap-2">
-        <span className="grid size-[26px] flex-none place-items-center rounded-lg bg-secondary text-primary">
-          <SparkleIcon className="size-[13px]" weight="fill" />
-        </span>
-        <div className="grid gap-1">
-          {pending.questions.length > 1 && (
-            <small className="text-xs font-bold text-muted-foreground">
-              Question {questionIndex + 1} of {pending.questions.length}
-            </small>
-          )}
-          {/* The one thing the user has to act on. --text-md is in the scale
-              and was never used here, so the question sat at the same size as
-              its own help text. */}
-          <strong className="text-md font-extrabold leading-[1.25]">{question.title}</strong>
-          {question.helpText && (
-            <small className="text-xs leading-[1.35] text-muted-foreground">
-              {question.helpText}
-            </small>
+    <form className="flex flex-col gap-4" id="intake-question" onSubmit={submit}>
+      <section
+        className="animate-[chat-arrive_0.2s_ease-out] rounded-[20px] border border-border bg-white px-[18px] pt-[22px] pb-5 motion-reduce:animate-none!"
+        // Remounts on every advance, so the arrival keyframe replays with no
+        // state to track.
+        key={question.id}
+      >
+        {/* --text-lg, and the only thing at that size on the screen. The
+            question used to sit at the same size as its own help text. */}
+        <h2 className="m-0 text-lg leading-[1.35] font-extrabold -tracking-[.3px]">
+          {question.title}
+        </h2>
+        {question.helpText && (
+          <p className="mt-2.5 text-copy leading-[1.6] text-muted-foreground">
+            {question.helpText}
+          </p>
+        )}
+        <div className="mt-4 flex flex-col gap-2">
+          {question.type === "single" ? (
+            <>
+              <RadioGroup
+                aria-label={question.title}
+                className="gap-2"
+                onValueChange={(next) =>
+                  setValues((current) => ({ ...current, [question.id]: String(next) }))
+                }
+                value={typeof value === "string" ? value : ""}
+              >
+                {options.map((option) => (
+                  <label
+                    className={optionRow(value === option.id)}
+                    data-cuelume-toggle="toggle"
+                    key={option.id}
+                  >
+                    <RadioGroupItem ring value={option.id} />
+                    {optionCopy(
+                      option.label,
+                      // The hint under "Other" is instructions for a field that
+                      // is now open below it.
+                      value === option.id && option.id === "__other__"
+                        ? undefined
+                        : option.description,
+                    )}
+                  </label>
+                ))}
+              </RadioGroup>
+              {value === "__other__" && (
+                <Input
+                  aria-label="Your answer"
+                  autoFocus
+                  className="h-[52px] rounded-[14px] border-[1.5px] border-primary px-[15px] text-[16px] font-semibold shadow-[0_0_0_4px_rgba(7,85,233,.1)]"
+                  onChange={(event) =>
+                    setCustom((current) => ({ ...current, [question.id]: event.target.value }))
+                  }
+                  placeholder="Type your answer"
+                  value={custom[question.id] ?? ""}
+                />
+              )}
+            </>
+          ) : question.type === "multi" ? (
+            <div aria-label={question.title} className="flex flex-col gap-2" role="group">
+              {options.map((option) => {
+                const checked = selected.includes(option.id);
+                return (
+                  <label
+                    className={optionRow(checked)}
+                    data-cuelume-toggle="toggle"
+                    key={option.id}
+                  >
+                    <Checkbox
+                      checked={checked}
+                      className="size-[21px]"
+                      onCheckedChange={() =>
+                        setValues((current) => ({
+                          ...current,
+                          [question.id]: checked
+                            ? selected.filter((id) => id !== option.id)
+                            : [...selected, option.id],
+                        }))
+                      }
+                    />
+                    {optionCopy(option.label, option.description)}
+                  </label>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              <Input
+                autoFocus
+                className="h-[52px] rounded-[14px] border-[1.5px] px-[15px] text-[16px] font-semibold"
+                error={Boolean(enteredText && !complete(question))}
+                max={question.maximum}
+                min={question.minimum}
+                onChange={(event) =>
+                  setValues((current) => ({ ...current, [question.id]: event.target.value }))
+                }
+                placeholder={question.placeholder ?? "Type your answer"}
+                type={question.type === "number" ? "number" : "text"}
+                value={typeof value === "string" ? value : ""}
+              />
+              {enteredText && !complete(question) && (
+                <FieldHint className="mt-0" error role="alert">
+                  {question.id === "business-address"
+                    ? "Enter the full street, building, or unit and barangay."
+                    : "Enter a distinctive dominant business name."}
+                </FieldHint>
+              )}
+            </div>
           )}
         </div>
-      </div>
-      {(() => {
-        const value = values[question.id];
-        const selected = Array.isArray(value) ? value : value ? [value] : [];
-        const enteredText = typeof value === "string" ? value.trim() : "";
-        const savedOptions = (question.options ?? []).map((option) =>
-          displayedIntakeOption(question.id, option),
-        );
-        const options =
-          question.type === "single" && question.allowOther !== false
-            ? [
-                ...savedOptions,
-                {
-                  id: "__other__",
-                  label: "Other — type your answer",
-                  description: "Enter a different answer",
-                },
-              ]
-            : savedOptions;
-        // p-3 with a 13px label puts the row at ~46px, over the 44pt tap-target
-        // floor it used to sit under. border-2 and the 900 label are what make
-        // a selected row read as chosen at a glance — the fill alone doesn't.
-        // These rows are the single most-tapped control in the product — every
-        // answer the agent needs comes through one — and the only feedback was a
-        // colour change that lands after the finger has already lifted. The dip
-        // happens while it is still down.
-        const optionCard = (checked: boolean) =>
-          cn(
-            "flex cursor-pointer items-center gap-2.5 rounded-md border-2 p-3",
-            // `scale`, not `transform`, in the transition list. Tailwind v4
-            // compiles scale-* to the standalone `scale:` property rather than
-            // `transform: scale()`, so an arbitrary transition-[transform,…]
-            // names a property that never changes and the dip snaps. The
-            // shorthand `transition-transform` covers it (it expands to
-            // transform,translate,scale,rotate); a hand-written list does not.
-            "transition-[scale,border-color,background-color] duration-150 ease-[var(--ease-out)] active:scale-[var(--press-lg)]",
-            checked
-              ? "border-primary bg-secondary"
-              : "border-input bg-white hover:border-primary/40",
-          );
-        const optionCopy = (label: string, description?: string, checked?: boolean) => (
-          <span className="grid gap-0.5">
-            <strong className={cn("text-sm leading-[1.3]", checked && "font-black")}>
-              {label}
-            </strong>
-            {description && (
-              <small className="text-xs leading-[1.25] text-muted-foreground">{description}</small>
-            )}
+      </section>
+      {allAnswered && pending.questions.length > 1 && (
+        <div className="grid grid-cols-[26px_minmax(0,1fr)] items-start gap-2.5">
+          <span className="grid size-[26px] place-items-center rounded-full bg-success-soft text-success">
+            <CheckCircleIcon className="size-[15px]" weight="fill" />
           </span>
-        );
-        return (
-          // key={question.id} already remounts this on every advance, so the
-          // keyframe replays without any state to track. 4px and no more: the
-          // form above is overflow-y:auto, and a larger offset would briefly
-          // add scroll range to a container that is already height-capped.
-          <section
-            className="grid animate-[chat-arrive_0.2s_ease-out] gap-3 motion-reduce:animate-none!"
-            key={question.id}
-          >
-            {question.type === "single" ? (
-              <>
-                <RadioGroup
-                  className="gap-2"
-                  aria-label={question.title}
-                  value={typeof value === "string" ? value : ""}
-                  onValueChange={(next) =>
-                    setValues((current) => ({ ...current, [question.id]: String(next) }))
-                  }
-                >
-                  {options.map((option) => (
-                    <label
-                      key={option.id}
-                      className={optionCard(value === option.id)}
-                      data-cuelume-toggle="toggle"
-                    >
-                      <RadioGroupItem value={option.id} />
-                      {optionCopy(option.label, option.description, value === option.id)}
-                    </label>
-                  ))}
-                </RadioGroup>
-                {value === "__other__" && (
-                  <div className="grid gap-1.5">
-                    <FieldLabel className="mb-0">Your answer</FieldLabel>
-                    <Input
-                      value={custom[question.id] ?? ""}
-                      onChange={(event) =>
-                        setCustom((current) => ({ ...current, [question.id]: event.target.value }))
-                      }
-                      placeholder="Type your answer"
-                      autoFocus
-                    />
-                  </div>
-                )}
-              </>
-            ) : question.type === "multi" ? (
-              <div className="grid gap-2" role="group" aria-label={question.title}>
-                {options.map((option) => {
-                  const checked = selected.includes(option.id);
-                  return (
-                    <label
-                      key={option.id}
-                      className={optionCard(checked)}
-                      data-cuelume-toggle="toggle"
-                    >
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={() =>
-                          setValues((current) => ({
-                            ...current,
-                            [question.id]: checked
-                              ? selected.filter((id) => id !== option.id)
-                              : [...selected, option.id],
-                          }))
-                        }
-                      />
-                      {optionCopy(option.label, option.description, checked)}
-                    </label>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="grid gap-1.5">
-                <FieldLabel className="mb-0">Your answer</FieldLabel>
-                <Input
-                  type={question.type === "number" ? "number" : "text"}
-                  min={question.minimum}
-                  max={question.maximum}
-                  placeholder={question.placeholder ?? "Type your answer"}
-                  value={typeof value === "string" ? value : ""}
-                  onChange={(event) =>
-                    setValues((current) => ({ ...current, [question.id]: event.target.value }))
-                  }
-                  error={Boolean(enteredText && !complete(question))}
-                  autoFocus
-                />
-                {enteredText && !complete(question) && (
-                  <FieldHint error role="alert" className="mt-0">
-                    {question.id === "business-address"
-                      ? "Enter the full street, building, or unit and barangay."
-                      : "Enter a distinctive dominant business name."}
-                  </FieldHint>
-                )}
-              </div>
-            )}
-          </section>
-        );
-      })()}
-      <div className="flex items-center gap-2">
-        {questionIndex > 0 && (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setQuestionIndex((current) => current - 1)}
-            disabled={disabled}
-          >
-            <ArrowLeft /> Back
-          </Button>
-        )}
-        {/* flex-1 rather than `block`: block is w-full, and Button's base
-            carries shrink-0, so beside the Back button it demanded 100% of the
-            row and ran off the right edge. `shrink` comes last so twMerge drops
-            the shrink-0. */}
-        <Button className="min-w-0 flex-1 shrink" type="submit" disabled={!canContinue || disabled}>
-          {lastQuestion ? "Continue" : "Next question"} <ArrowRightIcon weight="bold" />
-        </Button>
-      </div>
+          <span className="text-copy leading-[1.45] font-bold text-success-ink">
+            All {pending.questions.length} answered — your plan is ready to build.
+          </span>
+        </div>
+      )}
     </form>
+  );
+}
+
+/**
+ * The question's footer, rendered where the composer normally sits so the two
+ * never stack. Separate from the card because the card scrolls with the thread
+ * and this must not; the two are joined by `form="intake-question"`, which is
+ * what lets a submit button outside the form still submit it.
+ */
+function QuestionFooter({
+  canContinue,
+  disabled,
+  index,
+  lastQuestion,
+  onBack,
+}: {
+  canContinue: boolean;
+  disabled: boolean;
+  index: number;
+  lastQuestion: boolean;
+  onBack: () => void;
+}) {
+  return (
+    <div className="flex gap-2.5">
+      <Button
+        className="h-[52px] min-w-[106px] rounded-[14px] border-[1.5px] px-[18px] text-[16px] text-foreground hover:border-primary-border-strong disabled:bg-white disabled:text-gray-400"
+        disabled={index === 0 || disabled}
+        onClick={onBack}
+        type="button"
+        variant="outline"
+      >
+        <ArrowLeft weight="bold" /> Back
+      </Button>
+      <Button
+        className="h-[52px] min-w-0 flex-1 shrink rounded-[14px] text-[17px]"
+        disabled={!canContinue || disabled}
+        form="intake-question"
+        type="submit"
+      >
+        {lastQuestion ? "Build my plan" : "Next question"}
+        <ArrowRightIcon weight="bold" />
+      </Button>
+    </div>
   );
 }
 
@@ -769,20 +772,146 @@ function SearchTool({
   );
 }
 
+/**
+ * What changing a field actually costs, per field. The draft used to say "to
+ * change anything, type it below", which is true and useless: it put the whole
+ * form behind one free-text instruction and told the citizen nothing about
+ * which fields are consequential. Each row now opens its own editor and states
+ * the consequence of the value it holds.
+ */
+const FIELD_CONSEQUENCES: Record<string, string> = {
+  "Business activity": "Changing this can change which permits your plan includes.",
+  "Business address": "Your city hall issues the mayor’s permit for this address.",
+  Owner: "Must match the name on your eGovPH record.",
+  "Proposed business name": "DTI checks this against its name database when you submit.",
+  "Territorial scope": "Scope sets the DTI filing fee — barangay ₱200, city ₱500, national ₱2,000.",
+};
+
+function DtiFieldRow({
+  edited,
+  editing,
+  label,
+  onCancel,
+  onEdit,
+  onSave,
+  value,
+}: {
+  edited: boolean;
+  editing: boolean;
+  label: string;
+  onCancel: () => void;
+  onEdit: () => void;
+  onSave: (next: string) => void;
+  value: string;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [editing, value]);
+  const note = FIELD_CONSEQUENCES[label];
+  const canSave = draft.trim().length > 1 && draft.trim() !== value;
+
+  if (!editing)
+    return (
+      <div className="border-b border-[var(--line-soft)] last:border-b-0">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 py-[13px]">
+          <span className="flex min-w-0 flex-col gap-[3px]">
+            <span className="text-sm text-gray-600">{label}</span>
+            <strong
+              className={cn(
+                "text-base leading-[1.35] break-words",
+                edited ? "text-primary" : "text-foreground",
+              )}
+            >
+              {value}
+            </strong>
+            {edited && (
+              <span className="mt-0.5 inline-flex items-center gap-[5px] text-meta font-bold text-orange-ink">
+                <PencilSimpleIcon className="size-[11px]" weight="fill" />
+                Edited — will be filed with this value
+              </span>
+            )}
+          </span>
+          {note && (
+            <button
+              className={cn(
+                "inline-flex flex-none items-center gap-[5px] rounded-full bg-[var(--gray-100)] px-2.5 py-[5px] text-meta font-extrabold text-primary",
+                "transition-colors duration-150 hover:bg-primary-tint",
+                FOCUS_RING,
+              )}
+              data-cuelume-toggle="bloom"
+              onClick={onEdit}
+              type="button"
+            >
+              <PencilSimpleIcon className="size-3" weight="bold" />
+              Edit
+            </button>
+          )}
+        </div>
+      </div>
+    );
+
+  return (
+    <div className="border-b border-[var(--line-soft)] last:border-b-0">
+      <div className="my-[9px] mb-[13px] flex flex-col gap-2.5 rounded-[14px] border-[1.5px] border-primary-border bg-[var(--gray-50)] p-[13px]">
+        <span className="text-sm font-extrabold -tracking-[.1px] text-primary">{label}</span>
+        <Input
+          aria-label={label}
+          autoFocus
+          className="min-h-[46px] rounded-xl border-[1.5px] border-primary px-3.5 py-3 font-bold shadow-[0_0_0_4px_rgba(7,85,233,.12)]"
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && canSave) {
+              event.preventDefault();
+              onSave(draft.trim());
+            }
+            if (event.key === "Escape") onCancel();
+          }}
+          value={draft}
+        />
+        <span className="flex items-start gap-[7px] text-meta leading-[1.4] text-gray-800">
+          <InfoIcon className="mt-px size-[13px] flex-none text-primary" weight="fill" />
+          {note}
+        </span>
+        <div className="flex gap-2">
+          <Button
+            className="h-[42px] flex-none rounded-xl px-4 text-foreground"
+            onClick={onCancel}
+            type="button"
+            variant="outline"
+          >
+            Cancel
+          </Button>
+          <Button
+            className="h-[42px] min-w-0 flex-1 shrink rounded-xl text-base"
+            disabled={!canSave}
+            onClick={() => onSave(draft.trim())}
+            type="button"
+          >
+            <CheckIcon weight="bold" /> Save change
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function DtiFormCard({
+  editedFields,
   form,
-  note,
+  onEditField,
   paid,
   onSubmitPay,
 }: {
+  /** Labels whose value the citizen changed in this session. */
+  editedFields: Set<string>;
   form: DtiBusinessNameForm;
-  note?: string;
+  onEditField: (label: string, value: string) => void;
   paid: boolean;
   onSubmitPay: () => void;
 }) {
-  const rows = [
-    ...(form.dominantName ? [["Dominant name", form.dominantName]] : []),
-    ...(form.descriptorLabel ? [["Descriptor", form.descriptorLabel]] : []),
+  const [editing, setEditing] = useState<string | null>(null);
+  const rows: [string, string][] = [
+    ...(form.dominantName ? [["Dominant name", form.dominantName] as [string, string]] : []),
+    ...(form.descriptorLabel ? [["Descriptor", form.descriptorLabel] as [string, string]] : []),
     ["Proposed business name", form.proposedName || "Needs your answer"],
     ["Business activity", form.businessActivity],
     ["Territorial scope", form.territorialScope],
@@ -794,53 +923,46 @@ export function DtiFormCard({
   ];
   if (form.missingFields.length || rows.some(([, value]) => !value)) return null;
   return (
-    <Card className="w-full">
-      <div className="grid grid-cols-[39px_1fr_auto] items-center gap-[9px] border-b border-gray-200 p-[13px]">
-        <span className="grid size-[39px] place-items-center rounded-full bg-primary-ink text-xs font-black text-white">
+    <div className="w-full overflow-hidden rounded-[20px] border border-border bg-white">
+      <div className="grid grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-3 bg-[linear-gradient(120deg,var(--gray-50)_0%,var(--surface)_60%)] p-4">
+        <span className="grid size-11 place-items-center rounded-full bg-primary-deeper text-sm font-black tracking-[.02em] text-white">
           DTI
         </span>
-        <div className="grid gap-0.5">
-          <small className="text-xs font-bold text-muted-foreground">
+        <div className="flex min-w-0 flex-col">
+          <span className="text-sm font-semibold text-muted-foreground">
             Business name registration
-          </small>
-          <strong className="text-base">Application draft</strong>
+          </span>
+          <strong className="text-[18px] leading-[1.3] font-extrabold -tracking-[.2px]">
+            Application draft
+          </strong>
         </div>
-        <Badge variant="success">{paid ? "Paid" : "Ready"}</Badge>
+        <Badge className="text-meta" variant={paid ? "success" : "primary"}>
+          {paid ? "Filed" : "Ready"}
+        </Badge>
       </div>
-      {note && (
-        <p className="m-0 flex gap-1.5 bg-secondary px-[13px] py-[9px] text-xs text-gray-800">
-          <PencilSimpleIcon className="size-[13px] flex-none" /> {note}
-        </p>
-      )}
-      <div className="px-[13px] py-0.5">
-        {rows.map(([label, value], index) => (
-          <div
+      <p className="m-0 flex items-center gap-2 border-y border-[var(--line-soft)] bg-[var(--gray-50)] px-4 py-[9px] text-sm text-gray-800">
+        <PencilSimpleIcon className="size-3.5 flex-none text-primary" />
+        Prepared from your profile and confirmed answers
+      </p>
+      <div className="flex flex-col px-4 pt-1 pb-3">
+        {rows.map(([label, value]) => (
+          <DtiFieldRow
+            edited={editedFields.has(label)}
+            editing={editing === label}
             key={label}
-            className={cn(
-              "grid gap-[3px] py-2.5",
-              index < rows.length - 1 && "border-b border-line-soft",
-            )}
-          >
-            <span className="text-2xs font-bold text-muted-foreground">{label}</span>
-            <strong className="text-xs leading-[1.35]">{value}</strong>
-          </div>
+            label={label}
+            onCancel={() => setEditing(null)}
+            onEdit={() => setEditing(label)}
+            onSave={(next) => {
+              setEditing(null);
+              onEditField(label, next);
+            }}
+            value={value}
+          />
         ))}
       </div>
-      <div
-        className={cn(
-          "mx-[13px] mt-[5px] mb-3 flex gap-[7px] rounded-md p-[9px] text-xs leading-[1.4]",
-          paid ? "bg-success-soft text-success-ink" : "bg-muted text-gray-800",
-        )}
-      >
-        <InfoIcon className="size-[13px] flex-none text-primary" weight="fill" />
-        <span>
-          {paid
-            ? "Payment recorded. This application checkpoint is complete."
-            : "To change anything, type it below. For example: “Use the name Reyes Coffee Club.”"}
-        </span>
-      </div>
       {form.termsAndConditions && (
-        <details className="mx-[13px] mb-3 rounded-md border border-line-soft bg-muted px-3 py-2 text-xs">
+        <details className="mx-4 mb-3 rounded-xl border border-[var(--line-soft)] bg-muted px-3 py-2 text-sm">
           <summary className="cursor-pointer font-extrabold">
             BNRS terms and name requirements
           </summary>
@@ -854,32 +976,38 @@ export function DtiFormCard({
           ) : null}
         </details>
       )}
-      <div className="grid gap-[9px] border-t border-gray-200 px-[13px] pt-[11px] pb-[13px]">
-        <div className="flex items-center justify-between gap-2.5">
-          <small className="text-2xs font-extrabold text-muted-foreground">Payment</small>
-          <strong className="text-xs tabular-nums">{form.feeLabel}</strong>
+      <div className="flex flex-col gap-2.5 border-t border-[var(--line-soft)] bg-[var(--gray-50)] px-4 py-3.5">
+        <div className="flex items-center justify-between gap-3">
+          <span className="flex flex-col gap-0.5">
+            <strong className="text-base">DTI filing fee</strong>
+            <span className="text-meta text-gray-600">
+              Government fee · {form.territorialScope.toLowerCase()} scope
+            </span>
+          </span>
+          <strong className="flex-none text-lg tabular-nums -tracking-[.4px]">
+            {form.feeLabel}
+          </strong>
         </div>
-        <Button
-          block
-          data-cuelume-toggle="bloom"
-          onClick={onSubmitPay}
-          disabled={paid}
-          className={cn(
-            paid && "bg-[var(--success-soft)] text-success shadow-none disabled:opacity-100",
-          )}
-        >
-          {paid ? (
-            <>
-              <CheckCircleIcon weight="fill" /> Paid
-            </>
-          ) : (
-            <>
-              Submit and pay <ArrowRightIcon weight="bold" />
-            </>
-          )}
-        </Button>
+        {/* Once paid this is a receipt, not a control: a disabled primary button
+            still reads as the next thing to do. */}
+        {paid ? (
+          <div className="flex h-[52px] items-center justify-center gap-2 rounded-[14px] bg-success-soft text-[17px] font-extrabold text-success-ink">
+            <CheckCircleIcon className="size-[17px]" weight="fill" />
+            Payment received · {form.feeLabel}
+          </div>
+        ) : (
+          <Button
+            block
+            className="h-[52px] rounded-[14px] text-[17px]"
+            data-cuelume-toggle="bloom"
+            onClick={onSubmitPay}
+          >
+            <LockSimpleIcon className="size-[17px]" weight="fill" />
+            Submit and pay {form.feeLabel}
+          </Button>
+        )}
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -949,15 +1077,19 @@ function BirFormArtifactCard({
 
 function ToolPart({
   part,
+  editedFields,
   enableBirPayment,
   paidServices,
+  onEditField,
   onOpenBusiness,
   onSubmitPay,
   onPreviewPdf,
 }: {
   part: BusinessChatMessage["parts"][number];
+  editedFields: Set<string>;
   enableBirPayment: boolean;
   paidServices: Set<PaymentServiceType>;
+  onEditField: (label: string, value: string) => void;
   onOpenBusiness: (businessId: string) => void;
   onSubmitPay: (request: PaymentRequest) => void;
   onPreviewPdf: (artifact: BirFormArtifact) => void;
@@ -1151,8 +1283,9 @@ function ToolPart({
       const form = part.output.form;
       return (
         <DtiFormCard
+          editedFields={editedFields}
           form={form}
-          note={part.input.note}
+          onEditField={onEditField}
           paid={paidServices.has("dti-business-name")}
           onSubmitPay={() =>
             onSubmitPay({
@@ -1160,6 +1293,12 @@ function ToolPart({
               serviceLabel: "DTI Business Name Registration",
               proposedName: form.proposedName,
               feeLabel: form.feeLabel,
+              feeLines: form.feeBreakdown
+                ? [
+                    { amount: form.feeBreakdown.registration, label: form.proposedName },
+                    { amount: form.feeBreakdown.documentaryStamp, label: "Documentary stamp" },
+                  ]
+                : undefined,
             })
           }
         />
@@ -1187,21 +1326,39 @@ function ToolPart({
   );
 }
 
-export function PaymentDialog({
+/**
+ * A bottom sheet inside the phone, not a centred modal. Paying is the last step
+ * of the draft directly above it, and a dialog floating in the middle of the
+ * screen cut that thread — the sheet rises out of the button that opened it and
+ * leaves the draft visible behind the scrim.
+ */
+export function PaymentSheet({
   payment,
   conversationId,
   onClose,
+  onCheckoutFailed,
+  onOpeningCheckout,
 }: {
   payment: PaymentRequest;
   conversationId: string;
   onClose: () => void;
+  /** Fired if the redirect never happens, so the island stops claiming it did. */
+  onCheckoutFailed?: () => void;
+  /** Fired before the redirect, so the island can show the payment in flight. */
+  onOpeningCheckout?: () => void;
 }) {
   const [opening, setOpening] = useState(false);
   const [paymentError, setPaymentError] = useState("");
+  // One line when the service quotes one fee, and the real split when it quotes
+  // a split. Never invented: the DTI total is a registration fee plus a
+  // documentary stamp because BNRS says so, and the LGU assessment is one
+  // number because DX LGU returns one.
+  const lines = payment.feeLines ?? [{ amount: payment.feeLabel, label: payment.proposedName }];
   const openCheckout = async () => {
     play("loading");
     setOpening(true);
     setPaymentError("");
+    onOpeningCheckout?.();
     try {
       const response = await fetch("/api/payments/egovpay", {
         method: "POST",
@@ -1220,46 +1377,186 @@ export function PaymentDialog({
       play("error");
       setPaymentError(error instanceof Error ? error.message : "eGovPay could not open checkout.");
       setOpening(false);
+      onCheckoutFailed?.();
     }
   };
 
   return (
-    <Dialog open onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogContent>
-        <div className="flex flex-col items-center text-center">
-          <span className="mb-2 grid size-12 place-items-center rounded-xl bg-secondary text-primary">
-            <ShieldCheck className="size-[26px]" weight="duotone" />
+    <div className="chat-dialog-layer">
+      <motion.button
+        animate={{ opacity: 1, transition: SCRIM_IN }}
+        aria-label="Dismiss payment"
+        className="chat-dialog-scrim bg-[rgba(12,22,45,.42)]!"
+        data-cuelume-toggle="droplet"
+        exit={{ opacity: 0, transition: SCRIM_OUT }}
+        initial={{ opacity: 0 }}
+        onClick={onClose}
+      />
+      <motion.section
+        animate={{ transform: "translateY(0%)", transition: SHEET_IN }}
+        aria-labelledby="payment-sheet-title"
+        aria-modal="true"
+        className="relative z-[1] flex w-full flex-col rounded-t-[26px] bg-white px-5 pt-2.5 pb-[26px] shadow-[0_-20px_50px_-20px_rgba(12,22,45,.4)]"
+        exit={{ transform: "translateY(100%)", transition: SHEET_OUT }}
+        initial={{ transform: "translateY(100%)" }}
+        role="dialog"
+      >
+        <span
+          aria-hidden="true"
+          className="h-1 w-[38px] flex-none self-center rounded-full bg-gray-300"
+        />
+        <div className="mt-4 flex flex-none items-center gap-[11px]">
+          <span className="grid size-10 flex-none place-items-center rounded-xl bg-secondary text-primary">
+            <ShieldCheck className="size-[22px]" weight="duotone" />
           </span>
-          <span className="text-xs font-bold text-primary">eGovPay</span>
-          <DialogTitle className="mt-1 mb-1">Continue to secure payment</DialogTitle>
-          <DialogDescription>
-            You’ll continue to eGovPay in this tab. Payment is completed only after the server
-            verifies the provider transaction.
-          </DialogDescription>
+          <span className="flex min-w-0 flex-col gap-px">
+            <span className="text-sm font-extrabold -tracking-[.1px] text-primary">eGovPay</span>
+            <h2
+              className="text-[19px] leading-[1.3] font-extrabold -tracking-[.3px]"
+              id="payment-sheet-title"
+            >
+              Pay the {payment.serviceLabel.replace(/^(DTI|BIR|DX)\s+/, "").toLowerCase()}
+            </h2>
+          </span>
         </div>
-        <div className="my-4 flex items-center justify-between gap-3 border-y border-border py-3">
-          <span className="grid text-left">
-            <small className="text-2xs text-muted-foreground">{payment.serviceLabel}</small>
-            <strong className="text-xs">{payment.proposedName}</strong>
-          </span>
-          <strong className="text-xs tabular-nums">{payment.feeLabel}</strong>
+        <div className="mt-4 flex flex-none flex-col gap-[11px] rounded-2xl bg-[var(--gray-50)] p-3.5">
+          {lines.map(({ amount, label }, index) => (
+            <div className="flex items-baseline justify-between gap-3" key={label}>
+              <span className="flex min-w-0 flex-col gap-0.5">
+                {index === 0 && (
+                  <span className="text-sm text-muted-foreground">{payment.serviceLabel}</span>
+                )}
+                <strong
+                  className={cn(
+                    "truncate",
+                    index === 0 ? "text-base" : "text-sm font-normal text-muted-foreground",
+                  )}
+                >
+                  {label}
+                </strong>
+              </span>
+              <span className="flex-none text-base font-extrabold tabular-nums">{amount}</span>
+            </div>
+          ))}
+          <div className="h-px bg-border" />
+          <div className="flex items-center justify-between gap-3">
+            <strong className="text-base">Total due</strong>
+            <strong className="text-[22px] tabular-nums -tracking-[.6px]">
+              {payment.feeLabel}
+            </strong>
+          </div>
         </div>
         {paymentError && (
           <p
-            className="mb-4 rounded-md bg-destructive/10 px-2.5 py-2 text-xs leading-[1.4] text-destructive"
+            className="mt-3 flex-none rounded-xl bg-destructive-soft px-2.5 py-2 text-sm leading-[1.4] text-destructive-ink"
             role="alert"
           >
             {paymentError}
           </p>
         )}
-        <Button block size="lg" onClick={openCheckout} disabled={opening}>
-          <ShieldCheck weight="fill" /> {opening ? "Preparing checkout…" : "Continue to eGovPay"}
+        <Button
+          block
+          className="mt-4 h-[54px] rounded-[15px] text-[17px]"
+          data-cuelume-toggle="bloom"
+          disabled={opening}
+          onClick={openCheckout}
+        >
+          <LockSimpleIcon className="size-[17px]" weight="fill" />
+          {opening ? "Preparing checkout…" : "Continue to eGovPay"}
         </Button>
-        <p className="mt-2 text-center text-2xs text-muted-foreground">
-          Use “Back to merchant” after checkout to return to this saved chat.
-        </p>
-      </DialogContent>
-    </Dialog>
+        <span className="mt-3 flex flex-none items-center justify-center gap-[7px] text-center text-meta leading-[1.45] text-gray-600">
+          <ArrowUUpLeftIcon className="size-[13px] flex-none text-primary" weight="fill" />
+          You return to this plan automatically once payment clears.
+        </span>
+      </motion.section>
+    </div>
+  );
+}
+
+export type IslandState = "idle" | "paying" | "paid";
+
+// What the island calls each service. The conversation title is the citizen's
+// own prompt, not a reference number, and using it here read as one.
+const PAID_SERVICE_LABELS: Record<PaymentServiceType, string> = {
+  "bir-documentary-stamp-tax": "BIR documentary stamp tax",
+  "dti-business-name": "DTI business name registration",
+  "lgu-business-permit": "LGU business permit",
+};
+
+/**
+ * Payment status over the top of the screen instead of a modal in front of it,
+ * so the plan stays readable while eGovPay works. Two states, two fixed sizes:
+ * animating one element's width and height between them was a rendering bug in
+ * the prototype it comes from.
+ *
+ * The resting state is the frame's own .dynamic-island in phone-chrome.tsx, not
+ * a third state here — it is there on every screen, payment or not. This panel
+ * shares its origin and is larger on both axes, so it covers it rather than
+ * needing it hidden.
+ */
+function PaymentIsland({
+  amount,
+  onOpen,
+  service,
+  state,
+}: {
+  /**
+   * Omitted once the citizen is back from checkout: at that point the screen
+   * knows *which* service cleared but not what it quoted, and the DTI fee is
+   * not the documentary stamp's.
+   */
+  amount?: string;
+  onOpen: () => void;
+  service: PaymentServiceType | null;
+  state: IslandState;
+}) {
+  if (state === "idle") return null;
+  const paid = state === "paid";
+  const label = service ? PAID_SERVICE_LABELS[service] : "filing fee";
+  return (
+    <button
+      aria-live="polite"
+      className={cn(
+        "absolute top-[9px] left-1/2 z-[60] h-[60px] w-[330px] -translate-x-1/2 overflow-hidden rounded-[22px] bg-[var(--overlay-ink)] text-left text-white shadow-[0_10px_26px_-12px_rgba(6,10,20,.6)]",
+        FOCUS_RING,
+      )}
+      onClick={onOpen}
+      type="button"
+    >
+      <span className="grid h-full grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 px-[15px] py-[13px]">
+        <span
+          className={cn(
+            "grid size-[34px] flex-none place-items-center rounded-full",
+            paid ? "animate-[payment-ring_1.6s_ease-out_2] bg-success" : "bg-primary",
+          )}
+        >
+          {paid ? (
+            <CheckIcon className="size-[18px]" weight="bold" />
+          ) : (
+            <span className="size-[17px] animate-[chat-spin_.8s_linear_infinite] rounded-full border-[2.5px] border-white/30 border-t-white" />
+          )}
+        </span>
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <strong className="truncate text-copy -tracking-[.2px]">
+            {paid ? "Payment received" : `Paying the ${label}`}
+          </strong>
+          <span className="truncate text-meta text-gray-500">
+            {paid ? `${label} · recorded` : "eGovPay · secure checkout"}
+          </span>
+        </span>
+        <span className="flex flex-none flex-col items-end gap-0.5">
+          {amount && <strong className="text-base tabular-nums -tracking-[.3px]">{amount}</strong>}
+          <span
+            className={cn(
+              "text-xs font-extrabold",
+              paid ? "text-[var(--overlay-success)]" : "text-gray-500",
+            )}
+          >
+            {paid ? "Paid" : "Processing"}
+          </span>
+        </span>
+      </span>
+    </button>
   );
 }
 
@@ -1346,7 +1643,6 @@ export function BusinessChatScreen({
   paymentStatus,
   paymentService,
   onBack,
-  onNewConversation,
   onOpenBusiness,
   onSelectConversation,
   onDeleteConversation,
@@ -1358,7 +1654,6 @@ export function BusinessChatScreen({
   paymentStatus?: string | null;
   paymentService?: PaymentServiceType | null;
   onBack: () => void;
-  onNewConversation: () => void;
   onOpenBusiness: (businessId: string) => void;
   onSelectConversation: (id: string) => void;
   onDeleteConversation: (conversation: ConversationSummary) => void;
@@ -1382,6 +1677,17 @@ export function BusinessChatScreen({
   const seeded = useRef(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
+  // Lifted out of the question card so the header's progress bar and the
+  // footer's Next button read the same numbers the card does.
+  const [questionIndex, setQuestionIndex] = useState(0);
+  const [questionValid, setQuestionValid] = useState(false);
+  const [planOpen, setPlanOpen] = useState(false);
+  // Which draft fields the citizen changed *and the agent then applied*. The
+  // value at the moment they hit save is kept, so "Edited" appears only once
+  // the form comes back different — saying it on submit would be a claim about
+  // a change the agent had not made yet.
+  const [fieldEdits, setFieldEdits] = useState<Record<string, string>>({});
+  const [island, setIsland] = useState<IslandState>("idle");
   // Adding an exit animation exposed that there was no way to trigger one: the
   // only thing that closed this menu was the trigger itself, so tapping the
   // thread behind it left it hanging over the conversation. Escape and an
@@ -1488,6 +1794,14 @@ export function BusinessChatScreen({
   useEffect(() => {
     if (messages.length !== visibleMessages.length) setMessages(visibleMessages);
   }, [messages.length, setMessages, visibleMessages]);
+  // A new batch starts at its first question, and the plan checklist yields:
+  // the two share the header's progress row, and an open checklist would push
+  // the question the citizen has to answer off the top of the thread.
+  useEffect(() => {
+    setQuestionIndex(0);
+    setQuestionValid(false);
+    if (pending) setPlanOpen(false);
+  }, [pending?.part.toolCallId]);
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [visibleMessages, pending, status]);
@@ -1513,6 +1827,15 @@ export function BusinessChatScreen({
     if (failed && !hadError.current) play("error");
     hadError.current = failed;
   }, [continuationError, error]);
+  // Coming back from a cleared checkout, the island says so and then gets out of
+  // the way. The timer is the only thing dismissing it, so it is cleared on
+  // unmount — a setState on a screen the citizen has already left is a leak.
+  useEffect(() => {
+    if (!/paid|success|complete/i.test(paymentStatus ?? "")) return;
+    setIsland("paid");
+    const timer = setTimeout(() => setIsland("idle"), 4500);
+    return () => clearTimeout(timer);
+  }, [paymentStatus]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -1638,110 +1961,189 @@ export function BusinessChatScreen({
     sendMessage,
   ]);
 
+  // The draft the citizen is looking at, and the value each editable row holds.
+  // Derived from the thread rather than kept in a ref: a ref written during
+  // render is read by the memo below on the render *before* the one that set it,
+  // so the "Edited" note would only appear if some later render happened to
+  // arrive — which, at the end of a stream, it does not.
+  const latestDtiForm = useMemo(() => {
+    for (const message of [...visibleMessages].reverse())
+      for (const part of [...message.parts].reverse())
+        if (part.type === "tool-editDtiBusinessNameForm" && part.state === "output-available")
+          if (part.output.form) return part.output.form;
+    return null;
+  }, [visibleMessages]);
+  const draftFieldValues = useMemo(() => {
+    const values: Record<string, string> = {};
+    if (!latestDtiForm) return values;
+    values["Business activity"] = latestDtiForm.businessActivity;
+    values["Business address"] = latestDtiForm.businessAddress;
+    values.Owner = latestDtiForm.ownerName;
+    values["Proposed business name"] = latestDtiForm.proposedName;
+    values["Territorial scope"] = latestDtiForm.territorialScope;
+    return values;
+  }, [latestDtiForm]);
+  // A field counts as edited once its value differs from what it held when the
+  // citizen pressed save — the only evidence the agent actually applied it.
+  // Saying so on submit would be a claim about a change not yet made.
+  const editedFields = useMemo(() => {
+    const applied = new Set<string>();
+    for (const [label, previous] of Object.entries(fieldEdits))
+      if ((draftFieldValues[label] ?? previous) !== previous) applied.add(label);
+    return applied;
+  }, [draftFieldValues, fieldEdits]);
+  // What the field editor asks the agent for. Free text because that is the one
+  // interface the agent has for a correction — the Edit chip is a shortcut to
+  // saying it, not a second write path around the tool that owns the form.
+  const editDraftField = (label: string, value: string) => {
+    setFieldEdits((current) => ({ ...current, [label]: draftFieldValues[label] ?? "" }));
+    void sendMessage({ text: `Change the ${label.toLowerCase()} to “${value}”.` });
+  };
+
+  const questionCount = pending?.questions.length ?? 0;
+  const lastQuestion = questionIndex === questionCount - 1;
+
   return (
-    <div className="screen agent-chat-screen">
+    <div className={cn("screen agent-chat-screen", management && "management-chat")}>
       <StatusBar />
-      <header className="chat-header" ref={headerRef}>
-        <button data-cuelume-toggle="page" onClick={onBack} aria-label="Go back">
-          <ArrowLeft />
-        </button>
-        <div className="chat-agent-avatar">
-          <Headset weight="fill" />
-        </div>
-        <button
-          aria-expanded={historyOpen}
-          className="chat-session-trigger"
-          data-cuelume-toggle={historyOpen ? "droplet" : "bloom"}
-          onClick={() => setHistoryOpen((open) => !open)}
-        >
-          <span>
-            <h1>{conversation.title}</h1>
-            <small>
-              <ShieldCheck weight="fill" />{" "}
-              {management
-                ? `${business?.name ?? "Business record"} · Saved business chat`
-                : "Saved registration plan"}
-            </small>
-          </span>
-          {/* PlanDock's caret already turns over when its panel opens
-              (duration-200, same curve). This one is the same glyph doing the
-              same job three rows up and was the only one holding still. */}
-          <CaretDown
-            className={cn(
-              "transition-transform duration-200 ease-[var(--ease-out)] motion-reduce:transition-none",
-              historyOpen && "rotate-180",
+      <PaymentIsland
+        amount={island === "paying" ? paymentRequest?.feeLabel : undefined}
+        onOpen={() => setIsland("idle")}
+        service={
+          island === "paying" ? (paymentRequest?.serviceType ?? null) : (paymentService ?? null)
+        }
+        state={island}
+      />
+      <div className="min-h-0">
+        {/* Pushes the thread clear of the island rather than letting it sit over
+            the first card. Height, not a transform: the rows below have to move
+            with it, and a transform would slide them under the header. */}
+        <div
+          aria-hidden="true"
+          className="transition-[height] duration-[420ms] ease-[var(--ease-out)] motion-reduce:transition-none"
+          style={{ height: island === "idle" ? 0 : 38 }}
+        />
+        <header className="chat-header" ref={headerRef}>
+          <IconButton
+            aria-label="Go back"
+            className="size-[38px]"
+            data-cuelume-toggle="page"
+            onClick={onBack}
+            variant="plain"
+          >
+            <ArrowLeft className="size-[19px]" weight="bold" />
+          </IconButton>
+          {/* The centre column is the session switcher, so the plan title is
+              both the heading and the control that changes it. The caret only
+              appears when there is somewhere else to go. */}
+          <button
+            aria-expanded={historyOpen}
+            className="chat-session-trigger"
+            data-cuelume-toggle={historyOpen ? "droplet" : "bloom"}
+            disabled={conversations.length < 2}
+            onClick={() => setHistoryOpen((open) => !open)}
+          >
+            <span>
+              <h1>{conversation.title}</h1>
+              <small>
+                <ShieldCheck weight="fill" />
+                {management ? "Uses this business’s saved records" : "Saved plan"}
+              </small>
+            </span>
+            {conversations.length > 1 && (
+              <CaretDown
+                className={cn(
+                  "transition-transform duration-200 ease-[var(--ease-out)] motion-reduce:transition-none",
+                  historyOpen && "rotate-180",
+                )}
+              />
             )}
-          />
-        </button>
-        <button
-          className="chat-new-session"
-          data-cuelume-toggle="page"
-          onClick={onNewConversation}
-          aria-label={management ? "Create a new business chat" : "Create a new registration plan"}
-        >
-          <Plus />
-        </button>
-        {/* The one job motion is here for: this menu is a conditional render, so
-            before AnimatePresence it could fade in but never out — it vanished
-            in a single frame while its own trigger was still animating. The
-            origin is the trigger (top left, set in chat.css), so it grows out
-            of the control that opened it rather than out of its own middle. */}
-        <AnimatePresence>
-          {historyOpen && (
-            <motion.div
-              animate={{
-                opacity: 1,
-                transform: "scale(1) translateY(0px)",
-                transition: POPOVER_IN,
-              }}
-              className="chat-session-menu"
-              exit={{
-                opacity: 0,
-                transform: "scale(0.97) translateY(-6px)",
-                transition: POPOVER_OUT,
-              }}
-              initial={{ opacity: 0, transform: "scale(0.97) translateY(-6px)" }}
-            >
-              {conversations.map((item) => (
-                <div
-                  className={`chat-session-row ${item.id === conversation.id ? "active" : ""}`}
-                  key={item.id}
-                >
-                  <button
-                    className="chat-session-open"
-                    data-cuelume-toggle="page"
-                    onClick={() => {
-                      setHistoryOpen(false);
-                      onSelectConversation(item.id);
-                    }}
+          </button>
+          {/* Empty, and the same width as the back button, so the plan title
+              stays optically centred. Starting a plan belongs to the Business
+              home's composer and a business chat to the record's own controls;
+              a second entry point here was one the citizen had no reason to
+              reach for mid-conversation. */}
+          <span />
+          {/* The one job motion is here for: this menu is a conditional render, so
+              before AnimatePresence it could fade in but never out — it vanished
+              in a single frame while its own trigger was still animating. The
+              origin is the trigger (top left, set in chat.css), so it grows out
+              of the control that opened it rather than out of its own middle. */}
+          <AnimatePresence>
+            {historyOpen && (
+              <motion.div
+                animate={{
+                  opacity: 1,
+                  transform: "scale(1) translateY(0px)",
+                  transition: POPOVER_IN,
+                }}
+                className="chat-session-menu"
+                exit={{
+                  opacity: 0,
+                  transform: "scale(0.97) translateY(-6px)",
+                  transition: POPOVER_OUT,
+                }}
+                initial={{ opacity: 0, transform: "scale(0.97) translateY(-6px)" }}
+              >
+                {conversations.map((item) => (
+                  <div
+                    className={`chat-session-row ${item.id === conversation.id ? "active" : ""}`}
+                    key={item.id}
                   >
-                    {item.title}
-                  </button>
-                  <button
-                    className="chat-session-delete"
-                    data-cuelume-toggle="droplet"
-                    onClick={() => onDeleteConversation(item)}
-                    aria-label={`Delete ${item.title}`}
-                  >
-                    <Trash />
-                  </button>
-                </div>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </header>
+                    <button
+                      className="chat-session-open"
+                      data-cuelume-toggle="page"
+                      onClick={() => {
+                        setHistoryOpen(false);
+                        onSelectConversation(item.id);
+                      }}
+                    >
+                      {item.title}
+                    </button>
+                    <button
+                      className="chat-session-delete"
+                      data-cuelume-toggle="droplet"
+                      onClick={() => onDeleteConversation(item)}
+                      aria-label={`Delete ${item.title}`}
+                    >
+                      <Trash />
+                    </button>
+                  </div>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </header>
+        {/* Exactly one progress system, and the live one wins: the questions
+            while a batch is open, the plan the rest of the time. */}
+        {!management && (
+          <div className="bg-white/97 px-4 pt-3 pb-2.5">
+            {pending ? (
+              <ProgressRow
+                completed={questionIndex + (questionValid ? 1 : 0)}
+                total={questionCount}
+              />
+            ) : latestProgress ? (
+              <ProgressRow
+                completed={latestProgress.completed}
+                expandable
+                expanded={planOpen}
+                onToggle={() => setPlanOpen((open) => !open)}
+                total={latestProgress.total}
+              />
+            ) : null}
+          </div>
+        )}
+        {!management && planOpen && latestPlan && <PlanChecklist plan={latestPlan.plan} />}
+      </div>
       <main className="chat-thread" ref={scrollRef} id="app-content">
-        {localPaymentStatus && (
-          <div className={`payment-return ${paid ? "success" : "pending"}`}>
+        {localPaymentStatus && !paid && (
+          <div className="payment-return pending">
             <CheckCircle weight="fill" />
             <span>
-              <strong>{paid ? "Payment confirmed" : "Payment status updated"}</strong>
-              <small>
-                {paid
-                  ? "Your saved workflow is advancing to the next service."
-                  : `Status: ${localPaymentStatus}. You can continue in this saved chat.`}
-              </small>
+              <strong>Payment status updated</strong>
+              <small>Status: {localPaymentStatus}. You can continue in this saved chat.</small>
             </span>
           </div>
         )}
@@ -1749,34 +2151,40 @@ export function BusinessChatScreen({
           {management ? `About ${business?.name ?? "this business"}` : "Saved automatically"}
         </div>
         {management && visibleMessages.length === 0 && !busy && (
-          <section className="mx-auto grid max-w-[300px] gap-4 px-3 pt-8 text-center">
-            <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-secondary text-primary">
-              <Buildings className="size-7" weight="duotone" />
-            </span>
-            <div>
-              <h2 className="text-lg -tracking-[.4px]">How can I help?</h2>
-              <p className="mt-1 text-sm leading-normal text-muted-foreground">
-                Ask about this business’s calendar, files, permits, or next obligations.
+          <>
+            <section className="flex flex-col gap-2.5 rounded-[18px] border border-border bg-white p-4">
+              <span className="grid size-[38px] place-items-center rounded-[11px] bg-secondary text-primary">
+                <Buildings className="size-5" weight="duotone" />
+              </span>
+              <h2 className="text-[19px] leading-[1.3] font-extrabold -tracking-[.3px]">
+                What do you need for {business?.name ?? "this business"}?
+              </h2>
+              <p className="m-0 text-copy leading-[1.6] text-muted-foreground">
+                {business
+                  ? `I can read its ${business.records.length} records, ${business.files.length} files and filing calendar — ask in your own words.`
+                  : "Ask about this business’s records, files and filing calendar in your own words."}
               </p>
-            </div>
-            <div className="grid gap-2 text-left">
-              {[
-                "What’s next on my tax calendar?",
-                "Which business files do I have?",
-                "Is there anything I still need to complete?",
-              ].map((suggestion) => (
+            </section>
+            <div className="mt-3.5 flex flex-col gap-2">
+              {BUSINESS_CHAT_STARTERS.map(({ icon: Icon, text }) => (
                 <button
-                  className="rounded-lg border border-border bg-white px-3 py-2.5 text-left text-sm font-semibold shadow-xs transition-[scale,border-color,background-color] duration-150 ease-[var(--ease-out)] hover:border-primary-border hover:bg-gray-50 active:scale-[var(--press-lg)]"
-                  data-cuelume-toggle="page"
-                  key={suggestion}
-                  onClick={() => void sendMessage({ text: suggestion })}
+                  className={cn(
+                    "grid grid-cols-[24px_minmax(0,1fr)_14px] items-center gap-[11px] rounded-[14px] border border-border bg-white px-3.5 py-[13px] text-left text-copy font-bold",
+                    "transition-[scale,border-color] duration-150 ease-[var(--ease-out)] hover:border-primary-border active:scale-[var(--press-lg)]",
+                    FOCUS_RING,
+                  )}
+                  data-cuelume-toggle="toggle"
+                  key={text}
+                  onClick={() => setInput(text)}
                   type="button"
                 >
-                  {suggestion}
+                  <Icon className="size-[17px] text-primary" />
+                  {text}
+                  <ArrowUpRightIcon className="size-3 text-gray-500" weight="bold" />
                 </button>
               ))}
             </div>
-          </section>
+          </>
         )}
         {visibleMessages.map((message) => {
           const user = message.role === "user";
@@ -1799,17 +2207,30 @@ export function BusinessChatScreen({
                       <Markdown>{text}</Markdown>
                     </div>
                   ) : (
-                    <div className="assistant-prose">
-                      <Markdown streaming={streaming}>{text}</Markdown>
-                    </div>
+                    <>
+                      <div className="assistant-prose">
+                        <Markdown streaming={streaming}>{text}</Markdown>
+                      </div>
+                      {/* Under the answer, not in the composer: it is a claim
+                          about where this reply came from, and the composer's
+                          copy of it was a claim about nothing yet written. */}
+                      {management && !streaming && (
+                        <span className="chat-answer-source">
+                          <ShieldCheck weight="fill" />
+                          Answered from this business’s saved records
+                        </span>
+                      )}
+                    </>
                   ))}
                 {message.parts.map((part, index) =>
                   isToolUIPart(part) ? (
                     <ToolPart
                       key={`${message.id}-${index}`}
                       part={part}
+                      editedFields={editedFields}
                       enableBirPayment={Boolean(latestPlan)}
                       paidServices={paidServices}
+                      onEditField={editDraftField}
                       onOpenBusiness={onOpenBusiness}
                       onSubmitPay={setPaymentRequest}
                       onPreviewPdf={setPdfArtifact}
@@ -1820,6 +2241,17 @@ export function BusinessChatScreen({
             </article>
           );
         })}
+        {paid && (
+          <div className="payment-return success">
+            <CheckCircle weight="fill" />
+            <span>
+              <strong>Payment confirmed</strong>
+              <small>
+                The certificate lands in Your businesses once the agent finishes this step.
+              </small>
+            </span>
+          </div>
+        )}
         {!management && latestProgress?.done && business && !hasFinalizedBusinessCard && (
           <BusinessFinalizedCard
             businessId={business.id}
@@ -1827,6 +2259,23 @@ export function BusinessChatScreen({
             onOpenBusiness={onOpenBusiness}
             registrationNumber={business.registrationNumber}
           />
+        )}
+        {/* The question is the last thing in the thread, not a form folded into
+            the composer: the composer capped at min(76dvh, 680px) and scrolled
+            itself, which is how a five-option question came to clip its own
+            buttons off the bottom. */}
+        {!management && pending && (
+          <div className="mt-1.5">
+            <QuestionCard
+              disabled={busy || answeringToolCallId === pending.part.toolCallId}
+              index={questionIndex}
+              key={pending.part.toolCallId}
+              onAnswer={answer}
+              onIndexChange={setQuestionIndex}
+              onValidityChange={setQuestionValid}
+              pending={pending}
+            />
+          </div>
         )}
         {busy && (
           <div className="chat-working" role="status" aria-live="polite">
@@ -1857,27 +2306,24 @@ export function BusinessChatScreen({
         )}
       </main>
       <footer className="chat-composer-shell">
-        {!management && latestPlan && (
-          <PlanDock
-            plan={latestPlan.plan}
-            active={latestPlan.active}
-            collapseKey={pending?.part.toolCallId}
-          />
-        )}
         {!management && pending ? (
-          <QuestionComposer
-            key={pending.part.toolCallId}
-            pending={pending}
+          <QuestionFooter
+            canContinue={questionValid}
             disabled={busy || answeringToolCallId === pending.part.toolCallId}
-            onAnswer={answer}
+            index={questionIndex}
+            lastQuestion={lastQuestion}
+            onBack={() => setQuestionIndex((current) => Math.max(0, current - 1))}
           />
         ) : (
           <form
-            className="overflow-hidden rounded-xl border border-input bg-white shadow-xs transition-colors focus-within:border-primary"
+            className={cn(
+              "flex items-center gap-2.5 rounded-2xl border-[1.5px] bg-white py-[9px] pr-[9px] pl-[15px] transition-colors",
+              input.trim() ? "border-primary" : "border-input-strong",
+            )}
             onSubmit={submit}
           >
             <textarea
-              className="max-h-[100px] min-h-[44px] w-full resize-none border-0 bg-transparent px-[13px] pt-3 pb-1 text-base leading-normal text-foreground outline-none placeholder:text-gray-500"
+              className="max-h-[100px] min-h-[26px] flex-1 resize-none border-0 bg-transparent text-base leading-normal font-semibold text-foreground outline-none placeholder:text-gray-500"
               rows={1}
               value={input}
               onChange={(event) => setInput(event.target.value)}
@@ -1887,52 +2333,52 @@ export function BusinessChatScreen({
                   submit(event);
                 }
               }}
-              placeholder={
-                management ? "Ask about your business…" : "Ask or correct your application…"
-              }
+              placeholder={management ? "Ask about your business…" : "Ask or correct anything"}
               aria-label="Message"
             />
-            <div className="flex items-center justify-between gap-2 py-1.5 pr-1.5 pl-3">
-              <span className="flex items-center gap-1 text-2xs text-muted-foreground">
-                <ShieldCheck className="size-[11px] text-success" weight="fill" />{" "}
-                {management
-                  ? "Uses this business’s saved records"
-                  : "You can correct any field here"}
-              </span>
-              {busy ? (
-                <IconButton
-                  className="size-9 bg-destructive text-white hover:bg-destructive-hover"
-                  data-cuelume-toggle="droplet"
-                  type="button"
-                  onClick={() => void stop()}
-                  aria-label="Stop"
-                >
-                  <StopCircle className="size-[18px]" weight="fill" />
-                </IconButton>
-              ) : (
-                <IconButton
-                  variant="primary"
-                  className="size-9"
-                  type="submit"
-                  disabled={!input.trim()}
-                  aria-label="Send"
-                >
-                  <PaperPlaneRightIcon className="size-[18px]" weight="fill" />
-                </IconButton>
-              )}
-            </div>
+            {/* The composer's caption is gone: every draft row carries its own
+                Edit chip now, so "you can correct any field here" was a second,
+                vaguer version of an affordance already on the field. */}
+            {busy ? (
+              <IconButton
+                className="size-[38px] bg-destructive text-white hover:bg-destructive-hover"
+                data-cuelume-toggle="droplet"
+                type="button"
+                onClick={() => void stop()}
+                aria-label="Stop"
+              >
+                <StopCircle className="size-[18px]" weight="fill" />
+              </IconButton>
+            ) : (
+              <IconButton
+                variant="primary"
+                className={cn("size-[38px]", !input.trim() && "bg-muted text-gray-500 shadow-none")}
+                type="submit"
+                disabled={!input.trim()}
+                aria-label="Send"
+              >
+                <PaperPlaneRightIcon className="size-[18px]" weight="fill" />
+              </IconButton>
+            )}
           </form>
         )}
       </footer>
-      {!management && paymentRequest && (
-        <PaymentDialog
-          payment={paymentRequest}
-          conversationId={conversation.id}
-          onClose={() => setPaymentRequest(null)}
-        />
-      )}
-      {/* AnimatePresence has to sit outside the condition — it is what keeps the
-          dialog mounted long enough for its exit to play. */}
+      {/* AnimatePresence has to sit outside the condition — it is what keeps each
+          sheet mounted long enough for its exit to play. */}
+      <AnimatePresence>
+        {!management && paymentRequest && (
+          <PaymentSheet
+            conversationId={conversation.id}
+            onCheckoutFailed={() => setIsland("idle")}
+            onClose={() => {
+              setPaymentRequest(null);
+              setIsland("idle");
+            }}
+            onOpeningCheckout={() => setIsland("paying")}
+            payment={paymentRequest}
+          />
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {pdfArtifact && (
           <PdfPreviewDialog artifact={pdfArtifact} onClose={() => setPdfArtifact(null)} />
@@ -1941,3 +2387,11 @@ export function BusinessChatScreen({
     </div>
   );
 }
+
+// Fill the composer rather than send: the citizen usually wants to change a word
+// before asking, and a row that fires a request on one tap takes that away.
+const BUSINESS_CHAT_STARTERS = [
+  { icon: CalendarDotsIcon, text: "What’s next on my tax calendar?" },
+  { icon: FolderOpenIcon, text: "Which files do I already have?" },
+  { icon: ListChecksIcon, text: "Anything left to complete?" },
+];

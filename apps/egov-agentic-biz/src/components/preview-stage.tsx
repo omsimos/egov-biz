@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DtiFormCard, LguPermitCard, PaymentDialog } from "@/components/business-chat-screen";
+import { DtiFormCard, LguPermitCard, PaymentSheet } from "@/components/business-chat-screen";
 import { BusinessDetailScreen, BusinessLanding } from "@/components/egov-business-app";
 import { HomeScreen } from "@/components/home-screen";
 import { LoginScreen } from "@/components/login-screen";
-import { StatusBar } from "@/components/phone-chrome";
+import { PhoneFrame, StatusBar } from "@/components/phone-chrome";
 import type { DtiBusinessNameForm, LguPermitSummary } from "@/lib/business-chat";
 import type { CitizenProfile, RegisteredBusiness } from "@/lib/citizen-profile";
 import { writeLastAccount } from "@/lib/last-account";
@@ -37,7 +37,11 @@ const previewBusinesses: RegisteredBusiness[] = [
     registrationNumber: "DTI-2026-104382",
     status: "Active",
     finalizedAt: "2026-07-22T00:00:00.000Z",
-    nextTaxDue: null,
+    city: "Makati City",
+    nextTaxDue: "2026-08-10",
+    nextTaxTitle: "Monthly withholding tax return",
+    recordCount: 8,
+    fileCount: 4,
   },
 ];
 
@@ -131,8 +135,13 @@ const previewDtiForm: DtiBusinessNameForm = {
   businessAddress: "Unit 2, 88 Ayala Avenue, Barangay San Lorenzo",
   city: "Makati",
   feeLabel: "₱1,030.00",
+  feeBreakdown: { documentaryStamp: "₱30.00", registration: "₱1,000.00" },
   missingFields: [],
 };
+
+// The card shows the "Edited" note for labels in this set; the preview has no
+// agent to apply a change, so nothing is in it.
+const previewEditedFields = new Set<string>();
 
 const previewLguPermit: LguPermitSummary = {
   applicationId: "lgu-preview-application",
@@ -156,11 +165,17 @@ function ChatCardsPreview() {
         <button className="preview-cards-toggle" onClick={() => setShowPayment(true)} type="button">
           Show payment sheet
         </button>
-        <DtiFormCard form={previewDtiForm} paid={false} onSubmitPay={noop} />
+        <DtiFormCard
+          editedFields={previewEditedFields}
+          form={previewDtiForm}
+          onEditField={noop}
+          onSubmitPay={noop}
+          paid={false}
+        />
         <LguPermitCard permit={previewLguPermit} paid={false} onPay={noop} />
       </div>
       {showPayment && (
-        <PaymentDialog
+        <PaymentSheet
           conversationId="preview-conversation"
           onClose={() => setShowPayment(false)}
           payment={{
@@ -168,6 +183,10 @@ function ChatCardsPreview() {
             serviceLabel: "DTI Business Name Registration",
             proposedName: "Kape Diaria",
             feeLabel: "₱1,030.00",
+            feeLines: [
+              { amount: "₱1,000.00", label: "Kape Diaria" },
+              { amount: "₱30.00", label: "Documentary stamp" },
+            ],
           }}
         />
       )}
@@ -184,6 +203,9 @@ export function PreviewStage() {
     const hash = window.location.hash.slice(1);
     if ((screens as readonly string[]).includes(hash)) setScreenState(hash as PreviewScreen);
   }, []);
+  // State, not a ref: DialogContent reads it during render to pick its portal
+  // container, so the frame mounting has to cause a re-render.
+  const [phoneFrame, setPhoneFrame] = useState<HTMLElement | null>(null);
   const setScreen = (next: PreviewScreen) => {
     window.location.hash = next;
     setScreenState(next);
@@ -211,43 +233,46 @@ export function PreviewStage() {
           </button>
         ))}
       </div>
-      <div className="phone-shell">
-        {screen === "home" && (
-          <HomeScreen
-            onBusiness={() => setScreen("business")}
-            onLogout={noop}
-            profile={previewProfile}
-          />
-        )}
-        {screen === "business" && (
-          <BusinessLanding
-            businesses={previewBusinesses}
-            businessesLoading={false}
-            conversations={[]}
-            initialPrompt=""
-            onBack={() => setScreen("home")}
-            onDelete={noop}
-            onOpenBusiness={() => setScreen("record")}
-            onResume={noop}
-            onSubmit={noop}
-            profile={previewProfile}
-          />
-        )}
-        {screen === "record" && (
-          <BusinessDetailScreen
-            business={previewBusinessDetail}
-            conversations={[]}
-            conversationsLoading={false}
-            error={null}
-            loading={false}
-            onBack={() => setScreen("business")}
-            onNewChat={noop}
-            onOpenChat={noop}
-            profile={previewProfile}
-          />
-        )}
-        {screen === "cards" && <ChatCardsPreview />}
-        {screen === "login" && <LoginScreen />}
+      <div className="phone-shell" ref={setPhoneFrame}>
+        <PhoneFrame element={phoneFrame}>
+          {screen === "home" && (
+            <HomeScreen
+              onBusiness={() => setScreen("business")}
+              onLogout={noop}
+              profile={previewProfile}
+            />
+          )}
+          {screen === "business" && (
+            <BusinessLanding
+              businesses={previewBusinesses}
+              businessesLoading={false}
+              conversations={[]}
+              initialPrompt=""
+              onBack={() => setScreen("home")}
+              onDelete={noop}
+              onOpenBusiness={() => setScreen("record")}
+              onResume={noop}
+              onSubmit={noop}
+              profile={previewProfile}
+            />
+          )}
+          {screen === "record" && (
+            <BusinessDetailScreen
+              business={previewBusinessDetail}
+              conversations={[]}
+              conversationsLoading={false}
+              error={null}
+              loading={false}
+              onBack={() => setScreen("business")}
+              onNewChat={noop}
+              onOpenChat={noop}
+              onShowAllChats={noop}
+              profile={previewProfile}
+            />
+          )}
+          {screen === "cards" && <ChatCardsPreview />}
+          {screen === "login" && <LoginScreen />}
+        </PhoneFrame>
       </div>
     </div>
   );

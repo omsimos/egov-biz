@@ -287,7 +287,11 @@ export async function listBirRegisteredBusinesses(
       registrationNumber: business.registrationNumber,
       status: business.status,
       finalizedAt: business.finalizedAt,
+      city: business.city,
       nextTaxDue: business.taxObligations[0]?.dueDate ?? null,
+      nextTaxTitle: business.taxObligations[0]?.title ?? null,
+      recordCount: business.records.length,
+      fileCount: business.files.length,
     };
   });
 }

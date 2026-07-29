@@ -6,6 +6,7 @@ import { XIcon } from "@phosphor-icons/react";
 
 import { cn } from "@/lib/utils";
 import { IconButton } from "@/components/ui/icon-button";
+import { usePhoneFrame } from "@/components/phone-chrome";
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
@@ -23,12 +24,16 @@ function DialogClose({ ...props }: DialogPrimitive.Close.Props) {
   return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
 }
 
+// absolute, not fixed. Base UI requires the Portal, so the fix for a sheet that
+// escaped the phone is where the portal *lands*, not whether there is one: it
+// goes into `.phone-shell` (see usePhoneFrame), which is the positioned,
+// overflow-hidden ancestor these coordinates then resolve against.
 function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) {
   return (
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 z-50 bg-[rgba(16,27,47,.55)] backdrop-blur-[2px] duration-200 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 motion-reduce:animate-none!",
+        "absolute inset-0 z-50 bg-[rgba(12,22,45,.42)] backdrop-blur-[2px] duration-200 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 motion-reduce:animate-none!",
         className,
       )}
       {...props}
@@ -39,22 +44,35 @@ function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) 
 function DialogContent({
   className,
   children,
-  showCloseButton = true,
+  showCloseButton = false,
   ...props
 }: DialogPrimitive.Popup.Props & {
+  /**
+   * Off by default. Every sheet already closes on the scrim and on Escape, and
+   * the grab handle says which edge it came from — an X in the corner as well
+   * gave one dismissal three affordances. Opt in where a sheet has no other way
+   * out (a preview with nothing to cancel).
+   */
   showCloseButton?: boolean;
 }) {
+  const frame = usePhoneFrame();
   return (
-    <DialogPortal>
+    <DialogPortal container={frame ?? undefined}>
       <DialogOverlay />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          "fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-md rounded-t-2xl bg-white p-[22px] shadow-sheet outline-none duration-200 ease-[cubic-bezier(.2,.8,.2,1)] data-open:animate-in data-open:slide-in-from-bottom data-open:fade-in-0 data-closed:animate-out data-closed:slide-out-to-bottom data-closed:fade-out-0 motion-reduce:animate-none!",
+          // The same shape as the eGovPay sheet: 26px top radius, a grab handle,
+          // and the shadow cast upward onto the content behind it.
+          "absolute inset-x-0 bottom-0 z-50 flex w-full flex-col rounded-t-[26px] bg-white px-5 pt-2.5 pb-[26px] shadow-[0_-20px_50px_-20px_rgba(12,22,45,.4)] outline-none duration-200 ease-[cubic-bezier(.2,.8,.2,1)] data-open:animate-in data-open:slide-in-from-bottom data-closed:animate-out data-closed:slide-out-to-bottom motion-reduce:animate-none!",
           className,
         )}
         {...props}
       >
+        <span
+          aria-hidden="true"
+          className="h-1 w-[38px] flex-none self-center rounded-full bg-gray-300"
+        />
         {children}
         {showCloseButton && (
           <DialogPrimitive.Close
