@@ -157,6 +157,18 @@
         "typescript": "7.0.2",
       },
     },
+    "packages/utils": {
+      "name": "@repo/utils",
+      "version": "0.0.0",
+      "dependencies": {
+        "@aws-sdk/client-s3": "^3.1097.0",
+      },
+      "devDependencies": {
+        "@total-typescript/tsconfig": "1.0.4",
+        "@types/node": "^20",
+        "typescript": "7.0.2",
+      },
+    },
   },
   "packages": {
     "@ai-sdk/gateway": ["@ai-sdk/gateway@4.0.26", "", { "dependencies": { "@ai-sdk/provider": "4.0.3", "@ai-sdk/provider-utils": "5.0.12", "@vercel/oidc": "3.2.0" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-b/nc3COKtk8IxzgcCi418IoZFky/Bw+Jg8+J0/SBBnu/mOXA4bkIKCu81coEtJAWuH2g5Fvvsa0ar7EpmzNWTw=="],
@@ -608,6 +620,8 @@
     "@repo/egov-sso-sample": ["@repo/egov-sso-sample@workspace:apps/egov-sso-sample"],
 
     "@repo/transcript-scraper": ["@repo/transcript-scraper@workspace:packages/transcript-scraper"],
+
+    "@repo/utils": ["@repo/utils@workspace:packages/utils"],
 
     "@rtsao/scc": ["@rtsao/scc@1.1.0", "", {}, "sha512-zt6OdqaDoOnJ1ZYsCYGt9YmWzDXl4vQdKTyJev62gFhRGKdx7mcT54V9KIjg+d2wi9EXsPvAPKe7i7WjfVWB8g=="],
 

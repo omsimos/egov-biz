@@ -1,0 +1,12 @@
+{
+  "extends": "@total-typescript/tsconfig/tsc/dom/library-monorepo",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "noEmitOnError": true,
+    "exactOptionalPropertyTypes": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
+}
