@@ -74,15 +74,12 @@ describe("eMessage chat tools", () => {
     expect(extractExplicitSmsMessage("Send an SMS saying hello")).toBeUndefined();
   });
 
-  test("prefers a chat-supplied number and masks the tool output", async () => {
+  test("accepts a chat-supplied number and masks the tool output", async () => {
     const requests: EMessageSmsRequest[] = [];
     const output = await sendSmsMessage(
       { message: "Your application is ready.", number: "0917 111 2233" },
       "+639999999999",
-      {
-        client: recordingClient(requests),
-        env: { ...process.env, EMESSAGE_ALLOWED_RECIPIENTS: "+639171112233" },
-      },
+      { client: recordingClient(requests) },
     );
 
     expect(requests).toEqual([{ message: "Your application is ready.", number: "+639171112233" }]);
@@ -101,17 +98,6 @@ describe("eMessage chat tools", () => {
       client: recordingClient(requests),
     });
     expect(requests[0]?.number).toBe("+639170000000");
-  });
-
-  test("rejects chat recipients that are neither the SSO number nor allowlisted", async () => {
-    const requests: EMessageSmsRequest[] = [];
-    await expect(
-      sendSmsMessage({ message: "Hello", number: "+639171112233" }, "+639170000000", {
-        client: recordingClient(requests),
-        env: { ...process.env, EMESSAGE_ALLOWED_RECIPIENTS: "" },
-      }),
-    ).rejects.toThrow("not a verified eMessage recipient");
-    expect(requests).toHaveLength(0);
   });
 
   test("builds and sends a clearly labeled simulated tax reminder", async () => {

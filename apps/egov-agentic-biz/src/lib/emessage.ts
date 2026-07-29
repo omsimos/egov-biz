@@ -236,35 +236,13 @@ export function hasTaxObligationReference(text: string): boolean {
 export function resolveSmsRecipient(
   inputNumber: string | undefined,
   profileMobile: string,
-  env: NodeJS.ProcessEnv = process.env,
 ): string {
   const value = inputNumber?.trim() || profileMobile.trim();
   if (!value)
     throw new Error(
       "A recipient mobile number is required in the chat or authenticated eGov SSO profile",
     );
-  const recipient = normalizeSmsNumber(value);
-  let profileRecipient = "";
-  try {
-    profileRecipient = profileMobile.trim() ? normalizeSmsNumber(profileMobile) : "";
-  } catch {
-    // A verified allowlisted recipient can still be used when the SSO profile
-    // has no usable mobile number.
-  }
-  if (recipient === profileRecipient) return recipient;
-
-  const allowedRecipients = new Set(
-    (env.EMESSAGE_ALLOWED_RECIPIENTS ?? "")
-      .split(",")
-      .map((candidate) => candidate.trim())
-      .filter(Boolean)
-      .map((candidate) => normalizeSmsNumber(candidate)),
-  );
-  if (!allowedRecipients.has(recipient))
-    throw new Error(
-      "The chat-supplied recipient is not a verified eMessage recipient; use the authenticated SSO mobile number",
-    );
-  return recipient;
+  return normalizeSmsNumber(value);
 }
 
 export async function sendSmsMessage(
@@ -274,7 +252,7 @@ export async function sendSmsMessage(
 ): Promise<SendSmsMessageOutput> {
   const parsed = sendSmsMessageInputSchema.parse(input);
   const env = dependencies.env ?? process.env;
-  const number = resolveSmsRecipient(parsed.number, profileMobile, env);
+  const number = resolveSmsRecipient(parsed.number, profileMobile);
   const client = dependencies.client ?? createClient(env);
   const timeoutSignal = AbortSignal.timeout(dependencies.timeoutMs ?? 15_000);
   const signal = dependencies.signal
