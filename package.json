@@ -9,6 +9,7 @@
   "scripts": {
     "build": "turbo run build",
     "check-types": "turbo run check-types",
+    "debug:business": "bun run dev:business 2>&1 | tee \"/tmp/ebiz\"",
     "dev:business": "turbo run dev --filter=egov-agentic-biz",
     "demo:reset-businesses": "bun --filter egov-agentic-biz run demo:reset-businesses",
     "dev:sso": "turbo run dev --filter=@repo/egov-sso-sample",
