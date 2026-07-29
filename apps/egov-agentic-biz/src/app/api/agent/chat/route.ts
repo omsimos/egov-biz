@@ -19,6 +19,8 @@ import {
   type UIMessageStreamWriter,
 } from "ai";
 import { z } from "zod";
+import { generateBirFormInputSchema } from "@repo/dx/bir";
+import { LguError, type LguApplicationStatus, type LguIssuedDocuments } from "@repo/dx/lgu";
 import { fallbackQuestionFor, inferCategory } from "@/lib/business-rules";
 import {
   buildRationale,
@@ -29,28 +31,18 @@ import {
 } from "@/lib/government-data";
 import {
   uniqueMessagesById,
-  type BarangayClearance,
   type BusinessChatMessage,
   type DtiBusinessNameForm,
-  type EbplsBusinessPermitReceipt,
+  type LguPermitSummary,
   type PaymentServiceType,
   type RegistrationPlan,
   type UserInfoOutput,
 } from "@/lib/business-chat";
 import { readSession } from "@/lib/auth/session";
 import { createBirFormArtifact } from "@/lib/bir-form/artifact";
-import { generateBirFormInputSchema } from "@/lib/bir-form/schema";
-import {
-  completeRegistrationPlan,
-  initialRegistrationPlan,
-  normalizeRegistrationPlan,
-} from "@/lib/registration-plan";
+import { initialRegistrationPlan, normalizeRegistrationPlan } from "@/lib/registration-plan";
 import type { CitizenProfile } from "@/lib/citizen-profile";
-import {
-  availableUserInfoFields,
-  extractExplicitBusinessAddress,
-  profileAddressPreference,
-} from "@/lib/form-prefill";
+import { availableUserInfoFields, profileAddressPreference } from "@/lib/form-prefill";
 import {
   extractExplicitSmsMessage,
   hasTaxObligationReference,
@@ -69,11 +61,6 @@ import {
 } from "@/lib/emessage";
 import type { BusinessPlan, IntakeAnswer, IntakeQuestion } from "@/lib/questions";
 import { isValidChoiceAnswer } from "@/lib/intake-validation";
-import {
-  buildFinalSelfEmployedBusiness,
-  buildMockCompliance,
-  buildSelfEmployedMockCompliance,
-} from "@/lib/mock-compliance";
 import { describesBusinessIdea, isRegistrationStart } from "@/lib/registration-intent";
 import {
   businessManagementContext,
@@ -81,21 +68,20 @@ import {
 } from "@/lib/business-management";
 import type { RegisteredBusiness } from "@/lib/registered-business";
 import { getBusiness } from "@/server/businesses";
-import {
-  getBnrsConversationLink,
-  getConversation,
-  saveMessages,
-  setActiveStream,
-} from "@/server/conversations";
+import { getConversation, saveMessages, setActiveStream } from "@/server/conversations";
 import { bnrsActorFromProfile, getBnrs } from "@/server/dx/bnrs";
 import {
   getBnrsCertificateForConversation,
   prepareBnrsApplication,
   syncBnrsPaymentForConversation,
 } from "@/server/dx/bnrs-applications";
-import { getLatestPaymentForService, isPaidStatus } from "@/server/payments";
+import {
+  getLguDocumentsForConversation,
+  getLguStatusForConversation,
+  prepareLguApplication,
+  syncLguPaymentForConversation,
+} from "@/server/dx/lgu-applications";
 import { getResumableContext } from "@/server/resumable";
-import { upsertRegisteredBusiness } from "@/server/registered-businesses";
 import {
   dispatchSmsOnce,
   SmsDispatchRateLimitError,
@@ -105,10 +91,6 @@ import {
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
-
-const BARANGAY_CLEARANCE_MOCK_DELAY_MS = 2_000;
-const EBPLS_PERMIT_MOCK_DELAY_MS = 5_000;
-const COMPLIANCE_MOCK_DELAY_MS = 900;
 
 function readBnrsCatalog() {
   const bnrs = getBnrs();
@@ -129,6 +111,33 @@ function formatPeso(amount: number) {
   }).format(amount);
 }
 
+function lguPermitSummary(
+  status: LguApplicationStatus,
+  documents: LguIssuedDocuments | null = status.issuedDocuments,
+): LguPermitSummary {
+  return {
+    applicationId: status.applicationId,
+    state:
+      status.state === "COMPLETED"
+        ? "COMPLETED"
+        : status.state === "PAYMENT_PENDING"
+          ? "PAYMENT_PENDING"
+          : "PAYMENT_READY",
+    businessName: status.certificate.businessName,
+    city: status.city,
+    feeLabel: formatPeso(status.fee.totalFee),
+    paymentStatus:
+      status.payment?.status === "PAID"
+        ? "PAID"
+        : status.payment?.status === "PENDING" || status.payment?.status === "CREATING"
+          ? "PENDING"
+          : null,
+    businessPermitNumber: documents?.businessPermit.permitNumber ?? null,
+    barangayClearanceNumber: documents?.barangayClearance.clearanceNumber ?? null,
+    validUntil: documents?.businessPermit.validUntil ?? null,
+  };
+}
+
 const PLACEHOLDER_ANSWER =
   /^(?:a+s+s+|asdf+|test(?:ing)?|sample|placeholder|none|n\/?a|not sure|unknown|idk|tbd|xxx+|-+)$/i;
 
@@ -138,10 +147,10 @@ function normalizedAnswerText(value: string | string[]) {
 
 function birFormConsentQuestion(): IntakeQuestion {
   return {
-    id: "self-employed-bir-form-consent",
+    id: "bir-form-consent",
     eyebrow: "Your confirmation",
     title: "Generate your prefilled BIR Form 1901 now?",
-    helpText: "The demo PDF will use verified fields from your authenticated eGov profile.",
+    helpText: "The PDF will use verified fields from your authenticated eGov profile.",
     type: "single",
     options: [
       {
@@ -255,29 +264,6 @@ type EditDtiFormInput = {
   note: string;
 };
 type EditDtiFormOutput = { applicationId: string; form: DtiBusinessNameForm };
-const barangayClearanceApplicationSchema = z.object({
-  businessName: z.string(),
-  ownerName: z.string(),
-  businessActivity: z.string(),
-  businessAddress: z.string(),
-  barangay: z.string(),
-  city: z.string(),
-  registrationDocument: z.string(),
-  supportingDocuments: z.array(z.string()),
-});
-const ebplsBusinessPermitApplicationSchema = z.object({
-  system: z.literal("EBPLS"),
-  permitType: z.literal("New business permit"),
-  businessName: z.string(),
-  ownerName: z.string(),
-  businessActivity: z.string(),
-  businessAddress: z.string(),
-  barangay: z.string(),
-  city: z.string(),
-  barangayClearanceReference: z.string(),
-  registrationDocument: z.string(),
-  attachments: z.array(z.string()),
-});
 const planStepSchema = z.object({
   id: z.string().min(1).max(60),
   label: z.string().min(1).max(120),
@@ -287,11 +273,7 @@ const registrationPlanSchema = z.object({
   title: z.string().min(1).max(120),
   steps: z.array(planStepSchema).min(2).max(12),
 });
-const paymentServiceSchema = z.enum([
-  "dti-business-name",
-  "barangay-clearance",
-  "ebpls-business-permit",
-]);
+const paymentServiceSchema = z.enum(["dti-business-name", "lgu-business-permit"]);
 const requestSchema = z.object({
   id: z.string().uuid(),
   messages: z.array(z.unknown()),
@@ -343,24 +325,6 @@ function addressPreference(answers: IntakeAnswer[]) {
   return profileAddressPreference(
     answers.find((answer) => answer.questionId === "profile-address")?.value,
   );
-}
-
-function lastBarangayClearance(messages: UIMessage[]) {
-  for (const message of [...messages].reverse())
-    for (const part of [...message.parts].reverse()) {
-      if (part.type === "tool-submitBarangayClearance" && part.state === "output-available")
-        return (part.output as { clearance: BarangayClearance }).clearance;
-    }
-  return null;
-}
-
-function lastEbplsReceipt(messages: UIMessage[]) {
-  for (const message of [...messages].reverse())
-    for (const part of [...message.parts].reverse()) {
-      if (part.type === "tool-submitEbplsBusinessPermit" && part.state === "output-available")
-        return (part.output as { receipt: EbplsBusinessPermitReceipt }).receipt;
-    }
-  return null;
 }
 
 function planAfterPermitIssued(plan: RegistrationPlan): RegistrationPlan {
@@ -434,146 +398,6 @@ function immediatelyFailedTaxReminderInput(
     if (parsed.success) return parsed.data;
   }
   return null;
-}
-
-function planAfterBarangayClearance(plan: RegistrationPlan): RegistrationPlan {
-  return normalizeRegistrationPlan({
-    ...plan,
-    steps: plan.steps.map((step) => ({
-      ...step,
-      status:
-        step.id === "details" ||
-        step.id === "structure" ||
-        step.id === "name-registration" ||
-        step.id === "local-clearance"
-          ? "completed"
-          : step.id === "business-permit"
-            ? "in_progress"
-            : "pending",
-    })),
-  });
-}
-
-function planAfterEbplsSubmission(plan: RegistrationPlan): RegistrationPlan {
-  return normalizeRegistrationPlan({
-    ...plan,
-    steps: plan.steps.map((step) => ({
-      ...step,
-      status:
-        step.id === "details" ||
-        step.id === "structure" ||
-        step.id === "name-registration" ||
-        step.id === "local-clearance"
-          ? "completed"
-          : step.id === "business-permit"
-            ? "in_progress"
-            : "pending",
-    })),
-  });
-}
-
-function wait(milliseconds: number) {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
-}
-
-function mockReference(prefix: string) {
-  return `${prefix}-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-}
-
-function mockBarangayClearance(certificate: BnrsCertificate): BarangayClearance {
-  const submittedAt = new Date();
-  const address = certificate.businessAddress;
-  const businessAddress = [
-    address.addressLine1,
-    address.addressLine2,
-    address.barangay,
-    address.cityMunicipality,
-    address.province,
-    address.region,
-    address.postalCode,
-  ]
-    .filter(Boolean)
-    .join(", ");
-  return {
-    businessName: certificate.businessName,
-    ownerName: certificate.ownerName,
-    businessActivity: certificate.descriptor,
-    businessAddress,
-    barangay: address.barangay,
-    city: address.cityMunicipality,
-    registrationDocument: `DTI Business Name Certificate ${certificate.certificateNumber}`,
-    supportingDocuments: [
-      "DTI Business Name Certificate",
-      "Government-issued ID",
-      "Proof of business address",
-      "Owner consent or lease, if applicable",
-    ],
-    status: "Payment required",
-    referenceNumber: mockReference("BCLR"),
-    submittedAt: submittedAt.toISOString(),
-    approvedAt: null,
-    validUntil: null,
-    feeLabel: formatPeso(500),
-    usedFor: [
-      "Supporting document for the EBPLS mayor’s/business permit application",
-      "Proof of barangay approval for the declared business location",
-      "Local inspection and permit-record verification",
-    ],
-  };
-}
-
-function mockEbplsReceipt(clearance: BarangayClearance): EbplsBusinessPermitReceipt {
-  const submittedAt = new Date();
-  return {
-    system: "EBPLS",
-    permitType: "New business permit",
-    businessName: clearance.businessName,
-    ownerName: clearance.ownerName,
-    businessActivity: clearance.businessActivity,
-    businessAddress: clearance.businessAddress,
-    barangay: clearance.barangay,
-    city: clearance.city,
-    barangayClearanceReference: clearance.referenceNumber,
-    registrationDocument: clearance.registrationDocument,
-    attachments: [
-      clearance.registrationDocument,
-      `Barangay Clearance ${clearance.referenceNumber}`,
-      "Government-issued ID",
-      "Proof of business address",
-    ],
-    status: "Payment required",
-    referenceNumber: mockReference("EBPLS"),
-    submittedAt: submittedAt.toISOString(),
-    issuedAt: null,
-    validUntil: null,
-    feeLabel: formatPeso(2_500),
-    nextAction:
-      "Pay the assessed LGU fees through eGovPay so EBPLS can issue the mock mayor’s/business permit.",
-  };
-}
-
-function approveBarangayClearance(clearance: BarangayClearance): BarangayClearance {
-  const approvedAt = new Date();
-  const validUntil = new Date(approvedAt);
-  validUntil.setFullYear(validUntil.getFullYear() + 1);
-  return {
-    ...clearance,
-    status: "Approved",
-    approvedAt: approvedAt.toISOString(),
-    validUntil: validUntil.toISOString(),
-  };
-}
-
-function issueEbplsPermit(receipt: EbplsBusinessPermitReceipt): EbplsBusinessPermitReceipt {
-  const issuedAt = new Date();
-  const validUntil = new Date(issuedAt.getFullYear(), 11, 31, 23, 59, 59);
-  return {
-    ...receipt,
-    status: "Permit issued",
-    issuedAt: issuedAt.toISOString(),
-    validUntil: validUntil.toISOString(),
-    nextAction: "Continue to BIR registration and retain this permit with the business records.",
-  };
 }
 
 function planAfterPayment(plan: RegistrationPlan | null): RegistrationPlan {
@@ -684,7 +508,7 @@ async function managementResponse(
     stopWhen: stepCountIs(3),
     system: `You are the post-registration business assistant for one Filipino business. Answer concisely and warmly using the saved business record below. Help with the tax calendar, saved files, registrations, permits, renewals, employer obligations, and remaining operational compliance.
 
-Treat the record as the only source of truth about this business. Never start or continue a new-business registration workflow. Never invent a filing, status, deadline, reference number, document, or completed government action. Say clearly when the record does not contain an answer. All records are demo data: distinguish what the saved record shows from what the citizen must confirm with BIR, the LGU, BFP, or another responsible agency. Prefer short paragraphs and lists; use a table only when comparing three or more records.
+Treat the record as the only source of truth about this business. Never start or continue a new-business registration workflow. Never invent a filing, status, deadline, reference number, document, or completed government action. Say clearly when the record does not contain an answer. Records come from the BNRS, LGU, and BIR DX modules; distinguish that sandbox service state from actions the citizen must confirm with BIR, the LGU, BFP, or another responsible agency. Prefer short paragraphs and lists; use a table only when comparing three or more records.
 
 Use send_sms_message only when the citizen explicitly asks to send an SMS. Pass a recipient number only when the citizen supplied one in chat; otherwise omit it so the authenticated eGov SSO number is used. Use simulate_tax_payment_reminder only when the citizen explicitly asks to simulate sending a tax payment reminder. Never send a reminder for an ordinary question about tax dates or obligations.
 
@@ -1106,14 +930,6 @@ function makePlan(
   };
 }
 
-function answerText(answers: IntakeAnswer[], pattern: RegExp) {
-  return (
-    answers
-      .find((answer) => pattern.test(`${answer.questionId} ${answer.question}`))
-      ?.labels.join(", ") ?? ""
-  );
-}
-
 function answerValue(answers: IntakeAnswer[], questionId: string) {
   const value = answers.find((answer) => answer.questionId === questionId)?.value;
   return typeof value === "string" ? value.trim() : "";
@@ -1391,7 +1207,7 @@ function agentTools(
       execute: async (input) => {
         if (!userInfoReady) throw new Error("Call user_info before generate_bir_form");
         return {
-          artifact: await createBirFormArtifact(request, rawProfile, input),
+          artifact: await createBirFormArtifact(request, rawProfile, input, conversationId),
           source: "BIR tool input merged with authenticated eGov SSO profile" as const,
         };
       },
@@ -1472,20 +1288,6 @@ function agentTools(
         },
       }),
     }),
-    submitBarangayClearance: tool({
-      description:
-        "Submit an electronic barangay business-clearance request and return the clearance response.",
-      inputSchema: z.object({
-        application: barangayClearanceApplicationSchema,
-      }),
-    }),
-    submitEbplsBusinessPermit: tool({
-      description:
-        "Submit a mayor's or business-permit application through EBPLS (Electronic Business Permits and Licensing System).",
-      inputSchema: z.object({
-        application: ebplsBusinessPermitApplicationSchema,
-      }),
-    }),
     updatePlan: tool({
       description: "Create or update the concise registration checklist whenever progress changes.",
       inputSchema: registrationPlanSchema.extend({
@@ -1512,7 +1314,7 @@ export async function POST(request: Request) {
   if (!conversation) return Response.json({ error: "Chat session not found" }, { status: 404 });
   const managementBusiness =
     conversation.purpose === "management" && conversation.businessId
-      ? await getBusiness({ actor, legacyProfileId: session.profile.id }, conversation.businessId)
+      ? await getBusiness({ actor }, conversation.businessId)
       : null;
   if (conversation.purpose === "management" && !managementBusiness)
     return Response.json({ error: "Chat session not found" }, { status: 404 });
@@ -1809,20 +1611,20 @@ export async function POST(request: Request) {
   const answers = toolAnswers(messages);
   const invalidAnswers = invalidIntakeAnswerIds(messages);
   const birFormConsent = answers.find(
-    (answer) => answer.questionId === "self-employed-bir-form-consent",
+    (answer) =>
+      answer.questionId === "bir-form-consent" ||
+      answer.questionId === "self-employed-bir-form-consent",
   );
   const birFormConsentValue = birFormConsent
     ? normalizedAnswerText(birFormConsent.value).toLowerCase()
     : null;
-  const shouldGenerateBirForm = birFormConsentValue === "yes";
+  const shouldGenerateBirForm =
+    birFormConsentValue === "yes" && !hasCompletedTool(messages, "tool-generate_bir_form");
   const initialLocation = resolveBusinessLocation(prompt, profile?.city ?? "Philippines", answers);
   const preference = addressPreference(answers);
   const residentialAddress = mapEgovSsoProfileToBnrsResidentialAddress(session.rawProfile);
   const bnrsAddress = businessAddressFromAnswers(answers, residentialAddress);
   const termsAccepted = answerValue(answers, "bnrs-terms-accepted") === "accept";
-  const confirmedBusinessAddress =
-    extractExplicitBusinessAddress(prompt) ||
-    answerText(answers, /business.*address|operating.*address|exact.*address/i);
   const existingPlan = lastRegistrationPlan(messages);
   const hasSearched = messages.some((message) =>
     message.parts.some(
@@ -1856,8 +1658,6 @@ export async function POST(request: Request) {
     conversation.id,
     termsAccepted,
   );
-  const previousClearance = lastBarangayClearance(messages);
-  const previousEbplsReceipt = lastEbplsReceipt(messages);
   const location = initialLocation;
 
   if (parsed.data.event === "payment-completed") {
@@ -1883,15 +1683,28 @@ export async function POST(request: Request) {
       if (!certificate)
         return Response.json({ error: "BNRS certificate not found." }, { status: 409 });
 
+      let lguStatus: LguApplicationStatus;
+      try {
+        lguStatus = await prepareLguApplication({
+          actor,
+          certificate,
+          conversationId: conversation.id,
+          ownerProfile: session.rawProfile,
+        });
+      } catch (error) {
+        if (error instanceof LguError)
+          return Response.json({ error: error.message, code: error.code }, { status: 409 });
+        throw error;
+      }
       const paidPlan = planAfterPayment(existingPlan);
-      const clearance = mockBarangayClearance(certificate);
+      const permit = lguPermitSummary(lguStatus);
       return manualResponse(actor.egovUserId, conversation.id, messages, async (writer) => {
         emitTool(
           writer,
           "updatePlan",
           {
             ...paidPlan,
-            note: "BNRS payment verified and certificate issued. Moving to local clearances.",
+            note: "BNRS certificate issued. The combined LGU permit application is ready.",
           },
           { plan: paidPlan },
         );
@@ -1900,280 +1713,78 @@ export async function POST(request: Request) {
         writer.write({
           type: "text-delta",
           id: textId,
-          delta: `BNRS issued certificate **${certificate.certificateNumber}** for **${certificate.businessName}**. Next, I’m submitting the barangay business-clearance request using the freshly fetched certificate and registered address.`,
+          delta: `BNRS issued certificate **${certificate.certificateNumber}** for **${certificate.businessName}**. I passed that fresh credential to the DX LGU flow, which includes the business permit and barangay clearance in one assessment.`,
         });
         writer.write({ type: "text-end", id: textId });
-        const barangayId = crypto.randomUUID();
-        writer.write({
-          type: "tool-input-available",
-          toolCallId: barangayId,
-          toolName: "submitBarangayClearance",
-          input: {
-            application: {
-              businessName: clearance.businessName,
-              ownerName: clearance.ownerName,
-              businessActivity: clearance.businessActivity,
-              businessAddress: clearance.businessAddress,
-              barangay: clearance.barangay,
-              city: clearance.city,
-              registrationDocument: clearance.registrationDocument,
-              supportingDocuments: clearance.supportingDocuments,
-            },
-          },
-        });
-        await wait(BARANGAY_CLEARANCE_MOCK_DELAY_MS);
-        writer.write({
-          type: "tool-output-available",
-          toolCallId: barangayId,
-          output: { clearance },
-        });
+        emitTool(writer, "prepareLguBusinessPermit", {}, { permit });
         emitTool(
           writer,
           "updatePlan",
           {
             ...paidPlan,
-            note: "Barangay clearance assessed. Payment is required before approval.",
+            note: "LGU application validated. One combined permit fee is ready for payment.",
           },
           { plan: paidPlan },
         );
       });
     }
 
-    const payment = await getLatestPaymentForService(conversation.id, paymentService);
-    if (!payment || !isPaidStatus(payment.status))
-      return Response.json({ error: "Payment has not been marked paid." }, { status: 409 });
-    if (paymentService === "barangay-clearance") {
-      if (!previousClearance)
-        return Response.json(
-          { error: "Barangay clearance assessment not found." },
-          { status: 409 },
-        );
-      const certificate = await getBnrsCertificateForConversation({
-        actor,
-        conversationId: conversation.id,
-      });
-      if (!certificate)
-        return Response.json({ error: "BNRS certificate not found." }, { status: 409 });
-      const freshCredential = mockBarangayClearance(certificate);
-      const clearance = approveBarangayClearance({
-        ...previousClearance,
-        businessName: freshCredential.businessName,
-        ownerName: freshCredential.ownerName,
-        businessActivity: freshCredential.businessActivity,
-        businessAddress: freshCredential.businessAddress,
-        barangay: freshCredential.barangay,
-        city: freshCredential.city,
-        registrationDocument: freshCredential.registrationDocument,
-      });
-      const permitPlan = planAfterBarangayClearance(existingPlan ?? planAfterPayment(null));
-      return manualResponse(actor.egovUserId, conversation.id, messages, async (writer) => {
-        const barangayId = crypto.randomUUID();
-        writer.write({
-          type: "tool-input-available",
-          toolCallId: barangayId,
-          toolName: "submitBarangayClearance",
-          input: {
-            application: {
-              businessName: clearance.businessName,
-              ownerName: clearance.ownerName,
-              businessActivity: clearance.businessActivity,
-              businessAddress: clearance.businessAddress,
-              barangay: clearance.barangay,
-              city: clearance.city,
-              registrationDocument: clearance.registrationDocument,
-              supportingDocuments: clearance.supportingDocuments,
-            },
-          },
+    if (paymentService === "lgu-business-permit") {
+      let status: LguApplicationStatus;
+      let documents: LguIssuedDocuments | null;
+      try {
+        const result = await syncLguPaymentForConversation({
+          actor,
+          conversationId: conversation.id,
         });
-        await wait(BARANGAY_CLEARANCE_MOCK_DELAY_MS);
-        writer.write({
-          type: "tool-output-available",
-          toolCallId: barangayId,
-          output: { clearance },
-        });
-        emitTool(
-          writer,
-          "updatePlan",
-          {
-            ...permitPlan,
-            note: "Barangay clearance paid and approved. Starting EBPLS assessment.",
-          },
-          { plan: permitPlan },
-        );
-        const textId = crypto.randomUUID();
-        writer.write({ type: "text-start", id: textId });
-        writer.write({
-          type: "text-delta",
-          id: textId,
-          delta:
-            "The barangay clearance is paid and approved. I’m attaching it to the mayor’s/business permit application through **EBPLS — Electronic Business Permits and Licensing System**.",
-        });
-        writer.write({ type: "text-end", id: textId });
-        const receipt = mockEbplsReceipt(clearance);
-        const ebplsId = crypto.randomUUID();
-        writer.write({
-          type: "tool-input-available",
-          toolCallId: ebplsId,
-          toolName: "submitEbplsBusinessPermit",
-          input: {
-            application: {
-              system: receipt.system,
-              permitType: receipt.permitType,
-              businessName: receipt.businessName,
-              ownerName: receipt.ownerName,
-              businessActivity: receipt.businessActivity,
-              businessAddress: receipt.businessAddress,
-              barangay: receipt.barangay,
-              city: receipt.city,
-              barangayClearanceReference: receipt.barangayClearanceReference,
-              registrationDocument: receipt.registrationDocument,
-              attachments: receipt.attachments,
-            },
-          },
-        });
-        await wait(EBPLS_PERMIT_MOCK_DELAY_MS);
-        writer.write({
-          type: "tool-output-available",
-          toolCallId: ebplsId,
-          output: { receipt },
-        });
-        emitTool(
-          writer,
-          "updatePlan",
-          {
-            ...planAfterEbplsSubmission(permitPlan),
-            note: "EBPLS assessment complete. LGU fee payment is required.",
-          },
-          { plan: planAfterEbplsSubmission(permitPlan) },
-        );
-      });
-    }
-    if (paymentService === "ebpls-business-permit") {
-      if (!previousEbplsReceipt)
-        return Response.json({ error: "EBPLS assessment not found." }, { status: 409 });
-      const receipt = issueEbplsPermit(previousEbplsReceipt);
+        if (result.status.state !== "COMPLETED")
+          return Response.json({ error: "Payment has not been marked paid." }, { status: 409 });
+        const [currentStatus, linkedDocuments] = await Promise.all([
+          getLguStatusForConversation({ actor, conversationId: conversation.id }),
+          getLguDocumentsForConversation({ actor, conversationId: conversation.id }),
+        ]);
+        if (!currentStatus || !linkedDocuments)
+          throw new LguError(
+            "ISSUED_DOCUMENTS_NOT_FOUND",
+            "The LGU documents have not been issued.",
+          );
+        status = currentStatus;
+        documents = linkedDocuments;
+      } catch (error) {
+        if (error instanceof LguError)
+          return Response.json({ error: error.message, code: error.code }, { status: 409 });
+        throw error;
+      }
       const issuedPlan = planAfterPermitIssued(existingPlan ?? initialRegistrationPlan);
-      const businessPlan = makePlan(prompt, profile, answers);
-      const compliance = buildMockCompliance(businessPlan, receipt);
-      const sectorRecords = compliance.records.filter((record) => record.kind === "permit");
-      const employerRecords = compliance.records.filter((record) => record.kind === "employer");
-      const taxRecords = compliance.records.filter((record) => record.kind === "tax");
-      const booksAndInvoiceRecords = taxRecords.filter((record) =>
-        ["books-of-accounts", "invoice-setup"].includes(record.id),
-      );
-      const registrationTaxRecords = taxRecords.filter(
-        (record) => !booksAndInvoiceRecords.includes(record),
-      );
-      const sectorRequired = sectorRecords.some((record) => record.status !== "Not required");
-      const employerRequired = employerRecords.some((record) => record.status !== "Not required");
-      const completedPlan = completeRegistrationPlan(issuedPlan, {
-        employer: employerRequired,
-        sectorPermits: sectorRequired,
-      });
-      const [certificate, bnrsLink] = await Promise.all([
-        getBnrsCertificateForConversation({ actor, conversationId: conversation.id }),
-        getBnrsConversationLink(actor.egovUserId, conversation.id),
-      ]);
-      if (!certificate || !bnrsLink?.applicationId)
-        return Response.json({ error: "BNRS certificate not found." }, { status: 409 });
-      const business = {
-        id: bnrsLink.applicationId,
-        name: certificate.businessName,
-        status: "Active",
-      } as const;
-      return manualResponse(actor.egovUserId, conversation.id, messages, async (writer) => {
-        const ebplsId = crypto.randomUUID();
-        writer.write({
-          type: "tool-input-available",
-          toolCallId: ebplsId,
-          toolName: "submitEbplsBusinessPermit",
-          input: {
-            application: {
-              system: receipt.system,
-              permitType: receipt.permitType,
-              businessName: receipt.businessName,
-              ownerName: receipt.ownerName,
-              businessActivity: receipt.businessActivity,
-              businessAddress: receipt.businessAddress,
-              barangay: receipt.barangay,
-              city: receipt.city,
-              barangayClearanceReference: receipt.barangayClearanceReference,
-              registrationDocument: receipt.registrationDocument,
-              attachments: receipt.attachments,
-            },
-          },
-        });
-        await wait(EBPLS_PERMIT_MOCK_DELAY_MS);
-        writer.write({
-          type: "tool-output-available",
-          toolCallId: ebplsId,
-          output: { receipt },
-        });
+      const permit = lguPermitSummary(status, documents);
+      return manualResponse(actor.egovUserId, conversation.id, messages, (writer) => {
+        emitTool(writer, "issueLguBusinessPermit", {}, { permit });
         emitTool(
           writer,
           "updatePlan",
           {
             ...issuedPlan,
-            note: "Mayor’s/business permit issued. Moving to BIR registration.",
+            note: "LGU payment verified; the permit and barangay clearance were issued together.",
           },
           { plan: issuedPlan },
-        );
-        await wait(COMPLIANCE_MOCK_DELAY_MS);
-        const booksToolId = crypto.randomUUID();
-        writer.write({
-          type: "tool-input-available",
-          toolCallId: booksToolId,
-          toolName: "setupBooksAndInvoices",
-          input: {},
-        });
-        await wait(COMPLIANCE_MOCK_DELAY_MS);
-        writer.write({
-          type: "tool-output-available",
-          toolCallId: booksToolId,
-          output: { records: booksAndInvoiceRecords },
-        });
-        emitTool(
-          writer,
-          "setupTaxCompliance",
-          {},
-          {
-            records: registrationTaxRecords,
-            obligations: compliance.taxObligations,
-          },
-        );
-        await wait(COMPLIANCE_MOCK_DELAY_MS);
-        emitTool(writer, "completeSectorPermits", {}, { records: sectorRecords });
-        await wait(COMPLIANCE_MOCK_DELAY_MS);
-        emitTool(writer, "registerEmployerAgencies", {}, { records: employerRecords });
-        emitTool(
-          writer,
-          "updatePlan",
-          {
-            ...completedPlan,
-            note: "Demo compliance setup complete; BNRS remains the business-name record.",
-          },
-          { plan: completedPlan },
-        );
-        emitTool(
-          writer,
-          "finalizeBusinessRegistration",
-          {},
-          {
-            businessId: business.id,
-            businessName: business.name,
-            status: business.status,
-          },
         );
         const textId = crypto.randomUUID();
         writer.write({ type: "text-start", id: textId });
         writer.write({
           type: "text-delta",
           id: textId,
-          delta: `**All set up.** The downstream demo setup for **${business.name}** is complete, including books, invoices, recurring tax reminders, permits, and employer checks. BNRS remains the authoritative business-name record. Every downstream generated reference is marked as a mock and is not an official government record.`,
+          delta: `The DX LGU flow issued business permit **${permit.businessPermitNumber}** and barangay clearance **${permit.barangayClearanceNumber}**. Next, prepare the BIR registration form; the app will not claim BIR registration, books, invoices, or other agency approvals until those services actually complete them.`,
         });
         writer.write({ type: "text-end", id: textId });
+        writer.write({
+          type: "tool-input-available",
+          toolCallId: crypto.randomUUID(),
+          toolName: "askUser",
+          input: { questions: [birFormConsentQuestion()] },
+        });
       });
     }
+
     return Response.json({ error: "Unsupported payment service." }, { status: 400 });
   }
 
@@ -2190,187 +1801,51 @@ export async function POST(request: Request) {
 
       try {
         const output = {
-          artifact: await createBirFormArtifact(request, session.rawProfile, {
-            type: "1901",
-            data: {},
-          }),
+          artifact: await createBirFormArtifact(
+            request,
+            session.rawProfile,
+            { type: "1901", data: {} },
+            conversation.id,
+          ),
           source: "BIR tool input merged with authenticated eGov SSO profile" as const,
         };
 
-        const plan = makePlan(prompt, profile, answers);
-        if (plan.registrationType === "Self-employed") {
-          const compliance = buildSelfEmployedMockCompliance(plan, profile.fullName);
-          const taxRecords = compliance.records.filter((record) => record.kind === "tax");
-          const booksAndInvoiceRecords = taxRecords.filter((record) =>
-            ["books-of-accounts", "invoice-setup"].includes(record.id),
-          );
-          const registrationTaxRecords = taxRecords.filter(
-            (record) => !booksAndInvoiceRecords.includes(record),
-          );
-          const birCompletedPlan = normalizeRegistrationPlan({
-            ...initialRegistrationPlan,
-            steps: initialRegistrationPlan.steps.map((step) => ({
-              ...step,
-              status: ["details", "structure", "bir"].includes(step.id)
+        const route = makePlan(prompt, profile, answers);
+        const sourcePlan = existingPlan ?? initialRegistrationPlan;
+        const birCompletedPlan = normalizeRegistrationPlan({
+          ...sourcePlan,
+          steps: sourcePlan.steps.map((step) => ({
+            ...step,
+            status:
+              step.id === "bir"
                 ? ("completed" as const)
-                : ["name-registration", "local-clearance", "business-permit"].includes(step.id)
-                  ? ("skipped" as const)
-                  : step.id === "tax-compliance"
-                    ? ("in_progress" as const)
-                    : ("pending" as const),
-            })),
-          });
-          const business = await upsertRegisteredBusiness(
-            profile.id,
-            buildFinalSelfEmployedBusiness({
-              conversationId: conversation.id,
-              profile,
-              plan,
-              businessAddress:
-                confirmedBusinessAddress ||
-                (preference === "profile" ? profile.address : "Address confirmed during intake"),
-              compliance,
-              files: [
-                {
-                  id: "bir-form-1901",
-                  title: "BIR Form 1901",
-                  filename: "BIR-Form-1901.pdf",
-                  documentType: "Registration application",
-                  status: "Generated",
-                  createdAt: new Date().toISOString(),
-                  url: output.artifact.url,
-                  note: "Prefilled from the authenticated eGov profile. Submission to BIR is still required.",
-                  demo: true,
-                },
-                {
-                  id: "bir-form-2303",
-                  title: "BIR Certificate of Registration (Form 2303)",
-                  filename: "BIR-Certificate-of-Registration-2303.html",
-                  documentType: "Certificate of Registration",
-                  status: "Available",
-                  createdAt: new Date().toISOString(),
-                  url: null,
-                  note: "Printable HTML preview populated from the saved business record. This is not an official certificate issued by BIR.",
-                  demo: true,
-                },
-                {
-                  id: "books-and-invoices",
-                  title: "Books and invoice setup",
-                  filename: "DEMO-Books-and-Invoices.pdf",
-                  documentType: "Accounting setup record",
-                  status: "Available",
-                  createdAt: new Date().toISOString(),
-                  url: null,
-                  note: "Demo summary of configured books and invoice controls.",
-                  demo: true,
-                },
-                {
-                  id: "tax-calendar",
-                  title: "Recurring tax filing calendar",
-                  filename: "DEMO-Tax-Calendar.pdf",
-                  documentType: "Tax calendar",
-                  status: "Available",
-                  createdAt: new Date().toISOString(),
-                  url: null,
-                  note: "Demo schedule. Filing obligations must be confirmed with BIR.",
-                  demo: true,
-                },
-              ],
-            }),
-          );
-          const completedPlan = completeRegistrationPlan(birCompletedPlan, {
-            employer: false,
-            sectorPermits: false,
-          });
-
-          writer.write({ type: "tool-output-available", toolCallId, output });
-          emitTool(
-            writer,
-            "updatePlan",
-            {
-              ...birCompletedPlan,
-              note: "BIR Form 1901 generated. Setting up books, invoices, and tax filings.",
-            },
-            { plan: birCompletedPlan },
-          );
-
-          await wait(COMPLIANCE_MOCK_DELAY_MS);
-          const booksToolId = crypto.randomUUID();
-          writer.write({
-            type: "tool-input-available",
-            toolCallId: booksToolId,
-            toolName: "setupBooksAndInvoices",
-            input: {},
-          });
-          await wait(COMPLIANCE_MOCK_DELAY_MS);
-          writer.write({
-            type: "tool-output-available",
-            toolCallId: booksToolId,
-            output: { records: booksAndInvoiceRecords },
-          });
-          emitTool(
-            writer,
-            "updatePlan",
-            {
-              ...birCompletedPlan,
-              note: "Books and invoices are configured. Setting up recurring tax filings.",
-            },
-            { plan: birCompletedPlan },
-          );
-
-          await wait(COMPLIANCE_MOCK_DELAY_MS);
-          const taxToolId = crypto.randomUUID();
-          writer.write({
-            type: "tool-input-available",
-            toolCallId: taxToolId,
-            toolName: "setupTaxCompliance",
-            input: {},
-          });
-          await wait(COMPLIANCE_MOCK_DELAY_MS);
-          writer.write({
-            type: "tool-output-available",
-            toolCallId: taxToolId,
-            output: {
-              records: registrationTaxRecords,
-              obligations: compliance.taxObligations,
-            },
-          });
-          emitTool(
-            writer,
-            "updatePlan",
-            {
-              ...completedPlan,
-              note: "Books, invoices, and recurring tax filings are set up.",
-            },
-            { plan: completedPlan },
-          );
-          emitTool(
-            writer,
-            "finalizeBusinessRegistration",
-            {},
-            {
-              businessId: business.id,
-              businessName: business.name,
-              status: business.status,
-            },
-          );
-          const textId = crypto.randomUUID();
-          writer.write({ type: "text-start", id: textId });
-          writer.write({
-            type: "text-delta",
-            id: textId,
-            delta: `**All set up.** Your demo self-employed registration for **${business.name}** now includes the generated BIR Form 1901, books and invoices, and recurring tax filing reminders. DTI and the standard local-permit chain were skipped as not applicable. These are demo records, not official government registrations.`,
-          });
-          writer.write({ type: "text-end", id: textId });
-          return;
-        }
-
+                : step.id === "tax-compliance"
+                  ? ("in_progress" as const)
+                  : route.registrationType === "Self-employed" &&
+                      ["name-registration", "local-clearance", "business-permit"].includes(step.id)
+                    ? ("skipped" as const)
+                    : ["details", "structure"].includes(step.id)
+                      ? ("completed" as const)
+                      : step.status,
+          })),
+        });
+        writer.write({ type: "tool-output-available", toolCallId, output });
+        emitTool(
+          writer,
+          "updatePlan",
+          {
+            ...birCompletedPlan,
+            note: "BIR Form 1901 generated. BIR submission and downstream compliance remain pending.",
+          },
+          { plan: birCompletedPlan },
+        );
         const textId = crypto.randomUUID();
         writer.write({ type: "text-start", id: textId });
         writer.write({
           type: "text-delta",
           id: textId,
-          delta: "Your prefilled BIR Form 1901 is ready. Select the PDF to preview it.",
+          delta:
+            "Your DX-generated BIR Form 1901 is ready. Select the PDF to preview it, then submit it through the appropriate BIR channel. The app has not claimed taxpayer registration, books, invoices, tax filings, sector permits, or employer registrations.",
         });
         writer.write({ type: "text-end", id: textId });
       } catch (error) {
@@ -2387,8 +1862,7 @@ export async function POST(request: Request) {
         writer.write({
           type: "text-delta",
           id: textId,
-          delta:
-            "I couldn’t generate the BIR form PDF, so tax setup and finalization were not run.",
+          delta: "I couldn’t generate the BIR form PDF. No downstream registration was recorded.",
         });
         writer.write({ type: "text-end", id: textId });
       }
@@ -2517,7 +1991,6 @@ export async function POST(request: Request) {
           addressSource: preference === "profile" ? "Authenticated profile" : "Business address",
           status: "Ready for BIR form preparation",
           nextAction: "Confirm below whether to generate the prefilled BIR Form 1901.",
-          demo: true,
         },
       });
       const textId = crypto.randomUUID();

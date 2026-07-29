@@ -1,6 +1,6 @@
 import type { UIMessage } from "ai";
+import type { GenerateBirFormInput } from "@repo/dx/bir";
 import type { BirFormArtifact } from "@/lib/bir-form/artifact";
-import type { GenerateBirFormInput } from "@/lib/bir-form/schema";
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import type {
   SendSmsMessageInput,
@@ -9,7 +9,6 @@ import type {
   SimulateTaxPaymentReminderOutput,
 } from "@/lib/emessage";
 import type { BusinessPlan, IntakeQuestion } from "@/lib/questions";
-import type { BusinessRecord, TaxObligation } from "@/lib/registered-business";
 
 export type DtiBusinessNameForm = {
   applicationType: "New registration";
@@ -42,10 +41,7 @@ export type DtiBusinessNameForm = {
   missingFields: string[];
 };
 
-export type PaymentServiceType =
-  | "dti-business-name"
-  | "barangay-clearance"
-  | "ebpls-business-permit";
+export type PaymentServiceType = "dti-business-name" | "lgu-business-permit";
 
 export type AskUserAnswer = { questionId: string; value: string | string[]; labels: string[] };
 export type AskUserInput = { questions: IntakeQuestion[]; question?: IntakeQuestion };
@@ -65,52 +61,19 @@ export type EditDtiOutput = {
   applicationId: string;
   form?: DtiBusinessNameForm;
 };
-export type BarangayClearanceApplication = {
+export type LguPermitSummary = {
+  applicationId: string;
+  state: "PAYMENT_READY" | "PAYMENT_PENDING" | "COMPLETED";
   businessName: string;
-  ownerName: string;
-  businessActivity: string;
-  businessAddress: string;
-  barangay: string;
   city: string;
-  registrationDocument: string;
-  supportingDocuments: string[];
-};
-export type BarangayClearance = BarangayClearanceApplication & {
-  status: "Payment required" | "Approved";
-  referenceNumber: string;
-  submittedAt: string;
-  approvedAt: string | null;
-  validUntil: string | null;
   feeLabel: string;
-  usedFor: string[];
-};
-export type SubmitBarangayClearanceInput = { application: BarangayClearanceApplication };
-export type SubmitBarangayClearanceOutput = { clearance: BarangayClearance };
-export type EbplsBusinessPermitApplication = {
-  system: "EBPLS";
-  permitType: "New business permit";
-  businessName: string;
-  ownerName: string;
-  businessActivity: string;
-  businessAddress: string;
-  barangay: string;
-  city: string;
-  barangayClearanceReference: string;
-  registrationDocument: string;
-  attachments: string[];
-};
-export type EbplsBusinessPermitReceipt = EbplsBusinessPermitApplication & {
-  status: "Payment required" | "Permit issued";
-  referenceNumber: string;
-  submittedAt: string;
-  issuedAt: string | null;
+  paymentStatus: "PENDING" | "PAID" | null;
+  businessPermitNumber: string | null;
+  barangayClearanceNumber: string | null;
   validUntil: string | null;
-  feeLabel: string;
-  nextAction: string;
 };
-export type SubmitEbplsBusinessPermitInput = { application: EbplsBusinessPermitApplication };
-export type SubmitEbplsBusinessPermitOutput = { receipt: EbplsBusinessPermitReceipt };
-export type SetupBooksAndInvoicesOutput = { records: BusinessRecord[] };
+export type PrepareLguBusinessPermitOutput = { permit: LguPermitSummary };
+export type IssueLguBusinessPermitOutput = { permit: LguPermitSummary };
 export type PrepareSelfEmployedRegistrationOutput = {
   registrationType: "Self-employed";
   taxpayerName: string;
@@ -120,18 +83,6 @@ export type PrepareSelfEmployedRegistrationOutput = {
   addressSource: "Business address" | "Authenticated profile";
   status: "Ready for BIR form preparation";
   nextAction: string;
-  demo: true;
-};
-export type SetupTaxComplianceOutput = {
-  records: BusinessRecord[];
-  obligations: TaxObligation[];
-};
-export type CompleteSectorPermitsOutput = { records: BusinessRecord[] };
-export type RegisterEmployerAgenciesOutput = { records: BusinessRecord[] };
-export type FinalizeBusinessRegistrationOutput = {
-  businessId: string;
-  businessName: string;
-  status: "Active";
 };
 export type AgentPlanStep = {
   id: string;
@@ -172,34 +123,17 @@ export type BusinessChatTools = {
   askUser: { input: AskUserInput; output: AskUserOutput };
   webSearch: { input: WebSearchInput; output: WebSearchOutput };
   editDtiBusinessNameForm: { input: EditDtiInput; output: EditDtiOutput };
-  submitBarangayClearance: {
-    input: SubmitBarangayClearanceInput;
-    output: SubmitBarangayClearanceOutput;
-  };
   prepareSelfEmployedRegistration: {
     input: Record<string, never>;
     output: PrepareSelfEmployedRegistrationOutput;
   };
-  submitEbplsBusinessPermit: {
-    input: SubmitEbplsBusinessPermitInput;
-    output: SubmitEbplsBusinessPermitOutput;
-  };
-  setupBooksAndInvoices: {
+  prepareLguBusinessPermit: {
     input: Record<string, never>;
-    output: SetupBooksAndInvoicesOutput;
+    output: PrepareLguBusinessPermitOutput;
   };
-  setupTaxCompliance: { input: Record<string, never>; output: SetupTaxComplianceOutput };
-  completeSectorPermits: {
+  issueLguBusinessPermit: {
     input: Record<string, never>;
-    output: CompleteSectorPermitsOutput;
-  };
-  registerEmployerAgencies: {
-    input: Record<string, never>;
-    output: RegisterEmployerAgenciesOutput;
-  };
-  finalizeBusinessRegistration: {
-    input: Record<string, never>;
-    output: FinalizeBusinessRegistrationOutput;
+    output: IssueLguBusinessPermitOutput;
   };
   updatePlan: { input: UpdatePlanInput; output: UpdatePlanOutput };
 };

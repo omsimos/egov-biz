@@ -15,7 +15,6 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   const business = await getBusiness(
     {
       actor: bnrsActorFromProfile(session.rawProfile),
-      legacyProfileId: session.profile.id,
     },
     id,
   );

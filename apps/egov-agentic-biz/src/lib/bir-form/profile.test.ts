@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { EgovSsoCitizenProfile } from "@repo/egov/eGovSso";
+import { bir1901DataSchema, bir1905DataSchema } from "@repo/utils/bir-form";
 import {
   completeEgovSsoTestProfile,
   mapEgovProfileToBir1901,
   mapEgovProfileToBir1905,
 } from "@/lib/bir-form/profile";
-import { bir1901DataSchema, bir1905DataSchema } from "@/lib/bir-form/schema";
 
 describe("mapEgovProfileToBir1901", () => {
   test("maps every authoritative BIR 1901 field in the complete SSO fixture", () => {

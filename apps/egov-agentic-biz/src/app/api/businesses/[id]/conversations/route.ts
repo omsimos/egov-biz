@@ -10,7 +10,7 @@ async function ownedBusiness(request: Request, params: Promise<{ id: string }>) 
   if (!session) return { error: "Authentication required.", status: 401 } as const;
   const { id } = await params;
   const actor = bnrsActorFromProfile(session.rawProfile);
-  const business = await getBusiness({ actor, legacyProfileId: session.profile.id }, id);
+  const business = await getBusiness({ actor }, id);
   if (!business) return { error: "Business record not found.", status: 404 } as const;
   return { actor, business } as const;
 }

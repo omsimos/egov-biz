@@ -23,7 +23,7 @@ egov-scripts/
 │   └── rag-hor/            # Next.js RAG agent for House hearings
 ├── packages/
 │   ├── db/                 # Shared database package
-│   ├── dx/                 # Shared developer-experience package
+│   ├── dx/                 # BNRS, LGU, and BIR business-registration flows
 │   ├── egov/               # Typed client SDK for 9 eGovPH partner services
 │   └── transcript-scraper/ # YouTube timestamped-transcript extractor
 ├── docs/                   # eGov API architecture & reference (shared)

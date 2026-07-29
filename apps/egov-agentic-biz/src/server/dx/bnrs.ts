@@ -1,4 +1,3 @@
-import { createDatabaseFromEnv, type Database } from "@repo/db";
 import {
   createBnrsService,
   createDrizzleBnrsRepository,
@@ -8,14 +7,10 @@ import {
 } from "@repo/dx/bnrs";
 import { eGovPayApi } from "@repo/egov/eGovPay";
 import type { EgovSsoCitizenProfile } from "@repo/egov/eGovSso";
-
-type BnrsComposition = {
-  bnrs: BnrsService;
-  database: Database;
-};
+import { getDxDatabase } from "@/server/dx/database";
 
 const globalCache = globalThis as typeof globalThis & {
-  __egovBizBnrsComposition?: BnrsComposition;
+  __egovBizBnrs?: BnrsService;
 };
 
 /**
@@ -43,20 +38,17 @@ function createLazyPaymentProvider(
   };
 }
 
-function createBnrsComposition(): BnrsComposition {
-  const database = createDatabaseFromEnv();
-  const repository = createDrizzleBnrsRepository(database);
-  const bnrs = createBnrsService({
-    repository,
+function createBnrs(): BnrsService {
+  return createBnrsService({
+    repository: createDrizzleBnrsRepository(getDxDatabase()),
     paymentProvider: createLazyPaymentProvider(),
   });
-  return { bnrs, database };
 }
 
 /** Server-only composition root for the app's direct DX BNRS usage. */
 export function getBnrs(): BnrsService {
-  globalCache.__egovBizBnrsComposition ??= createBnrsComposition();
-  return globalCache.__egovBizBnrsComposition.bnrs;
+  globalCache.__egovBizBnrs ??= createBnrs();
+  return globalCache.__egovBizBnrs;
 }
 
 export function bnrsActorFromProfile(profile: EgovSsoCitizenProfile) {
