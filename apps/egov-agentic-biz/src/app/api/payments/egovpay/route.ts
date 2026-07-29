@@ -1,6 +1,7 @@
 import { eGovPayApi } from "@repo/egov/eGovPay";
 import { z } from "zod";
 import { readSession } from "@/lib/auth/session";
+import { latestReadyDtiBusinessNameForm } from "@/lib/dti-form";
 import { dtiRegistrationFee } from "@/lib/dti-fees";
 import {
   egovPayBaseUrl,
@@ -69,8 +70,18 @@ export async function POST(request: Request) {
       { error: "Check the application details and try again." },
       { status: 400 },
     );
-  if (!getConversation(parsed.data.conversationId))
-    return Response.json({ error: "Chat session not found." }, { status: 404 });
+  const conversation = getConversation(parsed.data.conversationId);
+  if (!conversation) return Response.json({ error: "Chat session not found." }, { status: 404 });
+
+  const dtiForm =
+    parsed.data.serviceType === "dti-business-name"
+      ? latestReadyDtiBusinessNameForm(conversation.messages)
+      : null;
+  if (parsed.data.serviceType === "dti-business-name" && !dtiForm)
+    return Response.json(
+      { error: "Confirm the required business address before continuing to payment." },
+      { status: 409 },
+    );
 
   if (
     !process.env.EGOVPAY_BASE_URL?.trim() ||
@@ -89,8 +100,10 @@ export async function POST(request: Request) {
   const service = services[parsed.data.serviceType];
   const amount =
     parsed.data.serviceType === "dti-business-name"
-      ? dtiRegistrationFee(parsed.data.territorialScope)
+      ? dtiRegistrationFee(dtiForm!.territorialScope)
       : service.amount;
+  const proposedName = dtiForm?.proposedName ?? parsed.data.proposedName;
+  const territorialScope = dtiForm?.territorialScope ?? "Not applicable";
   const transactionId = `${service.prefix}-${crypto.randomUUID()}`;
 
   try {
@@ -107,7 +120,7 @@ export async function POST(request: Request) {
         description: {
           service: service.label,
           ...(parsed.data.serviceType === "dti-business-name"
-            ? { scope: parsed.data.territorialScope }
+            ? { scope: territorialScope }
             : { reference: parsed.data.serviceReference }),
         },
         items: [{ amount, name: service.label }],
@@ -125,11 +138,8 @@ export async function POST(request: Request) {
       transactionId,
       amount,
       status: "pending",
-      proposedName: parsed.data.proposedName,
-      territorialScope:
-        parsed.data.serviceType === "dti-business-name"
-          ? parsed.data.territorialScope
-          : "Not applicable",
+      proposedName,
+      territorialScope,
       ownerName: session.profile.fullName,
       serviceType: parsed.data.serviceType,
       serviceReference: parsed.data.serviceReference ?? null,

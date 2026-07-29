@@ -19,6 +19,7 @@ product-agnostic — other ideas can build on the same APIs.
 ```
 egov-scripts/
 ├── apps/
+│   ├── egov-agentic-biz/  # Guided sole-proprietor registration demo
 │   ├── rag-hor/            # The product: Next.js RAG agent for House hearings
 │   ├── egov-ai-sample/     # Live eGov AI usage sample
 │   ├── egov-smoke/         # Live smoke harness across the eGov services
@@ -59,6 +60,25 @@ Root scripts run through Turborepo:
 | `bun run dev:sso` | Run the eGov SSO sample (`apps/egov-sso-sample`) |
 
 ## Workspaces
+
+### `apps/egov-agentic-biz` — guided business-registration demo
+
+The agentic business demo guides a citizen through a sole-proprietor route spanning DTI
+Business Name Registration, local permits, and BIR registration. Government submissions,
+payments, certificates, and compliance records produced by this app are demo artifacts.
+
+The BNRS flow has a required business-address confirmation before the DTI application can
+become ready for payment:
+
+1. eGov SSO supplies verified owner details and the citizen's registered residential address.
+2. The citizen must explicitly choose to use that residential address for the business or
+   enter a different, complete business address.
+3. The confirmed address and its source appear on the DTI application review card and are
+   reused by the downstream barangay, LGU, and BIR demo steps.
+
+The app never treats the SSO residential address as the business address without the
+citizen's confirmation. A missing or incomplete business address keeps the DTI form in
+draft and blocks payment.
 
 ### `apps/rag-hor` — the product
 

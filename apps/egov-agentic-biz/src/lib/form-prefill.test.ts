@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { isCompleteBusinessAddress } from "@/lib/business-address";
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import {
   availableUserInfoFields,
   extractExplicitBusinessAddress,
   profileAddressPreference,
-  resolveBusinessFormAddress,
+  resolveConfirmedBusinessAddress,
 } from "@/lib/form-prefill";
 
 const profile: CitizenProfile = {
@@ -25,21 +26,7 @@ const profile: CitizenProfile = {
   avatarUrl: null,
 };
 
-describe("resolveBusinessFormAddress", () => {
-  test("prefills the verified profile address when the business uses it", () => {
-    expect(resolveBusinessFormAddress("", profile, true)).toBe(profile.address);
-  });
-
-  test("keeps an explicit form address instead of the profile address", () => {
-    expect(resolveBusinessFormAddress("  2 Market Street, Makati City  ", profile, true)).toBe(
-      "2 Market Street, Makati City",
-    );
-  });
-
-  test("does not copy the profile address for a different business location", () => {
-    expect(resolveBusinessFormAddress("", profile, false)).toBe("");
-  });
-
+describe("business address prefill", () => {
   test("uses only the dedicated structured address preference", () => {
     expect(profileAddressPreference(undefined)).toBeNull();
     expect(profileAddressPreference("use-profile-address")).toBe("profile");
@@ -55,11 +42,63 @@ describe("resolveBusinessFormAddress", () => {
     ).toBe("2 Market Street, Makati City");
   });
 
+  test("does not treat a residential-address statement as a confirmed business address", () => {
+    expect(
+      extractExplicitBusinessAddress(
+        "My residential address is 1 Example Street, Barangay San Isidro, Quezon City.",
+      ),
+    ).toBe("");
+  });
+
   test("reports only non-empty verified fields as available", () => {
     const fields = availableUserInfoFields({ ...profile, birthDate: "", mobile: "" });
     expect(fields).toContain("fullName");
     expect(fields).toContain("address");
     expect(fields).not.toContain("birthDate");
     expect(fields).not.toContain("mobile");
+  });
+});
+
+describe("isCompleteBusinessAddress", () => {
+  test("requires premises, barangay, and comma-separated address components", () => {
+    expect(
+      isCompleteBusinessAddress("Unit 2, 88 Ayala Avenue, Barangay San Lorenzo, Makati City"),
+    ).toBe(true);
+    expect(isCompleteBusinessAddress("Unit 2 Main Building")).toBe(false);
+    expect(isCompleteBusinessAddress("Makati City")).toBe(false);
+  });
+});
+
+describe("resolveConfirmedBusinessAddress", () => {
+  test("requires an explicit choice before using the SSO residential address", () => {
+    expect(resolveConfirmedBusinessAddress("", profile, null)).toBeNull();
+  });
+
+  test("records consent when the residential address is used for the business", () => {
+    expect(resolveConfirmedBusinessAddress("", profile, "profile")).toEqual({
+      address: profile.address,
+      source: "egov-residential",
+    });
+  });
+
+  test("records a separately supplied business address", () => {
+    expect(
+      resolveConfirmedBusinessAddress(
+        "  2 Market Street, Barangay Poblacion, Makati City  ",
+        profile,
+        null,
+      ),
+    ).toEqual({
+      address: "2 Market Street, Barangay Poblacion, Makati City",
+      source: "user-provided",
+    });
+  });
+
+  test("does not confirm the different-address route until an address is supplied", () => {
+    expect(resolveConfirmedBusinessAddress("", profile, "different")).toBeNull();
+  });
+
+  test("does not confirm an empty SSO residential address", () => {
+    expect(resolveConfirmedBusinessAddress("", { ...profile, address: "" }, "profile")).toBeNull();
   });
 });

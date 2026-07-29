@@ -182,6 +182,7 @@ const previewDtiForm: DtiBusinessNameForm = {
   territorialScope: "City / municipality",
   ownerName: "Josh Preview",
   businessAddress: "Unit 2, 88 Ayala Avenue, Barangay San Lorenzo",
+  businessAddressSource: "egov-residential",
   city: "Makati",
   feeLabel: "₱1,030.00",
   missingFields: [],
