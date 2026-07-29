@@ -25,7 +25,7 @@ export async function POST(request: Request) {
 
   const parsed = requestSchema.safeParse(await request.json());
   if (!parsed.success) {
-    return NextResponse.json({ error: "A valid eGov exchange code is required." }, { status: 400 });
+    return NextResponse.json({ error: "A valid eGovPH sign-in is required." }, { status: 400 });
   }
 
   try {
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       name: error instanceof Error ? error.name : "UnknownError",
     });
     return NextResponse.json(
-      { error: "eGov SSO could not authenticate this code. Generate a fresh code and try again." },
+      { error: "eGovPH could not complete authentication. Start again and try once more." },
       { headers: { "Cache-Control": "no-store" }, status: 502 },
     );
   }

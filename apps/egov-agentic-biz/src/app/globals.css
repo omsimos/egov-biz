@@ -538,72 +538,6 @@ body {
   }
 }
 
-/* Authentication */
-/* The eGovPH widget mounts a React root into this box, and immediately before it
-   does it writes width/height/display/justify-content/align-items onto the
-   element as *inline* styles. So any layout this rule states is overridden the
-   moment the script lands, and only min-height survives — which is the one that
-   matters, because it holds the row's height while the widget loads instead of
-   letting the screen reflow under the reader. */
-#egov-sso-widget-button {
-  width: 100%;
-  min-height: 52px;
-  margin-top: 8px;
-}
-/* The control the widget injects is its own `ghost` variant — transparent
-   background, black text — so untouched, the primary action on the login screen
-   renders as the bare words "Login with" beside a wordmark and reads as a
-   caption rather than a button.
-   Styled by element and id on purpose: the markup belongs to widgets.e.gov.ph
-   and carries only their e-* utilities, so an id selector (1,0,1) beats every
-   one of them without !important, and nothing here depends on a class name they
-   are free to rename.
-   Filled brand blue, matching Button variant="primary" size="lg" (h-[50px],
-   rounded-lg, --shadow-primary) so the screen's main action is the same object
-   the rest of the app uses for one. */
-#egov-sso-widget-button button {
-  width: 100%;
-  min-height: 52px;
-  padding: 0 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  border: 0;
-  border-radius: var(--radius-lg);
-  background: var(--primary);
-  box-shadow: var(--shadow-primary);
-  cursor: pointer;
-  transition:
-    background-color 150ms var(--ease-out),
-    box-shadow 150ms var(--ease-out),
-    scale 150ms var(--ease-out);
-}
-#egov-sso-widget-button button:hover {
-  background: var(--primary-hover);
-}
-#egov-sso-widget-button button:active {
-  scale: var(--press-lg);
-}
-/* The widget sets its label at its own text-sm/400 in black. This is the
-   screen's primary action, so it takes the size and weight the rest of the app
-   gives one — and white, because the ground is now brand blue. */
-#egov-sso-widget-button button p {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 800;
-  color: #fff;
-}
-/* The injected mark is the full-colour eGOVPH wordmark, which is unreadable on
-   blue. brightness(0) flattens it to black while keeping its alpha, then
-   invert(1) lifts it to white — so the lockup's shape survives and only its ink
-   changes. Done in CSS rather than by swapping in our own asset, because the
-   <img> src belongs to widgets.e.gov.ph and is theirs to change. */
-#egov-sso-widget-button button img {
-  width: auto;
-  height: 22px;
-  filter: brightness(0) invert(1);
-}
 /* .auth-loading-mark's animation target — element now built from utilities
    in egov-business-app.tsx via animate-[auth-pulse_...]. */
 @keyframes auth-pulse {
@@ -649,16 +583,6 @@ body {
        that grows as copy is added drifts upward against a fixed-height phone,
        moving the whole composition. */
     align-items: start;
-  }
-  /* Taken out of flow. It is an empty mount point for the eGovPH widget's
-     modal, but as a third child of a two-column grid it was claiming a whole
-     implicit second row — which the stage then had to find height for, and
-     which split the leftover vertical space so the phone sat higher than
-     centred. The modal itself is position: fixed and .prototype-stage sets no
-     transform, filter or contain, so nothing here is a containing block for it:
-     it still covers the viewport and is not clipped by the overflow above. */
-  #egov-sso-widget-portal {
-    position: absolute;
   }
   .phone-shell {
     width: 390px;

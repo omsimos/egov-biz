@@ -1,104 +1,130 @@
 "use client";
 
 import {
+  ArrowLeftIcon,
   ArrowRightIcon,
   ShieldCheckIcon,
   WarningCircleIcon,
   WrenchIcon,
 } from "@phosphor-icons/react";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { EGovLogo } from "@/components/egov-logo";
 import { BagongPilipinasMark, CityscapeArt, DictSeal, NpcSeal } from "@/components/gov-seals";
 import { StatusBar } from "@/components/phone-chrome";
-import { ServiceLogo } from "@/components/service-logo";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { FieldLabel } from "@/components/ui/field";
-import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
+import {
+  authenticateEgovSsoMpin,
+  checkEgovSsoPartner,
+  EgovSsoRequestError,
+  requestEgovSsoOtp,
+  validateEgovSsoOtp,
+} from "@/lib/auth/egov-login";
 import type { CitizenProfile } from "@/lib/citizen-profile";
-import { clearLastAccount, LastAccount, readLastAccount } from "@/lib/last-account";
+import { clearLastAccount, type LastAccount, readLastAccount } from "@/lib/last-account";
 import { cn, FOCUS_RING } from "@/lib/utils";
 
-declare global {
-  interface Window {
-    handleEgovSsoSuccess(exchangeCode: string): void;
+type LoginResponse = { authenticated: true; profile: CitizenProfile } | { error: string };
+type LoginStep = "email" | "otp" | "mpin";
+
+const OTP_RESEND_SECONDS = 180;
+const stepNumber: Record<LoginStep, number> = { email: 1, mpin: 3, otp: 2 };
+
+function digitsOnly(value: string) {
+  return value.replace(/\D/g, "").slice(0, 6);
+}
+
+function maskEmail(email: string) {
+  const [localPart = "", domain = ""] = email.split("@");
+  if (!domain) return email;
+  const visibleLength = Math.max(1, Math.ceil(localPart.length / 2));
+  return `${localPart.slice(0, visibleLength)}${"*".repeat(
+    Math.max(1, localPart.length - visibleLength),
+  )}@${domain}`;
+}
+
+function formatCountdown(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function metaContent(name: string) {
+  return document.querySelector<HTMLMetaElement>(`meta[name="${name}"]`)?.content.trim() ?? "";
+}
+
+async function prepareSsoIntent() {
+  const response = await fetch("/api/auth/egov/intent", {
+    cache: "no-store",
+    method: "POST",
+  });
+  if (!response.ok) throw new Error("Could not start a secure eGovPH login.");
+}
+
+async function exchangeForSession(exchangeCode: string) {
+  // Refresh the short-lived, same-origin intent immediately before the server
+  // exchange. A citizen can take longer than its five-minute TTL to retrieve
+  // an OTP, and an expired intent must not make a valid MPIN look incorrect.
+  await prepareSsoIntent();
+  const response = await fetch("/api/auth/egov/exchange", {
+    body: JSON.stringify({ exchangeCode }),
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+  });
+  const body = (await response.json()) as LoginResponse;
+  if (!response.ok || "error" in body) {
+    throw new Error("error" in body ? body.error : "Authentication failed.");
   }
 }
 
-type LoginResponse = { authenticated: true; profile: CitizenProfile } | { error: string };
-
 export function LoginScreen({ initialError }: { initialError?: string }) {
-  const [exchangeCode, setExchangeCode] = useState("");
+  const [apiUrl, setApiUrl] = useState("");
+  const [clientId, setClientId] = useState("");
+  const [email, setEmail] = useState("");
   const [error, setError] = useState(initialError ?? "");
-  const [intentReady, setIntentReady] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [lastAccount, setLastAccount] = useState<LastAccount | null>(null);
-  // The code path stays reachable, just not first. An error means a code was
-  // already attempted, so the form has to be open to show it.
-  const [codeOpen, setCodeOpen] = useState(Boolean(initialError));
+  const [loading, setLoading] = useState(false);
+  const [mpin, setMpin] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpValidationToken, setOtpValidationToken] = useState("");
+  const [ready, setReady] = useState(false);
+  const [resendSeconds, setResendSeconds] = useState(0);
+  const [step, setStep] = useState<LoginStep>("email");
+  const resendActive = step === "otp" && resendSeconds > 0;
 
   useEffect(() => {
     setLastAccount(readLastAccount());
   }, []);
 
   useEffect(() => {
-    if (!initialError) return;
-    setError(initialError);
-    // An exchange-code error has to be visible, so the collapsed form opens.
-    setCodeOpen(true);
+    if (initialError) setError(initialError);
   }, [initialError]);
-
-  const authenticate = useCallback(
-    async (code: string) => {
-      if (!code.trim() || loading) return;
-      setLoading(true);
-      setError("");
-      setExchangeCode("");
-
-      try {
-        const response = await fetch("/api/auth/egov/exchange", {
-          body: JSON.stringify({ exchangeCode: code.trim() }),
-          cache: "no-store",
-          headers: { "Content-Type": "application/json" },
-          method: "POST",
-        });
-        const body = (await response.json()) as LoginResponse;
-        if (!response.ok || "error" in body) {
-          throw new Error("error" in body ? body.error : "Authentication failed.");
-        }
-        window.location.replace("/");
-      } catch (authenticationError) {
-        setError(
-          authenticationError instanceof Error
-            ? authenticationError.message
-            : "eGov SSO authentication failed.",
-        );
-      } finally {
-        setLoading(false);
-      }
-    },
-    [loading],
-  );
-
-  useEffect(() => {
-    window.handleEgovSsoSuccess = (code: string) => {
-      void authenticate(code);
-    };
-    return () => {
-      window.handleEgovSsoSuccess = () => undefined;
-    };
-  }, [authenticate]);
 
   useEffect(() => {
     let active = true;
-    void fetch("/api/auth/egov/intent", { cache: "no-store", method: "POST" })
-      .then((response) => {
-        if (!response.ok) throw new Error("Could not start eGov login.");
-        if (active) setIntentReady(true);
+    const partnerCode = metaContent("egov-client-id");
+    const configuredApiUrl = metaContent("egov-sso-api-url");
+    if (!partnerCode || !configuredApiUrl) {
+      setError("eGovPH SSO is not configured for this app.");
+      return;
+    }
+
+    setApiUrl(configuredApiUrl);
+    setClientId(partnerCode);
+    void Promise.all([
+      prepareSsoIntent(),
+      checkEgovSsoPartner({ apiUrl: configuredApiUrl, partnerCode }),
+    ])
+      .then(() => {
+        if (active) setReady(true);
       })
       .catch(() => {
-        if (active) setError("Could not start a secure eGov login. Refresh and try again.");
+        if (active) {
+          setError("Could not start a secure eGovPH login. Refresh and try again.");
+        }
       });
     return () => {
       active = false;
@@ -106,25 +132,119 @@ export function LoginScreen({ initialError }: { initialError?: string }) {
   }, []);
 
   useEffect(() => {
-    if (!intentReady || document.querySelector('script[data-egov-sso-widget="true"]')) return;
-    const script = document.createElement("script");
-    script.async = true;
-    script.dataset.egovSsoWidget = "true";
-    script.defer = true;
-    script.src = "https://widgets.e.gov.ph/egov-hackathon-sso-widget.js";
-    document.body.append(script);
-  }, [intentReady]);
+    if (!resendActive) return;
+    const timer = window.setInterval(() => {
+      setResendSeconds((seconds) => Math.max(0, seconds - 1));
+    }, 1_000);
+    return () => window.clearInterval(timer);
+  }, [resendActive]);
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const resetToEmail = () => {
+    setError("");
+    setLoading(false);
+    setMpin("");
+    setOtp("");
+    setOtpValidationToken("");
+    setResendSeconds(0);
+    setStep("email");
+  };
+
+  const requestOtp = async (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
+    const normalizedEmail = email.trim();
+    if (!ready || loading || !normalizedEmail) return;
+
+    setLoading(true);
+    setError("");
+    try {
+      await requestEgovSsoOtp({
+        apiUrl,
+        email: normalizedEmail,
+        partnerCode: clientId,
+      });
+      setEmail(normalizedEmail);
+      setOtp("");
+      setResendSeconds(OTP_RESEND_SECONDS);
+      setStep("otp");
+    } catch (requestError) {
+      if (
+        requestError instanceof EgovSsoRequestError &&
+        requestError.retryAfterSeconds !== undefined
+      ) {
+        setResendSeconds(requestError.retryAfterSeconds);
+      }
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "eGovPH could not send an OTP to this email.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyOtp = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    void authenticate(exchangeCode);
+    if (!ready || loading || otp.length !== 6) return;
+
+    setLoading(true);
+    setError("");
+    try {
+      const token = await validateEgovSsoOtp({
+        apiUrl,
+        email,
+        otp,
+        partnerCode: clientId,
+      });
+      setOtp("");
+      setOtpValidationToken(token);
+      setStep("mpin");
+    } catch (verificationError) {
+      setError(
+        verificationError instanceof Error
+          ? verificationError.message
+          : "That OTP could not be verified.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const authenticateMpin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!ready || loading || mpin.length !== 6 || !otpValidationToken) return;
+
+    setLoading(true);
+    setError("");
+    try {
+      const exchangeCode = await authenticateEgovSsoMpin({
+        apiUrl,
+        email,
+        mpin,
+        otpValidationToken,
+        partnerCode: clientId,
+      });
+      await exchangeForSession(exchangeCode);
+      setMpin("");
+      setOtpValidationToken("");
+      window.location.replace("/");
+    } catch (authenticationError) {
+      setMpin("");
+      setError(
+        authenticationError instanceof Error
+          ? authenticationError.message
+          : "eGovPH could not complete authentication.",
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="screen text-foreground">
       <StatusBar />
       <main
-        className="relative flex h-[calc(100%-36px)] min-h-[604px] flex-col overflow-x-hidden overflow-y-auto px-[22px] pt-[34px] [scrollbar-width:none] [@media(max-height:720px)]:pt-[25px] [&::-webkit-scrollbar]:hidden [&>*]:flex-none"
+        className="relative flex h-[calc(100%-36px)] min-h-[604px] flex-col overflow-x-hidden overflow-y-auto px-[22px] pt-[25px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:flex-none"
         id="app-content"
       >
         <div aria-hidden="true" className="flex h-12 items-center justify-center gap-[9px]">
@@ -137,129 +257,187 @@ export function LoginScreen({ initialError }: { initialError?: string }) {
           <EGovLogo priority size={46} />
         </div>
 
-        <header className="mt-[26px] text-center [@media(max-height:720px)]:mt-[22px]">
-          {/* Not .toUpperCase(). A citizen's own name was the last shouted string
-              left in the app, and the profile already stores the right case. */}
+        <header className="mt-[20px] text-center">
+          <p className="mb-2 text-xs font-black tracking-[0.08em] text-primary uppercase">
+            Step {stepNumber[step]} of 3
+          </p>
           <h1 className="text-xl leading-[1.15] -tracking-[.4px] text-foreground">
-            Welcome back{lastAccount ? `, ${lastAccount.firstName}` : ""}
+            {step === "email"
+              ? `Welcome back${lastAccount ? `, ${lastAccount.firstName}` : ""}`
+              : step === "otp"
+                ? "Check your email"
+                : "Enter your MPIN"}
           </h1>
-          <p className="mt-2.5 text-base font-medium text-muted-foreground">
-            {codeOpen ? "Enter your eGov exchange code" : "Sign in with your eGovPH account"}
+          <p className="mt-2.5 text-sm font-medium text-muted-foreground">
+            {step === "email"
+              ? "Use the email linked to your eGovPH account"
+              : step === "otp"
+                ? `We sent a 6-digit OTP to ${maskEmail(email)}`
+                : "Use your 6-digit eGovPH passcode to finish signing in"}
           </p>
         </header>
 
-        {/* eGovPH SSO leads. The exchange code is a one-time string minted by a
-            developer console — it is how this prototype is driven and it has to
-            stay reachable, but it is not what a citizen signs in with, and it
-            used to occupy the whole top of the screen. */}
-        <section
-          aria-label="eGovPH sign in"
-          className="relative z-[2] mt-7 grid justify-items-center gap-2.5 [@media(max-height:720px)]:mt-[23px]"
-        >
-          {/* The widget injects its own button here; we own the box, not the
-              button inside it, so this reserves full width and a stable height
-              rather than restyling markup from widgets.e.gov.ph. */}
-          <div
-            className="grid min-h-[54px] w-full place-items-center"
-            id="egov-sso-widget-button"
-          />
-          <p className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
-            <ServiceLogo
-              fallback={<ShieldCheckIcon className="size-4 text-success" weight="fill" />}
-              height={16}
-              service="egov-sso"
+        <div aria-hidden="true" className="mt-5 grid grid-cols-3 gap-2">
+          {(["email", "otp", "mpin"] as const).map((item) => (
+            <span
+              className={cn(
+                "h-1.5 rounded-full transition-colors",
+                stepNumber[item] <= stepNumber[step] ? "bg-primary" : "bg-muted",
+              )}
+              key={item}
             />
-            Secure eGovPH authentication
+          ))}
+        </div>
+
+        <section aria-label="eGovPH sign in" aria-live="polite" className="mt-6">
+          {step === "email" ? (
+            <form className="grid gap-4" onSubmit={(event) => void requestOtp(event)}>
+              <div>
+                <FieldLabel htmlFor="egov-email">Email address</FieldLabel>
+                <Input
+                  aria-describedby={error ? "egov-login-error" : undefined}
+                  aria-invalid={error ? true : undefined}
+                  autoComplete="username"
+                  autoFocus
+                  className="h-[56px]"
+                  disabled={!ready || loading}
+                  id="egov-email"
+                  inputMode="email"
+                  name="email"
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="you@example.com"
+                  required
+                  spellCheck={false}
+                  type="email"
+                  value={email}
+                />
+              </div>
+              <Button block disabled={!ready || loading || !email.trim()} size="lg" type="submit">
+                {loading ? "Sending OTP…" : "Continue"}
+                {!loading ? <ArrowRightIcon weight="bold" /> : null}
+              </Button>
+            </form>
+          ) : null}
+
+          {step === "otp" ? (
+            <form className="grid gap-4" onSubmit={(event) => void verifyOtp(event)}>
+              <div>
+                <div className="flex items-center justify-between">
+                  <FieldLabel htmlFor="egov-otp">One-time password</FieldLabel>
+                  <button
+                    className={cn("mb-1.5 text-xs font-extrabold text-primary", FOCUS_RING)}
+                    disabled={loading}
+                    onClick={resetToEmail}
+                    type="button"
+                  >
+                    Change email
+                  </button>
+                </div>
+                <Input
+                  aria-describedby={error ? "egov-login-error" : undefined}
+                  aria-invalid={error ? true : undefined}
+                  autoComplete="one-time-code"
+                  autoFocus
+                  className="h-[58px] text-center text-xl font-extrabold tracking-[0.36em] tabular-nums"
+                  disabled={loading}
+                  id="egov-otp"
+                  inputMode="numeric"
+                  maxLength={6}
+                  name="otp"
+                  onChange={(event) => setOtp(digitsOnly(event.target.value))}
+                  pattern="[0-9]{6}"
+                  placeholder="000000"
+                  required
+                  type="text"
+                  value={otp}
+                />
+              </div>
+              <Button block disabled={loading || otp.length !== 6} size="lg" type="submit">
+                {loading ? "Verifying…" : "Verify OTP"}
+                {!loading ? <ArrowRightIcon weight="bold" /> : null}
+              </Button>
+              <button
+                className={cn(
+                  "mx-auto w-fit text-sm font-bold text-primary disabled:text-muted-foreground",
+                  FOCUS_RING,
+                )}
+                disabled={loading || resendSeconds > 0}
+                onClick={() => void requestOtp()}
+                type="button"
+              >
+                {resendSeconds > 0
+                  ? `Resend OTP in ${formatCountdown(resendSeconds)}`
+                  : "Resend OTP"}
+              </button>
+            </form>
+          ) : null}
+
+          {step === "mpin" ? (
+            <form className="grid gap-4" onSubmit={(event) => void authenticateMpin(event)}>
+              <div>
+                <div className="flex items-center justify-between">
+                  <FieldLabel htmlFor="egov-mpin">MPIN</FieldLabel>
+                  <button
+                    className={cn("mb-1.5 text-xs font-extrabold text-primary", FOCUS_RING)}
+                    disabled={loading}
+                    onClick={resetToEmail}
+                    type="button"
+                  >
+                    Use another email
+                  </button>
+                </div>
+                <Input
+                  aria-describedby={error ? "egov-login-error" : undefined}
+                  aria-invalid={error ? true : undefined}
+                  autoComplete="current-password"
+                  autoFocus
+                  className="h-[58px] text-center text-xl font-extrabold tracking-[0.36em] tabular-nums"
+                  disabled={loading}
+                  id="egov-mpin"
+                  inputMode="numeric"
+                  maxLength={6}
+                  name="mpin"
+                  onChange={(event) => setMpin(digitsOnly(event.target.value))}
+                  pattern="[0-9]{6}"
+                  placeholder="••••••"
+                  required
+                  type="password"
+                  value={mpin}
+                />
+              </div>
+              <Button block disabled={loading || mpin.length !== 6} size="lg" type="submit">
+                {loading ? "Signing in…" : "Sign in securely"}
+                {!loading ? <ArrowRightIcon weight="bold" /> : null}
+              </Button>
+              <button
+                className={cn(
+                  "mx-auto inline-flex w-fit items-center gap-1.5 text-sm font-bold text-muted-foreground",
+                  FOCUS_RING,
+                )}
+                disabled={loading}
+                onClick={resetToEmail}
+                type="button"
+              >
+                <ArrowLeftIcon weight="bold" />
+                Start over
+              </button>
+            </form>
+          ) : null}
+
+          {error ? (
+            <Alert className="mt-4" id="egov-login-error" variant="destructive">
+              <WarningCircleIcon weight="fill" />
+              {error}
+            </Alert>
+          ) : null}
+
+          <p className="mt-4 flex items-start justify-center gap-1.5 text-center text-xs leading-[1.4] text-muted-foreground">
+            <ShieldCheckIcon className="mt-px size-4 shrink-0 text-success" weight="fill" />
+            Email, OTP, and MPIN go directly to eGovPH and are never stored by this app.
           </p>
         </section>
 
-        {codeOpen ? (
-          <form className="relative z-[2] mt-5 grid gap-[9px]" onSubmit={submit}>
-            <div className="flex items-center justify-between">
-              <FieldLabel className="mb-0" htmlFor="exchange-code">
-                Exchange code
-              </FieldLabel>
-              <button
-                className="text-xs font-extrabold text-muted-foreground transition hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
-                data-cuelume-toggle="droplet"
-                disabled={!exchangeCode || loading}
-                onClick={() => setExchangeCode("")}
-                type="button"
-              >
-                Clear
-              </button>
-            </div>
-            <div className="relative">
-              <Input
-                aria-describedby={error ? "exchange-code-error" : undefined}
-                aria-invalid={error ? true : undefined}
-                autoComplete="off"
-                autoFocus
-                className="h-[58px] pr-14 tracking-[0.5px]"
-                id="exchange-code"
-                onChange={(event) => setExchangeCode(event.target.value)}
-                placeholder="Paste a fresh one-time code"
-                spellCheck={false}
-                type="password"
-                value={exchangeCode}
-              />
-              <IconButton
-                aria-label="Continue with exchange code"
-                className="absolute top-1/2 right-2 -translate-y-1/2"
-                data-cuelume-toggle="loading"
-                disabled={!exchangeCode.trim() || !intentReady || loading}
-                type="submit"
-                variant="primary"
-              >
-                <ArrowRightIcon weight="bold" />
-              </IconButton>
-            </div>
-            {error ? (
-              <Alert className="mt-2.5" id="exchange-code-error" variant="destructive">
-                <WarningCircleIcon weight="fill" />
-                {error}
-              </Alert>
-            ) : null}
-            <a
-              className="mx-auto mt-1 block w-fit text-sm font-bold text-primary no-underline"
-              href="https://platforms.e.gov.ph/dashboard/api-catalogs/egov-sso"
-              rel="noreferrer"
-              target="_blank"
-            >
-              Forgot your code? Generate one
-            </a>
-          </form>
-        ) : (
-          // Only "exchange code" carries the link colour. Muting the whole
-          // sentence made the one alternative route off this screen read as
-          // disabled help text; colouring all of it would have given a secondary
-          // path the same billing as the blue CTA above it.
-          <button
-            className={cn(
-              "mx-auto mt-4 block w-fit text-sm font-bold text-foreground",
-              "transition-[scale] duration-150 ease-[var(--ease-out)] active:scale-[var(--press-md)]",
-              FOCUS_RING,
-            )}
-            onClick={() => setCodeOpen(true)}
-            type="button"
-          >
-            Have an <span className="text-primary">exchange code</span>? Enter it instead
-          </button>
-        )}
-
-        {/* Local dev only, and deliberately not a fake success.
-            The MPIN step in the eGovPH widget is validated by
-            hackathon-sso.e.gov.ph; a rejected MPIN means no exchange code, and
-            an exchange code cannot be produced here, because minting one is the
-            entire job of their server. So this does not pretend the widget
-            succeeded — it skips it and mints a real session through the same
-            createSession a genuine exchange calls, which is why everything
-            downstream (chat, tools, prefill, eGovPay) behaves normally.
-            Dashed and warning-toned so it never reads as part of the product.
-            Two guards, as with /preview: NODE_ENV is inlined at build time so
-            this element is absent from a production bundle, and the route
-            itself 404s outside dev and off loopback. */}
-        {process.env.NODE_ENV !== "production" && (
+        {process.env.NODE_ENV !== "production" ? (
           <a
             className={cn(
               "relative z-[2] mt-4 flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-warning-border bg-warning-soft px-3 py-2.5 text-sm font-bold text-warning-ink no-underline",
@@ -271,25 +449,24 @@ export function LoginScreen({ initialError }: { initialError?: string }) {
             <WrenchIcon className="size-4" weight="fill" />
             Skip sign-in — local dev session
           </a>
-        )}
+        ) : null}
 
-        <div className="relative z-[2] mt-[clamp(30px,5.5vh,56px)] mb-6 text-center [@media(max-height:720px)]:mt-[34px]">
+        <div className="relative z-[2] mt-5 text-center">
           {lastAccount?.maskedMobile ? (
             <Badge variant="neutral">{lastAccount.maskedMobile}</Badge>
           ) : (
             <Badge variant="primary">Staging environment</Badge>
           )}
           {lastAccount ? (
-            <p className="mt-2.5 text-base font-medium text-foreground">
+            <p className="mt-2.5 text-sm font-medium text-foreground">
               Not you?{" "}
-              {/* Was a link to the eGov API catalog, which switched nothing. The
-                  remembered account is the only thing this screen persists, so
-                  forgetting it is the entire action. */}
               <button
                 className={cn("ml-1 font-bold text-primary", FOCUS_RING)}
                 onClick={() => {
                   clearLastAccount();
                   setLastAccount(null);
+                  setEmail("");
+                  resetToEmail();
                 }}
                 type="button"
               >
@@ -299,15 +476,12 @@ export function LoginScreen({ initialError }: { initialError?: string }) {
           ) : null}
         </div>
 
-        {/* 132px, not 212. At the old size the mark alone was 152px tall and the
-            content above already filled an 844px viewport, so a citizen saw the
-            top third of a starburst and no cityscape at all. */}
         <div
           aria-hidden="true"
-          className="relative mt-auto -mx-[22px] h-[132px] overflow-hidden pointer-events-none"
+          className="relative mt-auto -mx-[22px] h-[112px] overflow-hidden pointer-events-none"
         >
-          <BagongPilipinasMark className="absolute top-0 left-1/2 z-[1] size-[92px] -translate-x-1/2 drop-shadow-[0_3px_8px_rgba(20,40,90,.16)]" />
-          <CityscapeArt className="absolute inset-x-0 bottom-0 z-[2] h-[96px] w-full" />
+          <BagongPilipinasMark className="absolute top-0 left-1/2 z-[1] size-[78px] -translate-x-1/2 drop-shadow-[0_3px_8px_rgba(20,40,90,.16)]" />
+          <CityscapeArt className="absolute inset-x-0 bottom-0 z-[2] h-[82px] w-full" />
         </div>
       </main>
     </div>

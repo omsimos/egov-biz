@@ -28,13 +28,13 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const clientId = process.env.EGOVSSO_PARTNER_CODE?.trim() ?? "";
+  const apiUrl = process.env.EGOVSSO_BASE_URL?.trim() ?? "";
 
   return (
     <html className={nunito.variable} lang="en">
       <head>
-        <meta content="STAGING" name="egov-environment" />
         <meta content={clientId} name="egov-client-id" />
-        <meta content="handleEgovSsoSuccess" name="egov-sso-onsuccess" />
+        <meta content={apiUrl} name="egov-sso-api-url" />
       </head>
       <body>
         <InteractionSounds />
