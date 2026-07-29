@@ -307,7 +307,7 @@ function ProgressRow({
     return (
       <div
         aria-label={`${completed} of ${total} answered`}
-        className="mt-3 flex items-center gap-2.5"
+        className="flex items-center gap-2.5"
         role="img"
       >
         {bar}
@@ -317,7 +317,7 @@ function ProgressRow({
     <button
       aria-controls="registration-plan-items"
       aria-expanded={expanded}
-      className={cn("mt-3 flex w-full items-center gap-2.5 rounded-md", FOCUS_RING)}
+      className={cn("flex w-full items-center gap-2.5 rounded-md", FOCUS_RING)}
       data-cuelume-toggle={expanded ? "droplet" : "bloom"}
       onClick={onToggle}
       type="button"
@@ -2125,7 +2125,7 @@ export function BusinessChatScreen({
         {/* Exactly one progress system, and the live one wins: the questions
             while a batch is open, the plan the rest of the time. */}
         {!management && (
-          <div className="bg-white/97 px-4 pb-2.5">
+          <div className="bg-white/97 px-4 pt-3 pb-2.5">
             {pending ? (
               <ProgressRow
                 completed={questionIndex + (questionValid ? 1 : 0)}
