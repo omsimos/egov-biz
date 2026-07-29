@@ -23,7 +23,7 @@
     "db:studio": "bun --env-file=../../.env drizzle-kit studio",
     "db:dev": "turso dev --db-file ./data/egov-agentic-biz.sqlite --port 8080",
     "db:reset": "rm -rf data/egov-agentic-biz.sqlite data/egov-agentic-biz.sqlite-*",
-    "db:reset:data": "bun --env-file=../../.env scripts/reset-data.ts"
+    "db:reset:data": "bun --env-file=../../.env --env-file=.env scripts/reset-data.ts"
   },
   "dependencies": {
     "@ai-sdk/mcp": "^2.0.15",
