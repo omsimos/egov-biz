@@ -35,6 +35,7 @@
     "drizzle-orm": "0.45.2"
   },
   "devDependencies": {
+    "@total-typescript/tsconfig": "1.0.4",
     "typescript": "7.0.2"
   }
 }
