@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { RegistrationPlan } from "@/lib/business-chat";
+import { planProgress, type RegistrationPlan } from "@/lib/business-chat";
 import { completeRegistrationPlan, normalizeRegistrationPlan } from "@/lib/registration-plan";
 
 describe("normalizeRegistrationPlan", () => {
@@ -38,48 +38,61 @@ describe("normalizeRegistrationPlan", () => {
   });
 
   test("does not turn explicitly inapplicable self-employed steps into completed steps", () => {
-    const result = completeRegistrationPlan(
-      {
-        title: "Self-employed registration",
-        steps: [
-          { id: "name-registration", label: "DTI", status: "skipped" },
-          { id: "business-permit", label: "Business permit", status: "skipped" },
-          { id: "bir", label: "BIR", status: "completed" },
-          { id: "tax-compliance", label: "Tax setup", status: "in_progress" },
-        ],
-      },
-      { employer: false, sectorPermits: false },
-    );
+    const result = completeRegistrationPlan({
+      title: "Self-employed registration",
+      steps: [
+        { id: "name-registration", label: "DTI", status: "skipped" },
+        { id: "business-permit", label: "Business permit", status: "skipped" },
+        { id: "bir", label: "BIR", status: "completed" },
+        { id: "tax-compliance", label: "Tax setup", status: "in_progress" },
+      ],
+    });
 
     expect(result.steps.map((step) => step.status)).toEqual([
       "skipped",
       "skipped",
       "completed",
-      "completed",
+      "pending",
     ]);
+    expect(result.steps.at(-1)?.optional).toBe(true);
   });
 });
 
 describe("completeRegistrationPlan", () => {
-  test("completes applicable requirements and skips requirements that do not apply", () => {
-    const result = completeRegistrationPlan(
-      {
-        title: "Registration",
-        steps: [
-          { id: "bir", label: "BIR", status: "in_progress" },
-          { id: "sector-permits", label: "Sector permits", status: "pending" },
-          { id: "employer", label: "Employer registration", status: "pending" },
-          { id: "launch-renewals", label: "Renewals", status: "pending" },
-        ],
-      },
-      { employer: false, sectorPermits: true },
-    );
+  test("completes required checkpoints and leaves optional follow-ups open", () => {
+    const result = completeRegistrationPlan({
+      title: "Registration",
+      steps: [
+        { id: "bir", label: "BIR", status: "in_progress" },
+        { id: "sector-permits", label: "Sector permits", status: "pending" },
+        { id: "employer", label: "Employer registration", status: "pending" },
+        { id: "launch-renewals", label: "Renewals", status: "pending" },
+      ],
+    });
 
     expect(result.steps.map((step) => step.status)).toEqual([
       "completed",
-      "completed",
-      "skipped",
+      "pending",
+      "pending",
       "completed",
     ]);
+    expect(planProgress(result)).toEqual({ completed: 2, done: true, total: 2 });
+  });
+});
+
+describe("planProgress", () => {
+  test("does not let optional steps block completion", () => {
+    expect(
+      planProgress({
+        title: "Registration",
+        steps: [
+          { id: "bir", label: "BIR", status: "completed" },
+          { id: "tax-compliance", label: "Books", status: "pending", optional: true },
+          { id: "sector-permits", label: "Sector permits", status: "pending", optional: true },
+          { id: "employer", label: "Employer", status: "pending", optional: true },
+          { id: "launch-renewals", label: "Launch", status: "completed" },
+        ],
+      }),
+    ).toEqual({ completed: 2, done: true, total: 2 });
   });
 });

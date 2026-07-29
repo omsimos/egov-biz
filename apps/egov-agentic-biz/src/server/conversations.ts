@@ -16,6 +16,7 @@ import {
 import { getDatabase, schema } from "@/server/db";
 import { getBnrs } from "@/server/dx/bnrs";
 import { getLgu } from "@/server/dx/lgu";
+import { isPaidStatus } from "@/server/payments";
 
 type ConversationRow = typeof schema.conversations.$inferSelect;
 
@@ -184,9 +185,11 @@ export async function getConversation(
       : null,
   ]);
 
-  const paymentStatuses = Object.fromEntries(
-    payments.map((payment) => [payment.serviceType, payment.status]),
-  ) as Partial<Record<PaymentServiceType, string>>;
+  const paymentStatuses: Partial<Record<PaymentServiceType, string>> = {};
+  for (const payment of payments) {
+    const current = paymentStatuses[payment.serviceType];
+    if (!current || !isPaidStatus(current)) paymentStatuses[payment.serviceType] = payment.status;
+  }
   if (bnrsStatus?.payment)
     paymentStatuses["dti-business-name"] = bnrsStatus.payment.status.toLowerCase();
   if (lguStatus?.payment)
@@ -197,8 +200,12 @@ export async function getConversation(
     parts: JSON.parse(message.partsJson) as UIMessage["parts"],
   }));
   const plan = latestRegistrationPlan(parsed as Pick<BusinessChatMessage, "parts">[]);
+  const linkedBusinessId =
+    row.businessId ??
+    (row.bnrsApplicationId && row.bnrsCertificateNumber ? row.bnrsApplicationId : null);
   return {
     ...mapSummary(row, row.purpose === "registration" && plan ? planProgress(plan.plan) : null),
+    businessId: linkedBusinessId,
     paymentStatus: paymentStatuses["dti-business-name"] ?? null,
     paymentStatuses,
     messages: parsed,
@@ -249,6 +256,24 @@ export async function setActiveStream(
         eq(schema.conversations.ownerEgovUserId, ownerEgovUserId),
       ),
     );
+}
+
+export async function linkBusiness(
+  ownerEgovUserId: string,
+  conversationId: string,
+  businessId: string,
+) {
+  const database = await getDatabase();
+  const result = await database
+    .update(schema.conversations)
+    .set({ businessId, updatedAt: new Date().toISOString() })
+    .where(
+      and(
+        eq(schema.conversations.id, conversationId),
+        eq(schema.conversations.ownerEgovUserId, ownerEgovUserId),
+      ),
+    );
+  if (result.rowsAffected === 0) throw new Error("Conversation not found.");
 }
 
 export async function saveMessages(

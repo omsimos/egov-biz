@@ -9,6 +9,11 @@ export type TursoConfig = {
 
 const REMOTE_PROTOCOLS = new Set(["libsql:", "https:", "wss:"]);
 const LOCAL_PROTOCOLS = new Set(["file:"]);
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "[::1]", "localhost"]);
+
+function isLocalDevServer(url: URL) {
+  return url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname);
+}
 
 function requiredSetting(value: string | undefined, name: string) {
   const normalized = value?.trim();
@@ -19,30 +24,32 @@ function requiredSetting(value: string | undefined, name: string) {
 export function tursoConfig(environment: Environment = process.env): TursoConfig {
   const url = requiredSetting(environment.TURSO_DATABASE_URL, "TURSO_DATABASE_URL");
 
-  let protocol: string;
+  let parsedUrl: URL;
   try {
-    protocol = new URL(url).protocol;
+    parsedUrl = new URL(url);
   } catch {
     throw new Error(
       "TURSO_DATABASE_URL must be a valid URL, such as libsql://<database>.turso.io or file:./data/egov-agentic-biz.sqlite",
     );
   }
 
+  const protocol = parsedUrl.protocol;
   const isLocal = LOCAL_PROTOCOLS.has(protocol);
-  if (!isLocal && !REMOTE_PROTOCOLS.has(protocol)) {
+  const isLocalServer = isLocalDevServer(parsedUrl);
+  if (!isLocal && !isLocalServer && !REMOTE_PROTOCOLS.has(protocol)) {
     throw new Error(
-      `TURSO_DATABASE_URL protocol "${protocol}" is not supported; use libsql:, https:, wss:, or file:`,
+      `TURSO_DATABASE_URL protocol "${protocol}" is not supported; use libsql:, https:, wss:, file:, or http: with a loopback host`,
     );
   }
 
-  // A local file needs no credentials, and silently accepting a token there
-  // hides the mistake of pointing production config at a local database.
+  // Local files and an explicitly loopback-only dev server need no credentials.
+  // Silently accepting a token for either hides a configuration mistake.
   const authToken = environment.TURSO_AUTH_TOKEN?.trim() || undefined;
-  if (!isLocal && !authToken) {
+  if (!isLocal && !isLocalServer && !authToken) {
     throw new Error(
       "TURSO_AUTH_TOKEN is required for a remote Turso database; create one with `turso db tokens create <database>`",
     );
   }
 
-  return { authToken: isLocal ? undefined : authToken, isLocal, url };
+  return { authToken: isLocal || isLocalServer ? undefined : authToken, isLocal, url };
 }

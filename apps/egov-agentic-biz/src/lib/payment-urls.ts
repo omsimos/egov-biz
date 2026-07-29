@@ -65,7 +65,7 @@ export function paymentUrls(
   request: Request,
   context?: {
     conversationId: string;
-    paymentService?: "dti-business-name" | "lgu-business-permit";
+    paymentService?: "dti-business-name" | "lgu-business-permit" | "bir-documentary-stamp-tax";
     transactionId?: string;
   },
 ) {

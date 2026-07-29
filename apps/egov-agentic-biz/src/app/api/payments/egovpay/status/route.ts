@@ -3,6 +3,7 @@ import { LguError } from "@repo/dx/lgu";
 import { z } from "zod";
 import { readSession } from "@/lib/auth/session";
 import { getConversation, markPaymentCheckpointComplete } from "@/server/conversations";
+import { BirDstPaymentError, syncBirDstPaymentForConversation } from "@/server/bir-dst-payment";
 import { bnrsActorFromProfile } from "@/server/dx/bnrs";
 import { syncBnrsPaymentForConversation } from "@/server/dx/bnrs-applications";
 import { syncLguPaymentForConversation } from "@/server/dx/lgu-applications";
@@ -11,7 +12,9 @@ export const dynamic = "force-dynamic";
 
 const querySchema = z.object({
   conversationId: z.string().uuid(),
-  serviceType: z.enum(["dti-business-name", "lgu-business-permit"]).default("dti-business-name"),
+  serviceType: z
+    .enum(["dti-business-name", "lgu-business-permit", "bir-documentary-stamp-tax"])
+    .default("dti-business-name"),
 });
 
 export async function GET(request: Request) {
@@ -29,6 +32,15 @@ export async function GET(request: Request) {
     return Response.json({ error: "Payment not found" }, { status: 404 });
 
   try {
+    if (parsed.data.serviceType === "bir-documentary-stamp-tax") {
+      const payment = await syncBirDstPaymentForConversation(parsed.data.conversationId);
+      return Response.json({
+        payment: {
+          serviceType: parsed.data.serviceType,
+          status: payment.status.toLowerCase(),
+        },
+      });
+    }
     if (parsed.data.serviceType === "lgu-business-permit") {
       const result = await syncLguPaymentForConversation({
         actor,
@@ -56,7 +68,11 @@ export async function GET(request: Request) {
       registration: result.registration,
     });
   } catch (error) {
-    if (error instanceof BnrsError || error instanceof LguError)
+    if (
+      error instanceof BnrsError ||
+      error instanceof LguError ||
+      error instanceof BirDstPaymentError
+    )
       return Response.json({ error: error.message, code: error.code }, { status: 409 });
     throw error;
   }

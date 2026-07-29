@@ -22,4 +22,27 @@ describe("business location answers", () => {
       source: "answer",
     });
   });
+
+  test("prefers the structured city over an earlier work-location answer", () => {
+    const structuredAnswers = [
+      {
+        questionId: "business-location",
+        labels: ["From home"],
+        value: "home",
+      },
+      {
+        questionId: "business-city-municipality",
+        labels: ["Makati City"],
+        value: "Makati City",
+      },
+    ];
+
+    expect(extractAnsweredLocation(structuredAnswers)).toBe("Makati City");
+    expect(
+      resolveBusinessLocation("I’m a freelancer", "CITY OF ALAMINOS", structuredAnswers),
+    ).toMatchObject({
+      city: "Makati City",
+      source: "answer",
+    });
+  });
 });

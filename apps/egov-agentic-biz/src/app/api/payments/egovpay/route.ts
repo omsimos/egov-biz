@@ -9,7 +9,9 @@ import {
   paymentUrls,
 } from "@/lib/payment-urls";
 import { classifyPaymentNetworkError, paymentNetworkMessage } from "@/lib/payment-network";
+import { BirDstPaymentError, createBirDstCheckout } from "@/server/bir-dst-payment";
 import { getConversation } from "@/server/conversations";
+import { listBirArtifacts } from "@/server/dx/bir-artifacts";
 import { bnrsActorFromProfile } from "@/server/dx/bnrs";
 import { createBnrsCheckout } from "@/server/dx/bnrs-applications";
 import { lguPaymentEnvironment } from "@/server/dx/lgu";
@@ -18,7 +20,7 @@ import { createLguCheckout } from "@/server/dx/lgu-applications";
 export const dynamic = "force-dynamic";
 
 const requestSchema = z.object({
-  serviceType: z.enum(["dti-business-name", "lgu-business-permit"]),
+  serviceType: z.enum(["dti-business-name", "lgu-business-permit", "bir-documentary-stamp-tax"]),
   conversationId: z.string().uuid(),
 });
 
@@ -40,6 +42,39 @@ export async function POST(request: Request) {
       conversationId: parsed.data.conversationId,
       paymentService: parsed.data.serviceType,
     });
+    if (parsed.data.serviceType === "bir-documentary-stamp-tax") {
+      const artifact = (
+        await listBirArtifacts({
+          conversationId: parsed.data.conversationId,
+          ownerEgovUserId: actor.egovUserId,
+        })
+      ).find(({ formType }) => formType === "1901");
+      if (!artifact)
+        return Response.json(
+          { error: "Generate BIR Form 1901 before paying the documentary stamp tax." },
+          { status: 409 },
+        );
+      const baseUrl = egovPayBaseUrl();
+      const checkout = await createBirDstCheckout({
+        artifactId: artifact.artifactId,
+        callbackUrl: urls.callbackUrl,
+        conversationId: parsed.data.conversationId,
+        email: session.profile.email || undefined,
+        mobile: session.profile.mobile || undefined,
+        redirectUrl: urls.redirectUrl,
+        taxpayerName: session.profile.fullName,
+      });
+      return Response.json({
+        amount: checkout.amount,
+        checkoutUrl: hostedCheckoutUrl(checkout.checkoutUrl, baseUrl).toString(),
+        payment: {
+          serviceType: parsed.data.serviceType,
+          status: checkout.payment.status,
+        },
+        transactionId: checkout.transactionId,
+        transactionUuid: checkout.transactionUuid,
+      });
+    }
     if (parsed.data.serviceType === "dti-business-name") {
       const baseUrl = egovPayBaseUrl();
       const checkout = await createBnrsCheckout({
@@ -77,7 +112,11 @@ export async function POST(request: Request) {
       transactionUuid: checkout.transactionUuid,
     });
   } catch (error) {
-    if (error instanceof BnrsError || error instanceof LguError)
+    if (
+      error instanceof BnrsError ||
+      error instanceof LguError ||
+      error instanceof BirDstPaymentError
+    )
       return Response.json({ error: error.message, code: error.code }, { status: 409 });
     if (error instanceof PaymentUrlConfigurationError)
       return Response.json(

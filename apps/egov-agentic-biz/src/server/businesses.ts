@@ -9,6 +9,10 @@ import type {
 } from "@/lib/registered-business";
 import { findConversationByBnrsApplication } from "@/server/conversations";
 import { listBirArtifacts } from "@/server/dx/bir-artifacts";
+import {
+  getBirRegisteredBusiness,
+  listBirRegisteredBusinesses,
+} from "@/server/dx/bir-registrations";
 import { getBnrs } from "@/server/dx/bnrs";
 import { getLgu } from "@/server/dx/lgu";
 
@@ -144,8 +148,13 @@ async function dxBusiness(
 }
 
 export async function listBusinesses(owner: BusinessOwner): Promise<RegisteredBusinessListItem[]> {
-  const registrations = await getBnrs().listRegisteredBusinesses({ actor: owner.actor });
-  return registrations
+  const [registrations, birBusinesses] = await Promise.all([
+    getBnrs().listRegisteredBusinesses({ actor: owner.actor }),
+    listBirRegisteredBusinesses(owner.actor.egovUserId),
+  ]);
+  const savedBusinessIds = new Set(birBusinesses.map(({ id }) => id));
+  const bnrsBusinesses = registrations
+    .filter(({ applicationId }) => !savedBusinessIds.has(applicationId))
     .map((registration) => ({
       id: registration.applicationId,
       name: registration.businessName,
@@ -154,11 +163,15 @@ export async function listBusinesses(owner: BusinessOwner): Promise<RegisteredBu
       status: "Active" as const,
       finalizedAt: registration.issuedAt,
       nextTaxDue: null,
-    }))
-    .sort((left, right) => right.finalizedAt.localeCompare(left.finalizedAt));
+    }));
+  return [...bnrsBusinesses, ...birBusinesses].sort((left, right) =>
+    right.finalizedAt.localeCompare(left.finalizedAt),
+  );
 }
 
 export async function getBusiness(owner: BusinessOwner, id: string) {
+  const saved = await getBirRegisteredBusiness(owner.actor.egovUserId, id);
+  if (saved) return saved;
   const registration = (await getBnrs().listRegisteredBusinesses({ actor: owner.actor })).find(
     ({ applicationId }) => applicationId === id,
   );

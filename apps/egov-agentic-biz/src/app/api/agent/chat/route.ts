@@ -30,6 +30,7 @@ import {
   selectRdo,
 } from "@/lib/government-data";
 import {
+  planProgress,
   uniqueMessagesById,
   type BusinessChatMessage,
   type DtiBusinessNameForm,
@@ -40,9 +41,17 @@ import {
 } from "@/lib/business-chat";
 import { readSession } from "@/lib/auth/session";
 import { createBirFormArtifact } from "@/lib/bir-form/artifact";
-import { initialRegistrationPlan, normalizeRegistrationPlan } from "@/lib/registration-plan";
+import {
+  completeRegistrationPlan,
+  initialRegistrationPlan,
+  normalizeRegistrationPlan,
+} from "@/lib/registration-plan";
 import type { CitizenProfile } from "@/lib/citizen-profile";
-import { availableUserInfoFields, profileAddressPreference } from "@/lib/form-prefill";
+import {
+  availableUserInfoFields,
+  profileAddressPreference,
+  shouldCollectStructuredBusinessAddress,
+} from "@/lib/form-prefill";
 import {
   extractExplicitSmsMessage,
   hasTaxObligationReference,
@@ -68,7 +77,18 @@ import {
 } from "@/lib/business-management";
 import type { RegisteredBusiness } from "@/lib/registered-business";
 import { getBusiness } from "@/server/businesses";
-import { getConversation, saveMessages, setActiveStream } from "@/server/conversations";
+import {
+  getBnrsConversationLink,
+  getConversation,
+  saveMessages,
+  setActiveStream,
+} from "@/server/conversations";
+import { BirDstPaymentError, syncBirDstPaymentForConversation } from "@/server/bir-dst-payment";
+import { isPaidStatus, type StoredPayment } from "@/server/payments";
+import {
+  finalizeBirSelfEmployedRegistration,
+  finalizeBirSoleProprietorRegistration,
+} from "@/server/dx/bir-registrations";
 import { bnrsActorFromProfile, getBnrs } from "@/server/dx/bnrs";
 import {
   getBnrsCertificateForConversation,
@@ -143,28 +163,6 @@ const PLACEHOLDER_ANSWER =
 
 function normalizedAnswerText(value: string | string[]) {
   return (Array.isArray(value) ? value.join(" ") : value).trim().replace(/\s+/g, " ");
-}
-
-function birFormConsentQuestion(): IntakeQuestion {
-  return {
-    id: "bir-form-consent",
-    eyebrow: "Your confirmation",
-    title: "Generate your prefilled BIR Form 1901 now?",
-    helpText: "The PDF will use verified fields from your authenticated eGov profile.",
-    type: "single",
-    options: [
-      {
-        id: "yes",
-        label: "Yes, generate it",
-        description: "Create the prefilled PDF now",
-      },
-      {
-        id: "no",
-        label: "No, not now",
-        description: "Pause before generating the form",
-      },
-    ],
-  };
 }
 
 function hasCompletedTool(messages: UIMessage[], type: string) {
@@ -268,17 +266,22 @@ const planStepSchema = z.object({
   id: z.string().min(1).max(60),
   label: z.string().min(1).max(120),
   status: z.enum(["pending", "in_progress", "completed", "skipped"]),
+  optional: z.boolean().optional(),
 });
 const registrationPlanSchema = z.object({
   title: z.string().min(1).max(120),
   steps: z.array(planStepSchema).min(2).max(12),
 });
-const paymentServiceSchema = z.enum(["dti-business-name", "lgu-business-permit"]);
+const paymentServiceSchema = z.enum([
+  "dti-business-name",
+  "lgu-business-permit",
+  "bir-documentary-stamp-tax",
+]);
 const requestSchema = z.object({
   id: z.string().uuid(),
   messages: z.array(z.unknown()),
   initialPrompt: z.string().trim().min(1).max(2_000),
-  event: z.enum(["payment-completed"]).optional(),
+  event: z.enum(["payment-completed", "registration-completed"]).optional(),
   paymentService: paymentServiceSchema.optional(),
 });
 type GeneratedRoute = {
@@ -303,9 +306,10 @@ function profileAddressQuestion(): IntakeQuestion {
   return {
     id: "profile-address",
     eyebrow: "Business address",
-    title: "Which address should this business use?",
-    helpText: "Your registered eGov address is used only if you choose it here.",
+    title: "Which address should this registration use?",
+    helpText: "Choose your residential address from eGov SSO or enter a business address.",
     type: "single",
+    allowOther: false,
     options: [
       {
         id: "use-profile-address",
@@ -362,7 +366,9 @@ function questionsForIncompleteDtiForm(
     questions.push(territorialScopeQuestion(catalog));
   if (!form.termsAccepted) questions.push(termsQuestion(catalog));
   if (!form.businessAddressDetails)
-    questions.push(...structuredAddressQuestions().filter(({ id }) => !answered.has(id)));
+    questions.push(
+      ...structuredAddressQuestions("Sole proprietor").filter(({ id }) => !answered.has(id)),
+    );
   return questions;
 }
 
@@ -597,7 +603,9 @@ function termsQuestion(catalog: BnrsCatalog): IntakeQuestion {
   };
 }
 
-function structuredAddressQuestions(): IntakeQuestion[] {
+function structuredAddressQuestions(
+  registrationType: BusinessPlan["registrationType"],
+): IntakeQuestion[] {
   return [
     {
       id: "business-address-line-1",
@@ -643,7 +651,10 @@ function structuredAddressQuestions(): IntakeQuestion[] {
       id: "business-postal-code",
       eyebrow: "Business address",
       title: "What is the four-digit postal code?",
-      helpText: "BNRS requires a complete postal code.",
+      helpText:
+        registrationType === "Self-employed"
+          ? "Enter the postal code for the work address."
+          : "BNRS requires a complete postal code.",
       type: "text",
       placeholder: "1234",
     },
@@ -683,10 +694,18 @@ function intakeBatch(
   if (!answered.has("workers") && !promptHasStaffing(prompt))
     questions.push(fallbackQuestionFor(prompt, 1));
   const preference = addressPreference(answers);
-  if (!preference && residentialAddress) questions.push(profileAddressQuestion());
-  if (preference !== "profile" || !residentialAddress)
-    questions.push(...structuredAddressQuestions().filter(({ id }) => !answered.has(id)));
   const registrationType = makePlan(prompt, profile, answers).registrationType;
+  if (!preference) questions.push(profileAddressQuestion());
+  else if (
+    shouldCollectStructuredBusinessAddress(
+      preference,
+      registrationType,
+      Boolean(residentialAddress),
+    )
+  )
+    questions.push(
+      ...structuredAddressQuestions(registrationType).filter(({ id }) => !answered.has(id)),
+    );
   if (registrationType === "Sole proprietor") {
     if (!answered.has("bnrs-terms-accepted")) questions.push(termsQuestion(catalog));
     if (!answered.has("business-dominant-name")) questions.push(dominantNameQuestion(catalog));
@@ -816,6 +835,88 @@ function emitTool(
     input,
   } as never);
   writer.write({ type: "tool-output-available", toolCallId, output } as never);
+}
+
+function planForBirPayment(
+  plan: RegistrationPlan,
+  registrationType: BusinessPlan["registrationType"],
+) {
+  return normalizeRegistrationPlan({
+    ...plan,
+    steps: plan.steps.map((step) => ({
+      ...step,
+      status:
+        step.id === "bir"
+          ? ("in_progress" as const)
+          : registrationType === "Self-employed" &&
+              ["name-registration", "local-clearance", "business-permit"].includes(step.id)
+            ? ("skipped" as const)
+            : ["details", "structure"].includes(step.id)
+              ? ("completed" as const)
+              : step.status,
+    })),
+  });
+}
+
+async function emitBir1901Generation(
+  writer: UIMessageStreamWriter<BusinessChatMessage>,
+  request: Request,
+  rawProfile: EgovSsoCitizenProfile,
+  conversationId: string,
+  plan: RegistrationPlan,
+) {
+  const toolCallId = crypto.randomUUID();
+  writer.write({
+    type: "tool-input-available",
+    toolCallId,
+    toolName: "generate_bir_form",
+    input: { type: "1901", data: {} },
+  });
+
+  try {
+    const output = {
+      artifact: await createBirFormArtifact(
+        request,
+        rawProfile,
+        { type: "1901", data: {} },
+        conversationId,
+      ),
+      source: "BIR tool input merged with authenticated eGov SSO profile" as const,
+    };
+
+    writer.write({ type: "tool-output-available", toolCallId, output });
+    const generatedPlan = {
+      ...plan,
+      note: "BIR Form 1901 generated. Documentary stamp tax payment is the final required checkpoint.",
+    };
+    emitTool(writer, "updatePlan", generatedPlan, { plan: generatedPlan });
+    const textId = crypto.randomUUID();
+    writer.write({ type: "text-start", id: textId });
+    writer.write({
+      type: "text-delta",
+      id: textId,
+      delta:
+        "Your DX-generated BIR Form 1901 is ready. Preview the PDF, then pay the ₱30 Documentary Stamp Tax below to complete this registration plan. Books and invoices, sector permits, and employer-agency registrations are optional follow-ups.",
+    });
+    writer.write({ type: "text-end", id: textId });
+  } catch (error) {
+    console.warn("BIR form artifact generation failed", {
+      name: error instanceof Error ? error.name : "UnknownError",
+    });
+    writer.write({
+      type: "tool-output-error",
+      toolCallId,
+      errorText: "The PDF could not be generated.",
+    } as never);
+    const textId = crypto.randomUUID();
+    writer.write({ type: "text-start", id: textId });
+    writer.write({
+      type: "text-delta",
+      id: textId,
+      delta: "I couldn’t generate the BIR form PDF. No downstream registration was recorded.",
+    });
+    writer.write({ type: "text-end", id: textId });
+  }
 }
 
 function planForAnswers(
@@ -979,6 +1080,42 @@ function businessAddressLabel(address: BnrsBusinessAddressInput | null) {
   ]
     .filter(Boolean)
     .join(", ");
+}
+
+async function completedBusinessRecord(input: {
+  actor: ReturnType<typeof bnrsActorFromProfile>;
+  answers: IntakeAnswer[];
+  businessAddress: BnrsBusinessAddressInput | null;
+  conversationId: string;
+  payment: StoredPayment;
+  profile: CitizenProfile;
+  prompt: string;
+}) {
+  const plan = makePlan(input.prompt, input.profile, input.answers);
+  if (plan.registrationType === "Self-employed")
+    return finalizeBirSelfEmployedRegistration({
+      businessActivity: plan.businessLabel,
+      businessAddress:
+        businessAddressLabel(input.businessAddress) || input.profile.address || plan.city,
+      category: plan.category,
+      city: plan.city,
+      conversationId: input.conversationId,
+      finalizedAt: input.payment.paidAt ?? input.payment.updatedAt,
+      name: input.profile.fullName,
+      ownerEgovUserId: input.actor.egovUserId,
+      rdo: plan.rdo ? `${plan.rdo.code} - ${plan.rdo.name}` : "For BIR confirmation",
+      tinMasked: input.profile.tinMasked,
+    });
+
+  const businessLink = await getBnrsConversationLink(input.actor.egovUserId, input.conversationId);
+  if (!businessLink?.applicationId) return null;
+  const business = await getBusiness({ actor: input.actor }, businessLink.applicationId);
+  if (!business) return null;
+  return finalizeBirSoleProprietorRegistration({
+    business,
+    finalizedAt: input.payment.paidAt ?? input.payment.updatedAt,
+    ownerEgovUserId: input.actor.egovUserId,
+  });
 }
 
 function appScopeLabel(
@@ -1610,16 +1747,16 @@ export async function POST(request: Request) {
   const prompt = conversationText || parsed.data.initialPrompt;
   const answers = toolAnswers(messages);
   const invalidAnswers = invalidIntakeAnswerIds(messages);
-  const birFormConsent = answers.find(
+  const legacyBirFormConsent = answers.find(
     (answer) =>
       answer.questionId === "bir-form-consent" ||
       answer.questionId === "self-employed-bir-form-consent",
   );
-  const birFormConsentValue = birFormConsent
-    ? normalizedAnswerText(birFormConsent.value).toLowerCase()
+  const legacyBirFormConsentValue = legacyBirFormConsent
+    ? normalizedAnswerText(legacyBirFormConsent.value).toLowerCase()
     : null;
-  const shouldGenerateBirForm =
-    birFormConsentValue === "yes" && !hasCompletedTool(messages, "tool-generate_bir_form");
+  const shouldGenerateLegacyBirForm =
+    legacyBirFormConsentValue === "yes" && !hasCompletedTool(messages, "tool-generate_bir_form");
   const initialLocation = resolveBusinessLocation(prompt, profile?.city ?? "Philippines", answers);
   const preference = addressPreference(answers);
   const residentialAddress = mapEgovSsoProfileToBnrsResidentialAddress(session.rawProfile);
@@ -1662,6 +1799,63 @@ export async function POST(request: Request) {
 
   if (parsed.data.event === "payment-completed") {
     const paymentService: PaymentServiceType = parsed.data.paymentService ?? "dti-business-name";
+    if (paymentService === "bir-documentary-stamp-tax") {
+      if (!existingPlan)
+        return Response.json({ error: "Registration plan not found." }, { status: 409 });
+      let payment: StoredPayment;
+      try {
+        payment = await syncBirDstPaymentForConversation(conversation.id);
+        if (!isPaidStatus(payment.status))
+          return Response.json({ error: "Payment has not been marked paid." }, { status: 409 });
+      } catch (error) {
+        if (error instanceof BirDstPaymentError)
+          return Response.json({ error: error.message, code: error.code }, { status: 409 });
+        throw error;
+      }
+      const completedPlan = completeRegistrationPlan(existingPlan);
+      const finalizedBusiness = await completedBusinessRecord({
+        actor,
+        answers,
+        businessAddress: bnrsAddress,
+        conversationId: conversation.id,
+        payment,
+        profile,
+        prompt,
+      });
+      if (!finalizedBusiness)
+        return Response.json({ error: "Business record was not found." }, { status: 409 });
+      return manualResponse(actor.egovUserId, conversation.id, messages, (writer) => {
+        emitTool(
+          writer,
+          "updatePlan",
+          {
+            ...completedPlan,
+            note: "BIR documentary stamp tax payment verified. Required registration is complete.",
+          },
+          { plan: completedPlan },
+        );
+        emitTool(
+          writer,
+          "finalizeBusinessRegistration",
+          {},
+          {
+            businessId: finalizedBusiness.id,
+            businessName: finalizedBusiness.name,
+            registrationNumber: finalizedBusiness.registrationNumber,
+            status: finalizedBusiness.status,
+          },
+        );
+        const textId = crypto.randomUUID();
+        writer.write({ type: "text-start", id: textId });
+        writer.write({
+          type: "text-delta",
+          id: textId,
+          delta:
+            "Your ₱30 BIR Documentary Stamp Tax payment is verified, so this registration plan is complete. Books and invoices, sector-specific permits, and SSS, PhilHealth, or Pag-IBIG registration remain available as optional follow-ups and do not block completion.",
+        });
+        writer.write({ type: "text-end", id: textId });
+      });
+    }
     if (paymentService === "dti-business-name") {
       let certificate: BnrsCertificate | null;
       try {
@@ -1757,7 +1951,7 @@ export async function POST(request: Request) {
       }
       const issuedPlan = planAfterPermitIssued(existingPlan ?? initialRegistrationPlan);
       const permit = lguPermitSummary(status, documents);
-      return manualResponse(actor.egovUserId, conversation.id, messages, (writer) => {
+      return manualResponse(actor.egovUserId, conversation.id, messages, async (writer) => {
         emitTool(writer, "issueLguBusinessPermit", {}, { permit });
         emitTool(
           writer,
@@ -1773,99 +1967,84 @@ export async function POST(request: Request) {
         writer.write({
           type: "text-delta",
           id: textId,
-          delta: `The DX LGU flow issued business permit **${permit.businessPermitNumber}** and barangay clearance **${permit.barangayClearanceNumber}**. Next, prepare the BIR registration form; the app will not claim BIR registration, books, invoices, or other agency approvals until those services actually complete them.`,
+          delta: `The DX LGU flow issued business permit **${permit.businessPermitNumber}** and barangay clearance **${permit.barangayClearanceNumber}**. I’m generating BIR Form 1901 now; the app will not claim BIR registration until its required payment completes.`,
         });
         writer.write({ type: "text-end", id: textId });
-        writer.write({
-          type: "tool-input-available",
-          toolCallId: crypto.randomUUID(),
-          toolName: "askUser",
-          input: { questions: [birFormConsentQuestion()] },
-        });
+        await emitBir1901Generation(
+          writer,
+          request,
+          session.rawProfile,
+          conversation.id,
+          planForBirPayment(issuedPlan, "Sole proprietor"),
+        );
       });
     }
 
     return Response.json({ error: "Unsupported payment service." }, { status: 400 });
   }
 
-  if (shouldGenerateBirForm)
+  if (parsed.data.event === "registration-completed") {
+    if (!existingPlan || !planProgress(existingPlan).done)
+      return Response.json({ error: "Registration plan is not complete." }, { status: 409 });
+    let payment: StoredPayment;
+    try {
+      payment = await syncBirDstPaymentForConversation(conversation.id);
+      if (!isPaidStatus(payment.status))
+        return Response.json({ error: "Payment has not been marked paid." }, { status: 409 });
+    } catch (error) {
+      if (error instanceof BirDstPaymentError)
+        return Response.json({ error: error.message, code: error.code }, { status: 409 });
+      throw error;
+    }
+    const finalizedBusiness = await completedBusinessRecord({
+      actor,
+      answers,
+      businessAddress: bnrsAddress,
+      conversationId: conversation.id,
+      payment,
+      profile,
+      prompt,
+    });
+    if (!finalizedBusiness)
+      return Response.json({ error: "Business record was not found." }, { status: 409 });
+    return manualResponse(actor.egovUserId, conversation.id, messages, (writer) => {
+      emitTool(
+        writer,
+        "finalizeBusinessRegistration",
+        {},
+        {
+          businessId: finalizedBusiness.id,
+          businessName: finalizedBusiness.name,
+          registrationNumber: finalizedBusiness.registrationNumber,
+          status: finalizedBusiness.status,
+        },
+      );
+      const textId = crypto.randomUUID();
+      writer.write({ type: "text-start", id: textId });
+      writer.write({
+        type: "text-delta",
+        id: textId,
+        delta: "Your completed registration is now linked to its business record.",
+      });
+      writer.write({ type: "text-end", id: textId });
+    });
+  }
+
+  if (shouldGenerateLegacyBirForm)
     return manualResponse(actor.egovUserId, conversation.id, messages, async (writer) => {
       if (!hasUserInfo) emitTool(writer, "user_info", {}, userInfoOutput);
-      const toolCallId = crypto.randomUUID();
-      writer.write({
-        type: "tool-input-available",
-        toolCallId,
-        toolName: "generate_bir_form",
-        input: { type: "1901", data: {} },
-      });
-
-      try {
-        const output = {
-          artifact: await createBirFormArtifact(
-            request,
-            session.rawProfile,
-            { type: "1901", data: {} },
-            conversation.id,
-          ),
-          source: "BIR tool input merged with authenticated eGov SSO profile" as const,
-        };
-
-        const route = makePlan(prompt, profile, answers);
-        const sourcePlan = existingPlan ?? initialRegistrationPlan;
-        const birCompletedPlan = normalizeRegistrationPlan({
-          ...sourcePlan,
-          steps: sourcePlan.steps.map((step) => ({
-            ...step,
-            status:
-              step.id === "bir"
-                ? ("completed" as const)
-                : step.id === "tax-compliance"
-                  ? ("in_progress" as const)
-                  : route.registrationType === "Self-employed" &&
-                      ["name-registration", "local-clearance", "business-permit"].includes(step.id)
-                    ? ("skipped" as const)
-                    : ["details", "structure"].includes(step.id)
-                      ? ("completed" as const)
-                      : step.status,
-          })),
-        });
-        writer.write({ type: "tool-output-available", toolCallId, output });
-        emitTool(
-          writer,
-          "updatePlan",
-          {
-            ...birCompletedPlan,
-            note: "BIR Form 1901 generated. BIR submission and downstream compliance remain pending.",
-          },
-          { plan: birCompletedPlan },
-        );
-        const textId = crypto.randomUUID();
-        writer.write({ type: "text-start", id: textId });
-        writer.write({
-          type: "text-delta",
-          id: textId,
-          delta:
-            "Your DX-generated BIR Form 1901 is ready. Select the PDF to preview it, then submit it through the appropriate BIR channel. The app has not claimed taxpayer registration, books, invoices, tax filings, sector permits, or employer registrations.",
-        });
-        writer.write({ type: "text-end", id: textId });
-      } catch (error) {
-        console.warn("BIR form artifact generation failed", {
-          name: error instanceof Error ? error.name : "UnknownError",
-        });
-        writer.write({
-          type: "tool-output-error",
-          toolCallId,
-          errorText: "The PDF could not be generated.",
-        } as never);
-        const textId = crypto.randomUUID();
-        writer.write({ type: "text-start", id: textId });
-        writer.write({
-          type: "text-delta",
-          id: textId,
-          delta: "I couldn’t generate the BIR form PDF. No downstream registration was recorded.",
-        });
-        writer.write({ type: "text-end", id: textId });
-      }
+      const route = makePlan(prompt, profile, answers);
+      const birPaymentPlan = planForBirPayment(
+        existingPlan ?? initialRegistrationPlan,
+        route.registrationType,
+      );
+      await emitBir1901Generation(
+        writer,
+        request,
+        session.rawProfile,
+        conversation.id,
+        birPaymentPlan,
+      );
     });
 
   const firstTurn =
@@ -1938,7 +2117,7 @@ export async function POST(request: Request) {
     businessPlan.registrationType === "Self-employed" &&
     !hasCompletedTool(messages, "tool-prepareSelfEmployedRegistration")
   )
-    return manualResponse(actor.egovUserId, conversation.id, messages, (writer) => {
+    return manualResponse(actor.egovUserId, conversation.id, messages, async (writer) => {
       const preparedPlan = normalizeRegistrationPlan({
         ...currentPlan,
         steps: currentPlan.steps.map((step) => ({
@@ -1989,8 +2168,8 @@ export async function POST(request: Request) {
             ? `${businessPlan.rdo.code} - ${businessPlan.rdo.name}`
             : "For BIR confirmation",
           addressSource: preference === "profile" ? "Authenticated profile" : "Business address",
-          status: "Ready for BIR form preparation",
-          nextAction: "Confirm below whether to generate the prefilled BIR Form 1901.",
+          status: "Generating BIR Form 1901",
+          nextAction: "Form 1901 is generated automatically. Next: ₱30 DST payment.",
         },
       });
       const textId = crypto.randomUUID();
@@ -1999,33 +2178,16 @@ export async function POST(request: Request) {
         type: "text-delta",
         id: textId,
         delta:
-          "Your self-employed professional route goes directly to BIR; DTI business-name registration is not required when you operate under your legal name.",
+          "Your self-employed professional route goes directly to BIR; DTI business-name registration is not required when you operate under your legal name. I’m generating Form 1901 now.",
       });
       writer.write({ type: "text-end", id: textId });
-      writer.write({
-        type: "tool-input-available",
-        toolCallId: crypto.randomUUID(),
-        toolName: "askUser",
-        input: { questions: [birFormConsentQuestion()] },
-      });
-    });
-
-  if (
-    continuingIntake &&
-    businessPlan.registrationType === "Self-employed" &&
-    hasCompletedTool(messages, "tool-prepareSelfEmployedRegistration") &&
-    birFormConsentValue === "no"
-  )
-    return manualResponse(actor.egovUserId, conversation.id, messages, (writer) => {
-      const textId = crypto.randomUUID();
-      writer.write({ type: "text-start", id: textId });
-      writer.write({
-        type: "text-delta",
-        id: textId,
-        delta:
-          "Form generation is paused at your request. Your confirmed route remains self-employed BIR registration, with DTI and the standard local-permit chain marked not applicable.",
-      });
-      writer.write({ type: "text-end", id: textId });
+      await emitBir1901Generation(
+        writer,
+        request,
+        session.rawProfile,
+        conversation.id,
+        planForBirPayment(preparedPlan, "Self-employed"),
+      );
     });
 
   if (!process.env.AI_GATEWAY_API_KEY) {
@@ -2254,7 +2416,7 @@ Standard intake questions are handled by the API router before this response. If
 
 For an active registration workflow, every response must advance or explicitly block the workflow. If the next checkpoint is ready, call the applicable tool now; do not merely describe the step, offer to help later, or end with phrases such as “if you want” or “I can help with that next.” If required information is missing, call askUser. Prose-only responses are allowed only for unrelated informational requests, explicit requests to review/explain, tool errors, or a genuinely completed workflow.
 
-Use updatePlan whenever registration progress changes. Keep the comprehensive 8–12 checkpoint plan and preserve stable step IDs. Mark finished work completed, requirements that do not apply to this route skipped, and keep at most one step in_progress. Never mark a requirement completed merely because the user started at a later checkpoint. The current plan is ${JSON.stringify(existingPlan ?? currentPlan)}.
+Use updatePlan whenever registration progress changes. Keep the comprehensive 8–12 checkpoint plan and preserve stable step IDs. Mark finished work completed, requirements that do not apply to this route skipped, and keep at most one step in_progress. The tax-compliance, sector-permits, and employer steps are optional follow-ups: preserve optional: true on them and never let them block registration completion. Never mark a requirement completed merely because the user started at a later checkpoint. The current plan is ${JSON.stringify(existingPlan ?? currentPlan)}.
 
 The user_info tool reports which authenticated eGov SSO fields are available for server-side form prefilling; it never returns their values to the model. It is ${hasUserInfo ? "already loaded in this conversation" : "not loaded yet"}. Call it before a government form tool when it has not already completed.
 

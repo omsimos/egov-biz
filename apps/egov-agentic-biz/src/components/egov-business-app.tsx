@@ -367,10 +367,6 @@ export function BusinessDetailScreen({
                     )}
                   </CardContent>
                 </Card>
-                <Alert variant="info">
-                  <ShieldCheckIcon weight="fill" />
-                  DX sandbox records only. They are not official live-agency documents.
-                </Alert>
               </TabsContent>
               <TabsContent className="flex flex-col gap-2.5" value="files">
                 <header className="flex items-center justify-between">
@@ -488,8 +484,9 @@ export function BusinessDetailScreen({
                   <CalendarDotsIcon className="size-[30px] text-primary" weight="duotone" />
                 </header>
                 <p className="mx-0.5 mb-1 text-2xs text-muted-foreground">
-                  The current DX modules do not create a BIR tax calendar. Confirm tax types and
-                  filing deadlines directly with BIR.
+                  {business.taxObligations.length
+                    ? "DX BIR demo reminders are based only on the legal business type. Confirm tax types and filing deadlines directly with BIR."
+                    : "No tax calendar is saved for this record. Confirm tax types and filing deadlines directly with BIR."}
                 </p>
                 {business.taxObligations.map((obligation) => {
                   const date = new Date(`${obligation.dueDate}T00:00:00Z`);
@@ -957,9 +954,10 @@ export function EgaphBusinessApp({
       setPrompt(current.initialPrompt);
       setPaymentStatus(status ?? null);
       setPaymentService(serviceType ?? null);
-      if (current.purpose === "management" && current.businessId) {
+      if (current.businessId) {
         setSelectedBusinessId(current.businessId);
-        await refreshBusinessConversations(current.businessId);
+        if (current.purpose === "management")
+          await refreshBusinessConversations(current.businessId);
       }
       setScreen("chat");
       const url = new URL(window.location.href);
@@ -1073,6 +1071,8 @@ export function EgaphBusinessApp({
     }
   };
   const openBusiness = (id: string) => {
+    setBusinessRevision((current) => current + 1);
+    void refreshConversations();
     setSelectedBusinessId(id);
     setBusinessConversations([]);
     setScreen("business-detail");
@@ -1245,7 +1245,7 @@ export function EgaphBusinessApp({
               )}
               {screen === "chat" && conversation && (
                 <BusinessChatScreen
-                  business={conversation.purpose === "management" ? selectedBusiness : null}
+                  business={selectedBusiness}
                   key={conversation.id}
                   conversation={conversation}
                   conversations={
@@ -1256,9 +1256,11 @@ export function EgaphBusinessApp({
                   paymentService={paymentService}
                   onBack={leaveChat}
                   onNewConversation={() => {
-                    if (conversation.businessId) void startBusinessChat(conversation.businessId);
+                    if (conversation.purpose === "management" && conversation.businessId)
+                      void startBusinessChat(conversation.businessId);
                     else leaveChat();
                   }}
+                  onOpenBusiness={openBusiness}
                   onSelectConversation={(id) => void openConversation(id)}
                   onDeleteConversation={setPendingDelete}
                 />
