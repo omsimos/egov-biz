@@ -1,28 +1,14 @@
 import type { CitizenProfile } from "@/lib/citizen-profile";
-import type { BusinessAddressSource, UserInfoOutput } from "@/lib/business-chat";
+import type { UserInfoOutput } from "@/lib/business-chat";
 
-export type BusinessAddressPreference = "profile" | "different" | null;
-
-export type ConfirmedBusinessAddress = {
-  address: string;
-  source: BusinessAddressSource;
-};
-
-export function resolveConfirmedBusinessAddress(
+export function resolveBusinessFormAddress(
   providedAddress: string,
   profile: CitizenProfile | null,
-  preference: BusinessAddressPreference,
-): ConfirmedBusinessAddress | null {
+  usesProfileAddress: boolean,
+) {
   const provided = providedAddress.trim();
-  if (provided) return { address: provided, source: "user-provided" };
-
-  const registeredResidentialAddress = profile?.address.trim() ?? "";
-  if (preference !== "profile" || !registeredResidentialAddress) return null;
-
-  return {
-    address: registeredResidentialAddress,
-    source: "egov-residential",
-  };
+  if (provided) return provided;
+  return usesProfileAddress ? (profile?.address.trim() ?? "") : "";
 }
 
 export function profileAddressPreference(value: string | string[] | undefined) {
@@ -35,7 +21,7 @@ export function profileAddressPreference(value: string | string[] | undefined) {
 export function extractExplicitBusinessAddress(prompt: string) {
   const matches = [
     ...prompt.matchAll(
-      /\b(?:(?:(?:business|operating|store|office) address)(?:\s+(?:is|to)|\s*[:=])|(?:change|update|correct|set|use)(?:\s+the)?\s+(?:business\s+)?address\s+to)\s*[“"]?([^”"\n]{5,180}?)(?=(?:[.!?]\s+(?:change|update|correct|set|use|my|the)\b)|$)/gi,
+      /\b(?:business )?address(?:\s+(?:is|to)|\s*[:=])\s*[“"]?([^”"\n]{5,180}?)(?=(?:[.!?]\s+(?:change|update|correct|set|use|my|the)\b)|$)/gi,
     ),
   ];
   return matches.at(-1)?.[1]?.trim().replace(/[.]+$/, "") ?? "";

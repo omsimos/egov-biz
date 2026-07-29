@@ -57,9 +57,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
 import { POPOVER_IN, POPOVER_OUT, SCRIM_IN, SCRIM_OUT, SHEET_IN, SHEET_OUT } from "@/lib/motion";
 import type { BirFormArtifact } from "@/lib/bir-form/artifact";
-import { isCompleteBusinessAddress } from "@/lib/business-address";
 import {
-  businessAddressSourceLabels,
   latestRegistrationPlan,
   uniqueMessagesById,
   type BarangayClearance,
@@ -574,7 +572,13 @@ function QuestionComposer({
     if (!text) return false;
     if (question.id === "proposed-business-name") return text.length >= 3;
     if (question.id !== "business-address") return true;
-    return isCompleteBusinessAddress(text);
+    const hasAddressMarker =
+      /\b(?:\d{1,5}|unit|room|floor|block|lot|house|street|st\.?|road|rd\.?|avenue|ave\.?|drive|highway|building|bldg\.?|plaza|village|subdivision|purok|sitio|poblacion|barangay|brgy\.?)\b/i.test(
+        text,
+      );
+    return (
+      text.length >= 10 && hasAddressMarker && (text.includes(",") || text.split(/\s+/).length >= 4)
+    );
   };
 
   const canContinue = complete(question);
@@ -865,10 +869,6 @@ export function DtiFormCard({
     [
       "Business address",
       `${form.businessAddress}${form.city && !form.businessAddress.includes(form.city) ? `, ${form.city}` : ""}`,
-    ],
-    [
-      "Address source",
-      form.businessAddressSource ? businessAddressSourceLabels[form.businessAddressSource] : "",
     ],
   ];
   if (form.missingFields.length || rows.some(([, value]) => !value)) return null;

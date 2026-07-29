@@ -31,7 +31,6 @@ import {
   type RegistrationPlan,
   type UserInfoOutput,
 } from "@/lib/business-chat";
-import { isCompleteBusinessAddress } from "@/lib/business-address";
 import { readSession } from "@/lib/auth/session";
 import { createBirFormArtifact } from "@/lib/bir-form/artifact";
 import { isExplicitBirFormRequest } from "@/lib/bir-form/request";
@@ -41,22 +40,15 @@ import {
   normalizeRegistrationPlan,
 } from "@/lib/registration-plan";
 import { dtiRegistrationFee, formatPeso } from "@/lib/dti-fees";
-import {
-  isMeaningfulBusinessName,
-  latestReadyDtiBusinessNameForm,
-  readyDtiBusinessNameFormSchema,
-} from "@/lib/dti-form";
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import {
   availableUserInfoFields,
   extractExplicitBusinessAddress,
   profileAddressPreference,
-  resolveConfirmedBusinessAddress,
-  type BusinessAddressPreference,
-  type ConfirmedBusinessAddress,
+  resolveBusinessFormAddress,
 } from "@/lib/form-prefill";
 import type { BusinessPlan, IntakeAnswer, IntakeQuestion } from "@/lib/questions";
-import { isPlaceholderAnswer, isValidChoiceAnswer } from "@/lib/intake-validation";
+import { isValidChoiceAnswer } from "@/lib/intake-validation";
 import {
   buildFinalBusiness,
   buildFinalSelfEmployedBusiness,
@@ -79,6 +71,9 @@ export const maxDuration = 120;
 const BARANGAY_CLEARANCE_MOCK_DELAY_MS = 2_000;
 const EBPLS_PERMIT_MOCK_DELAY_MS = 5_000;
 const COMPLIANCE_MOCK_DELAY_MS = 900;
+
+const PLACEHOLDER_ANSWER =
+  /^(?:a+s+s+|asdf+|test(?:ing)?|sample|placeholder|none|n\/?a|not sure|unknown|idk|tbd|xxx+|-+)$/i;
 
 function normalizedAnswerText(value: string | string[]) {
   return (Array.isArray(value) ? value.join(" ") : value).trim().replace(/\s+/g, " ");
@@ -106,11 +101,26 @@ function hasCompletedTool(messages: UIMessage[], type: string) {
   );
 }
 
+function isMeaningfulBusinessName(value: string) {
+  const text = value.trim().replace(/\s+/g, " ");
+  return text.length >= 3 && /[a-z\d]/i.test(text) && !PLACEHOLDER_ANSWER.test(text);
+}
+
+function isCompleteBusinessAddress(value: string) {
+  const text = value.trim().replace(/\s+/g, " ");
+  if (text.length < 10 || PLACEHOLDER_ANSWER.test(text)) return false;
+  const addressMarker =
+    /\b(?:\d{1,5}|unit|room|floor|block|lot|house|street|st\.?|road|rd\.?|avenue|ave\.?|drive|highway|building|bldg\.?|plaza|village|subdivision|purok|sitio|poblacion|barangay|brgy\.?)\b/i.test(
+      text,
+    );
+  return addressMarker && (text.includes(",") || text.split(" ").length >= 4);
+}
+
 function isUsableIntakeAnswer(answer: IntakeAnswer, question?: IntakeQuestion) {
   if (question?.type === "single" || question?.type === "multi")
     return isValidChoiceAnswer(question, answer.value);
   const text = normalizedAnswerText(answer.value);
-  if (!text || isPlaceholderAnswer(text)) return false;
+  if (!text || PLACEHOLDER_ANSWER.test(text)) return false;
   if (answer.questionId === "business-address") return isCompleteBusinessAddress(text);
   if (answer.questionId === "proposed-business-name") return isMeaningfulBusinessName(text);
   return true;
@@ -149,6 +159,24 @@ const questionSchema = z
         path: ["options"],
       });
   });
+const dtiFormSchema = z.object({
+  applicationType: z.literal("New registration"),
+  status: z.enum(["Ready to submit", "Submitted"]),
+  proposedName: z
+    .string()
+    .trim()
+    .refine(isMeaningfulBusinessName, "A complete proposed business name is required"),
+  businessActivity: z.string().trim().min(1),
+  territorialScope: z.enum(["Barangay", "City / municipality", "Regional", "National"]),
+  ownerName: z.string().trim().min(1),
+  businessAddress: z
+    .string()
+    .trim()
+    .refine(isCompleteBusinessAddress, "A complete business address is required"),
+  city: z.string().trim().min(1),
+  feeLabel: z.string().trim().min(1),
+  missingFields: z.array(z.string()).max(0),
+});
 const barangayClearanceApplicationSchema = z.object({
   businessName: z.string(),
   ownerName: z.string(),
@@ -211,23 +239,23 @@ function userText(messages: UIMessage[]) {
     .join("\n");
 }
 
-function profileAddressQuestion(requirement = "Business registration"): IntakeQuestion {
+function profileAddressQuestion(): IntakeQuestion {
   return {
     id: "profile-address",
     eyebrow: "Business address",
-    title: "Will this business use your registered residential address?",
-    helpText: `${requirement} requires a business address. Your eGov residential address is used only if you confirm it here.`,
+    title: "Which address should this business use?",
+    helpText: "Your registered eGov address is used only if you choose it here.",
     type: "single",
     options: [
       {
         id: "use-profile-address",
-        label: "Yes, use this address",
-        description: "Use my registered residential address for the business",
+        label: "Use my registered eGov address",
+        description: "Prefill the verified address from my profile",
       },
       {
         id: "use-different-address",
-        label: "No, use another address",
-        description: "I will enter a different business address",
+        label: "Use a different address",
+        description: "I will enter the business address",
       },
     ],
   };
@@ -286,15 +314,7 @@ function questionsForIncompleteDtiForm(
   const questions: IntakeQuestion[] = [];
   if (!isMeaningfulBusinessName(form.proposedName) && !answered.has("proposed-business-name"))
     questions.push(proposedNameQuestion());
-  const preference = addressPreference(answers);
-  if (
-    !form.businessAddressSource &&
-    profile?.address.trim() &&
-    !preference &&
-    !answered.has("profile-address")
-  )
-    questions.push(profileAddressQuestion("BNRS"));
-  else if (!isCompleteBusinessAddress(form.businessAddress) && !answered.has("business-address"))
+  if (!isCompleteBusinessAddress(form.businessAddress) && !answered.has("business-address"))
     questions.push(
       businessAddressQuestion(form.city || profile?.city || "your city or municipality"),
     );
@@ -534,19 +554,10 @@ function intakeBatch(prompt: string, profile: CitizenProfile | null, answers: In
     questions.push(activityQuestion);
   if (!answered.has("workers") && !promptHasStaffing(prompt))
     questions.push(fallbackQuestionFor(prompt, 1));
-  const registrationType = makePlan(prompt, profile, answers).registrationType;
   const explicitAddress = extractExplicitBusinessAddress(prompt);
   const preference = addressPreference(answers);
   if (!explicitAddress && !preference && profile?.address.trim())
-    questions.push(
-      profileAddressQuestion(
-        registrationType === "Sole proprietor"
-          ? "BNRS"
-          : registrationType === "Self-employed"
-            ? "BIR registration"
-            : "Business registration",
-      ),
-    );
+    questions.push(profileAddressQuestion());
   if (
     !explicitAddress &&
     !answered.has("business-address") &&
@@ -559,6 +570,7 @@ function intakeBatch(prompt: string, profile: CitizenProfile | null, answers: In
         /(?:called|named|name is|business name(?: is|:)?|trade name(?: is|:)?)\s+[“"]?([^.”"\n]+)/i,
       )?.[1]
       ?.trim() ?? "";
+  const registrationType = makePlan(prompt, profile, answers).registrationType;
   if (
     registrationType !== "Self-employed" &&
     !answered.has("proposed-business-name") &&
@@ -677,10 +689,9 @@ function planForAnswers(
   registrationType?: BusinessPlan["registrationType"],
 ) {
   const answerIds = new Set(answers.map((answer) => answer.questionId));
-  const addressConfirmed =
-    answerIds.has("business-address") || addressPreference(answers) === "profile";
   const detailsComplete =
-    intakeReady ?? (answerIds.has("workers") && addressConfirmed && answers.length >= 3);
+    intakeReady ??
+    (answerIds.has("workers") && answerIds.has("business-address") && answers.length >= 3);
   return normalizeRegistrationPlan({
     ...initialRegistrationPlan,
     steps: initialRegistrationPlan.steps.map((step) => ({
@@ -708,6 +719,15 @@ function planForAnswers(
                 : "pending",
     })),
   });
+}
+
+function lastDtiForm(messages: UIMessage[]) {
+  for (const message of [...messages].reverse())
+    for (const part of [...message.parts].reverse()) {
+      if (part.type === "tool-editDtiBusinessNameForm" && part.state === "output-available")
+        return (part.output as { form: DtiBusinessNameForm }).form;
+    }
+  return null;
 }
 
 function makePlan(
@@ -787,7 +807,7 @@ function makeDtiForm(
   profile: CitizenProfile | null,
   answers: IntakeAnswer[],
   plan: BusinessPlan,
-  businessAddressPreference: BusinessAddressPreference,
+  usesProfileAddress: boolean,
 ): DtiBusinessNameForm {
   const proposedNameMatch = prompt.match(
     /(?:called|named|name is|business name(?: is|:)?|trade name(?: is|:)?)\s+[“"]?([^.”"\n]+)/i,
@@ -797,13 +817,12 @@ function makeDtiForm(
     proposedNameMatch?.[1]?.trim() ||
     "";
   const proposedName = isMeaningfulBusinessName(rawProposedName) ? rawProposedName : "";
-  const confirmedBusinessAddress = resolveConfirmedBusinessAddress(
+  const rawBusinessAddress = resolveBusinessFormAddress(
     extractExplicitBusinessAddress(prompt) ||
       answerText(answers, /business.*address|operating.*address|exact.*address/i),
     profile,
-    businessAddressPreference,
+    usesProfileAddress,
   );
-  const rawBusinessAddress = confirmedBusinessAddress?.address ?? "";
   const businessAddress = isCompleteBusinessAddress(rawBusinessAddress) ? rawBusinessAddress : "";
   const scope: DtiBusinessNameForm["territorialScope"] = /nationwide|national/i.test(prompt)
     ? "National"
@@ -824,7 +843,6 @@ function makeDtiForm(
     territorialScope: scope,
     ownerName: profile?.fullName ?? "",
     businessAddress,
-    businessAddressSource: businessAddress ? (confirmedBusinessAddress?.source ?? null) : null,
     city: plan.city,
     feeLabel: formatPeso(dtiRegistrationFee(scope)),
     missingFields,
@@ -840,7 +858,14 @@ function deterministicNext(
   if (questions.length) return { questions };
   const plan = makePlan(prompt, profile, answers);
   if (plan.registrationType !== "Sole proprietor") return { plan };
-  const form = makeDtiForm(prompt, prompt, profile, answers, plan, addressPreference(answers));
+  const form = makeDtiForm(
+    prompt,
+    prompt,
+    profile,
+    answers,
+    plan,
+    addressPreference(answers) === "profile",
+  );
   const missingQuestions = questionsForIncompleteDtiForm(form, profile, answers);
   if (missingQuestions.length) return { questions: missingQuestions };
   return { plan, form };
@@ -887,7 +912,8 @@ function agentTools(
   userInfo: UserInfoOutput,
   hasUserInfo: boolean,
   businessCity: string,
-  confirmedBusinessAddress: ConfirmedBusinessAddress | null,
+  usesProfileAddress: boolean,
+  confirmedBusinessAddress: string,
 ) {
   let userInfoReady = hasUserInfo;
   return {
@@ -935,25 +961,23 @@ function agentTools(
     editDtiBusinessNameForm: tool({
       description:
         "Create or revise a complete DTI Business Name Registration form. Never call with blank or missing fields; use askUser first for every unresolved required field.",
-      inputSchema: z.object({
-        form: readyDtiBusinessNameFormSchema,
-        note: z.string().max(180),
-      }),
+      inputSchema: z.object({ form: dtiFormSchema, note: z.string().max(180) }),
       execute: ({ form }) => {
-        if (
-          !confirmedBusinessAddress ||
-          !isCompleteBusinessAddress(confirmedBusinessAddress.address)
-        )
+        const businessAddress = resolveBusinessFormAddress(
+          confirmedBusinessAddress || form.businessAddress,
+          profile,
+          usesProfileAddress,
+        );
+        if (!isCompleteBusinessAddress(businessAddress))
           throw new Error(
-            "Ask the user to confirm the required BNRS business address before creating the DTI form.",
+            "Ask the user for the complete business address before creating the DTI form.",
           );
         return {
           form: {
             ...form,
             ownerName: profile.fullName,
             businessActivity: prompt.slice(0, 160),
-            businessAddress: confirmedBusinessAddress.address,
-            businessAddressSource: confirmedBusinessAddress.source,
+            businessAddress,
             city: businessCity,
             feeLabel: formatPeso(dtiRegistrationFee(form.territorialScope)),
             missingFields: [],
@@ -1023,21 +1047,16 @@ export async function POST(request: Request) {
     isExplicitBirFormRequest(latestPrompt) || birFormConsentValue === "yes";
   const initialLocation = resolveBusinessLocation(prompt, profile?.city ?? "Philippines", answers);
   const preference = addressPreference(answers);
-  const providedBusinessAddress =
+  const confirmedBusinessAddress =
     extractExplicitBusinessAddress(prompt) ||
     answerText(answers, /business.*address|operating.*address|exact.*address/i);
-  const confirmedBusinessAddress = resolveConfirmedBusinessAddress(
-    providedBusinessAddress,
-    profile,
-    preference,
-  );
   const existingPlan = lastRegistrationPlan(messages);
   const hasSearched = messages.some((message) =>
     message.parts.some(
       (part) => part.type === "tool-webSearch" && part.state === "output-available",
     ),
   );
-  const lastForm = latestReadyDtiBusinessNameForm(messages);
+  const lastForm = lastDtiForm(messages);
   const hasUserInfo = messages.some((message) =>
     message.parts.some(
       (part) => part.type === "tool-user_info" && part.state === "output-available",
@@ -1051,6 +1070,7 @@ export async function POST(request: Request) {
     userInfoOutput,
     hasUserInfo,
     initialLocation.city,
+    preference === "profile",
     confirmedBusinessAddress,
   );
   const previousClearance = lastBarangayClearance(messages);
@@ -1362,7 +1382,7 @@ export async function POST(request: Request) {
               profile,
               plan,
               businessAddress:
-                confirmedBusinessAddress?.address ||
+                confirmedBusinessAddress ||
                 (preference === "profile" ? profile.address : "Address confirmed during intake"),
               compliance,
               files: [
@@ -1756,7 +1776,7 @@ export async function POST(request: Request) {
       profile,
       answers,
       businessPlan,
-      preference,
+      preference === "profile",
     );
     const missingQuestions = questionsForIncompleteDtiForm(form, profile, answers);
     if (missingQuestions.length)
@@ -1861,7 +1881,7 @@ generate_bir_form creates a prefilled BIR Form 1901 PDF artifact. Invoke it only
 
 The resolved business city is ${location.city}. Explicit locations override the profile. Reuse every fact the citizen has already stated and never ask for it again. Do not force registration steps when the latest request is unrelated or exploratory; answer that request directly and only return to the saved plan when the citizen asks. The resolved route is ${JSON.stringify(businessPlan)}.
 
-For a sole proprietor, call user_info before creating or updating a DTI Business Name Registration draft with editDtiBusinessNameForm. A confirmed business address is a required BNRS step. The SSO address is the citizen's registered residential address, not a business address; use it only after the citizen explicitly confirms that the business will use it. Otherwise collect a separate complete business address. Verified profile values stay server-side. DTI handles sole-proprietor business-name registration; do not call it a BIR form. Preserve known fields and copy the exact profile owner name. Never invent an address, address source, or fee. If the business city differs from the profile city and no full business address was supplied, leave the address blank and list Business address under missingFields. Use the official DTI territorial-scope fee plus documentary stamp supplied by the application; never invent a fee. The citizen may correct any field in ordinary chat; apply the correction by calling editDtiBusinessNameForm with the full revised form. Current form: ${JSON.stringify(lastForm ? { ...lastForm, ownerName: lastForm.ownerName ? "[server-prefilled verified name]" : "", businessAddress: lastForm.businessAddress ? "[server-confirmed business address]" : "" } : null)}.
+For a sole proprietor, call user_info before creating or updating a DTI Business Name Registration draft with editDtiBusinessNameForm. Verified profile values stay server-side and the registered address may be used only after explicit consent. DTI handles sole-proprietor business-name registration; do not call it a BIR form. Preserve known fields and copy the exact profile owner name. Never invent an address or fee. If the business city differs from the profile city and no full business address was supplied, leave the address blank and list Business address under missingFields. Use the official DTI territorial-scope fee plus documentary stamp supplied by the application; never invent a fee. The citizen may correct any field in ordinary chat; apply the correction by calling editDtiBusinessNameForm with the full revised form. Current form: ${JSON.stringify(lastForm ? { ...lastForm, ownerName: lastForm.ownerName ? "[server-prefilled verified name]" : "", businessAddress: lastForm.businessAddress ? "[server-confirmed business address]" : "" } : null)}.
 
 Use webSearch only when new current evidence is useful. Cite only returned official links. Never expose private reasoning. Do not claim submission or payment occurred. After every completed checkpoint, explicitly state the next concrete step.`,
     messages: await convertToModelMessages(messages, { tools, ignoreIncompleteToolCalls: true }),

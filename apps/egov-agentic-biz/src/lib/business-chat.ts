@@ -4,15 +4,6 @@ import type { CitizenProfile } from "@/lib/citizen-profile";
 import type { BusinessPlan, IntakeQuestion } from "@/lib/questions";
 import type { BusinessRecord, TaxObligation } from "@/lib/registered-business";
 
-export const businessAddressSources = ["egov-residential", "user-provided"] as const;
-
-export type BusinessAddressSource = (typeof businessAddressSources)[number];
-
-export const businessAddressSourceLabels: Record<BusinessAddressSource, string> = {
-  "egov-residential": "Confirmed eGov residential address",
-  "user-provided": "User-provided business address",
-};
-
 export type DtiBusinessNameForm = {
   applicationType: "New registration";
   status: "Draft" | "Ready to submit" | "Submitted";
@@ -21,7 +12,6 @@ export type DtiBusinessNameForm = {
   territorialScope: "Barangay" | "City / municipality" | "Regional" | "National";
   ownerName: string;
   businessAddress: string;
-  businessAddressSource: BusinessAddressSource | null;
   city: string;
   feeLabel: string;
   missingFields: string[];
