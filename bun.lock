@@ -121,8 +121,8 @@
       "name": "@repo/db",
       "version": "0.0.0",
       "dependencies": {
+        "@libsql/client": "^0.17.4",
         "drizzle-orm": "0.45.2",
-        "postgres": "3.4.9",
       },
       "devDependencies": {
         "@types/node": "^20",

@@ -214,27 +214,6 @@ describe("LGU application workflow", () => {
     );
   });
 
-  test("does not present missing legacy address data as a real address", async () => {
-    const { actor, applicant, repository, service } = setup();
-    const application = await service.startOrResumeApplication({
-      actor,
-      applicant,
-      certificate,
-    });
-    Object.assign(repository.applications.get(application.applicationId)!, {
-      businessAddressLine1: null,
-      businessBarangay: null,
-      businessProvince: null,
-      businessRegion: null,
-      businessPostalCode: null,
-    });
-
-    await expectLguError(
-      () => service.getStatus({ actor, applicationId: application.applicationId }),
-      "APPLICATION_CONFLICT",
-    );
-  });
-
   test("abandons an unpaid application and permits a clean replacement", async () => {
     const { actor, applicant, repository, service } = setup();
     const first = await service.startOrResumeApplication({

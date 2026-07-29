@@ -1,82 +1,53 @@
+import { randomUUID } from "node:crypto";
 import { relations, sql } from "drizzle-orm";
-import {
-  check,
-  index,
-  integer,
-  pgEnum,
-  pgTable,
-  text,
-  timestamp,
-  uniqueIndex,
-  uuid,
-  varchar,
-} from "drizzle-orm/pg-core";
+import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 const timestamps = {
-  createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .default(sql`(unixepoch() * 1000)`)
+    .notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .default(sql`(unixepoch() * 1000)`)
+    .notNull(),
 };
 
-export const lguApplicationStateEnum = pgEnum("lgu_application_state", [
-  "PAYMENT_READY",
-  "PAYMENT_PENDING",
-  "COMPLETED",
-  "ABANDONED",
-]);
+const applicationStates = ["PAYMENT_READY", "PAYMENT_PENDING", "COMPLETED", "ABANDONED"] as const;
+const territorialScopes = ["CITY_MUNICIPALITY", "REGIONAL", "NATIONAL"] as const;
+const paymentStatuses = ["CREATING", "PENDING", "PAID", "FAILED", "EXPIRED", "VOIDED"] as const;
 
-export const lguTerritorialScopeEnum = pgEnum("lgu_territorial_scope", [
-  "CITY_MUNICIPALITY",
-  "REGIONAL",
-  "NATIONAL",
-]);
-
-export const lguPaymentStatusEnum = pgEnum("lgu_payment_status", [
-  "CREATING",
-  "PENDING",
-  "PAID",
-  "FAILED",
-  "EXPIRED",
-  "VOIDED",
-]);
-
-export const lguApplications = pgTable(
+export const lguApplications = sqliteTable(
   "lgu_applications",
   {
-    id: uuid("id").defaultRandom().primaryKey(),
+    id: text("id").$defaultFn(randomUUID).primaryKey(),
     egovUserId: text("egov_user_id").notNull(),
-    state: lguApplicationStateEnum("state").default("PAYMENT_READY").notNull(),
+    state: text("state", { enum: applicationStates }).default("PAYMENT_READY").notNull(),
     city: text("city").notNull(),
     normalizedCity: text("normalized_city").notNull(),
-    businessAddressLine1: text("business_address_line_1"),
+    businessAddressLine1: text("business_address_line_1").notNull(),
     businessAddressLine2: text("business_address_line_2"),
-    businessBarangay: text("business_barangay"),
-    businessProvince: text("business_province"),
-    businessRegion: text("business_region"),
-    businessPostalCode: varchar("business_postal_code", { length: 4 }),
-    certificateNumber: varchar("certificate_number", { length: 40 }).notNull(),
-    certificateIssuingAgency: varchar("certificate_issuing_agency", { length: 40 }).notNull(),
-    certificateStatus: varchar("certificate_status", { length: 20 }).notNull(),
+    businessBarangay: text("business_barangay").notNull(),
+    businessProvince: text("business_province").notNull(),
+    businessRegion: text("business_region").notNull(),
+    businessPostalCode: text("business_postal_code").notNull(),
+    certificateNumber: text("certificate_number").notNull(),
+    certificateIssuingAgency: text("certificate_issuing_agency").notNull(),
+    certificateStatus: text("certificate_status").notNull(),
     certificateBusinessName: text("certificate_business_name").notNull(),
     certificateOwnerName: text("certificate_owner_name").notNull(),
     certificateDescriptor: text("certificate_descriptor").notNull(),
-    certificateTerritorialScope: lguTerritorialScopeEnum("certificate_territorial_scope").notNull(),
-    certificateIssuedAt: timestamp("certificate_issued_at", {
-      mode: "date",
-      withTimezone: true,
+    certificateTerritorialScope: text("certificate_territorial_scope", {
+      enum: territorialScopes,
     }).notNull(),
-    certificateValidUntil: timestamp("certificate_valid_until", {
-      mode: "date",
-      withTimezone: true,
+    certificateIssuedAt: integer("certificate_issued_at", { mode: "timestamp_ms" }).notNull(),
+    certificateValidUntil: integer("certificate_valid_until", {
+      mode: "timestamp_ms",
     }).notNull(),
-    latestPaymentId: uuid("latest_payment_id"),
-    permitNumber: varchar("permit_number", { length: 40 }),
-    barangayClearanceNumber: varchar("barangay_clearance_number", { length: 40 }),
-    documentsIssuedAt: timestamp("documents_issued_at", { mode: "date", withTimezone: true }),
-    documentsValidUntil: timestamp("documents_valid_until", {
-      mode: "date",
-      withTimezone: true,
-    }),
-    abandonedAt: timestamp("abandoned_at", { mode: "date", withTimezone: true }),
+    latestPaymentId: text("latest_payment_id"),
+    permitNumber: text("permit_number"),
+    barangayClearanceNumber: text("barangay_clearance_number"),
+    documentsIssuedAt: integer("documents_issued_at", { mode: "timestamp_ms" }),
+    documentsValidUntil: integer("documents_valid_until", { mode: "timestamp_ms" }),
+    abandonedAt: integer("abandoned_at", { mode: "timestamp_ms" }),
     ...timestamps,
   },
   (table) => [
@@ -90,12 +61,20 @@ export const lguApplications = pgTable(
       .on(table.barangayClearanceNumber)
       .where(sql`${table.barangayClearanceNumber} is not null`),
     check(
+      "lgu_application_state_valid",
+      sql`${table.state} in ('PAYMENT_READY', 'PAYMENT_PENDING', 'COMPLETED', 'ABANDONED')`,
+    ),
+    check(
       "lgu_certificate_dates_valid",
       sql`${table.certificateIssuedAt} <= ${table.certificateValidUntil}`,
     ),
     check(
       "lgu_certificate_credential_supported",
       sql`${table.certificateIssuingAgency} = 'DTI-BNRS' and ${table.certificateStatus} = 'REGISTERED'`,
+    ),
+    check(
+      "lgu_certificate_scope_valid",
+      sql`${table.certificateTerritorialScope} in ('CITY_MUNICIPALITY', 'REGIONAL', 'NATIONAL')`,
     ),
     check(
       "lgu_issued_documents_complete",
@@ -105,35 +84,35 @@ export const lguApplications = pgTable(
   ],
 );
 
-export const lguApplicantInformation = pgTable("lgu_applicant_information", {
-  applicationId: uuid("application_id")
+export const lguApplicantInformation = sqliteTable("lgu_applicant_information", {
+  applicationId: text("application_id")
     .primaryKey()
     .references(() => lguApplications.id, { onDelete: "cascade" }),
   ownerName: text("owner_name").notNull(),
   normalizedOwnerName: text("normalized_owner_name").notNull(),
-  tin: varchar("tin", { length: 14 }),
+  tin: text("tin"),
   ...timestamps,
 });
 
-export const lguPayments = pgTable(
+export const lguPayments = sqliteTable(
   "lgu_payments",
   {
-    id: uuid("id").defaultRandom().primaryKey(),
-    applicationId: uuid("application_id")
+    id: text("id").$defaultFn(randomUUID).primaryKey(),
+    applicationId: text("application_id")
       .notNull()
       .references(() => lguApplications.id, { onDelete: "cascade" }),
-    provider: varchar("provider", { length: 40 }).default("EGOVPAY").notNull(),
-    status: lguPaymentStatusEnum("status").default("CREATING").notNull(),
-    transactionId: varchar("transaction_id", { length: 150 }).notNull(),
-    transactionUuid: uuid("transaction_uuid"),
+    provider: text("provider").default("EGOVPAY").notNull(),
+    status: text("status", { enum: paymentStatuses }).default("CREATING").notNull(),
+    transactionId: text("transaction_id").notNull(),
+    transactionUuid: text("transaction_uuid"),
     checkoutUrl: text("checkout_url"),
     providerCallbackUrl: text("provider_callback_url").notNull(),
     providerRedirectUrl: text("provider_redirect_url").notNull(),
     amount: integer("amount").notNull(),
-    currency: varchar("currency", { length: 3 }).default("PHP").notNull(),
+    currency: text("currency").default("PHP").notNull(),
     providerStatus: text("provider_status"),
-    paidAt: timestamp("paid_at", { mode: "date", withTimezone: true }),
-    expiresAt: timestamp("expires_at", { mode: "date", withTimezone: true }),
+    paidAt: integer("paid_at", { mode: "timestamp_ms" }),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }),
     ...timestamps,
   },
   (table) => [
@@ -142,6 +121,10 @@ export const lguPayments = pgTable(
       .where(sql`${table.status} in ('CREATING', 'PENDING')`),
     uniqueIndex("lgu_payment_transaction_uuid_unique").on(table.transactionUuid),
     uniqueIndex("lgu_payment_transaction_id_unique").on(table.transactionId),
+    check(
+      "lgu_payment_status_valid",
+      sql`${table.status} in ('CREATING', 'PENDING', 'PAID', 'FAILED', 'EXPIRED', 'VOIDED')`,
+    ),
     check(
       "lgu_payment_assessment_fixed",
       sql`${table.amount} = 2500 and ${table.currency} = 'PHP'`,

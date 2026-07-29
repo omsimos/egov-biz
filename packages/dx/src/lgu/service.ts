@@ -246,17 +246,6 @@ function certificateFromRecord(
 }
 
 function businessAddressFromRecord(application: LguApplicationRecord): LguBusinessAddressInput {
-  if (
-    application.businessAddressLine1 === null ||
-    application.businessBarangay === null ||
-    application.businessProvince === null ||
-    application.businessRegion === null ||
-    application.businessPostalCode === null
-  )
-    throw new LguError(
-      "APPLICATION_CONFLICT",
-      "This legacy LGU application has no business-address snapshot and must be restarted.",
-    );
   return {
     addressLine1: application.businessAddressLine1,
     ...(application.businessAddressLine2 === null

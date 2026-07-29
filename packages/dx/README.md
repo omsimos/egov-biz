@@ -45,7 +45,7 @@ Business addresses are stored separately as PII. Status responses expose only `{
 ## Setup and usage
 
 ```ts
-import { createDatabase } from "@repo/db";
+import { createDatabaseFromEnv } from "@repo/db";
 import { createEgovPayClient } from "@repo/egov/eGovPay";
 import {
   createBnrsService,
@@ -54,7 +54,7 @@ import {
   mapEgovSsoProfileToBnrsResidentialAddress,
 } from "@repo/dx/bnrs";
 
-const database = createDatabase(process.env.DATABASE_URL!);
+const database = createDatabaseFromEnv();
 const repository = createDrizzleBnrsRepository(database);
 const paymentProvider = createEgovPayBnrsPaymentProvider(
   createEgovPayClient({
@@ -194,7 +194,7 @@ The actor ID is authorization context and is stored separately from applicant da
 Use an LGU-owned repository and an independently configured eGovPay client. The SDK can be the same library used elsewhere, but credentials, settlement template, provider instance, and environment configuration belong to LGU:
 
 ```ts
-import { createDatabase } from "@repo/db";
+import { createDatabaseFromEnv } from "@repo/db";
 import { createEgovPayClient } from "@repo/egov/eGovPay";
 import {
   createDrizzleLguRepository,
@@ -202,7 +202,7 @@ import {
   createLguService,
 } from "@repo/dx/lgu";
 
-const database = createDatabase(process.env.DATABASE_URL!);
+const database = createDatabaseFromEnv();
 const repository = createDrizzleLguRepository(database);
 const paymentProvider = createEgovPayLguPaymentProvider(
   createEgovPayClient({
@@ -261,7 +261,7 @@ Both documents include the structured BNRS business address and expire at `23:59
 
 The generated Drizzle migration adds three LGU-owned tables:
 
-- `lgu_applications` stores lifecycle, the accepted credential and structured-address snapshot, derived city identity, and dedicated permit/clearance issuance columns. Address columns are nullable only for rows created before address handoff existed; new applications always write the complete validated snapshot, and DX refuses to present missing legacy values as a real address.
+- `lgu_applications` stores lifecycle, the accepted credential, the required structured-address snapshot, derived city identity, and dedicated permit/clearance issuance columns.
 - `lgu_applicant_information` stores the separate one-to-one owner name and optional TIN.
 - `lgu_payments` stores every LGU hosted-payment attempt and provider reference.
 

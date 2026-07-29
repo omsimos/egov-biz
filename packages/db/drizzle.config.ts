@@ -1,10 +1,16 @@
 import { defineConfig } from "drizzle-kit";
 
 export default defineConfig({
-  dialect: "postgresql",
+  dbCredentials: {
+    authToken: process.env.TURSO_AUTH_TOKEN,
+    url: process.env.TURSO_DATABASE_URL ?? "",
+  },
+  dialect: "turso",
+  migrations: {
+    table: "__dx_drizzle_migrations",
+  },
   out: "./drizzle",
   schema: "./src/schema.ts",
-  dbCredentials: {
-    url: process.env.DATABASE_URL ?? "",
-  },
+  strict: true,
+  verbose: true,
 });

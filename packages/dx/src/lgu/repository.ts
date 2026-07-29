@@ -12,12 +12,12 @@ export type LguApplicationRecord = {
   state: LguApplicationState;
   city: string;
   normalizedCity: string;
-  businessAddressLine1: string | null;
+  businessAddressLine1: string;
   businessAddressLine2: string | null;
-  businessBarangay: string | null;
-  businessProvince: string | null;
-  businessRegion: string | null;
-  businessPostalCode: string | null;
+  businessBarangay: string;
+  businessProvince: string;
+  businessRegion: string;
+  businessPostalCode: string;
   certificateNumber: string;
   certificateIssuingAgency: "DTI-BNRS";
   certificateStatus: "REGISTERED";

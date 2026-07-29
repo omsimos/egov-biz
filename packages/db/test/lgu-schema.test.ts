@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getTableConfig } from "drizzle-orm/pg-core";
+import { getTableConfig } from "drizzle-orm/sqlite-core";
 
 import { lguApplicantInformation, lguApplications, lguPayments } from "../src/schema.js";
 
@@ -37,12 +37,12 @@ describe("LGU schema", () => {
     expect(config.columns.find(({ name }) => name === "certificate_number")).toBeDefined();
     expect(config.columns.find(({ name }) => name === "normalized_city")).toBeDefined();
     expect(config.columns.find(({ name }) => name === "business_address_line_1")?.notNull).toBe(
-      false,
+      true,
     );
-    expect(config.columns.find(({ name }) => name === "business_barangay")?.notNull).toBe(false);
-    expect(config.columns.find(({ name }) => name === "business_province")?.notNull).toBe(false);
-    expect(config.columns.find(({ name }) => name === "business_region")?.notNull).toBe(false);
-    expect(config.columns.find(({ name }) => name === "business_postal_code")?.notNull).toBe(false);
+    expect(config.columns.find(({ name }) => name === "business_barangay")?.notNull).toBe(true);
+    expect(config.columns.find(({ name }) => name === "business_province")?.notNull).toBe(true);
+    expect(config.columns.find(({ name }) => name === "business_region")?.notNull).toBe(true);
+    expect(config.columns.find(({ name }) => name === "business_postal_code")?.notNull).toBe(true);
     expect(config.checks).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "lgu_certificate_dates_valid" }),

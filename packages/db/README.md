@@ -1,26 +1,27 @@
 # Database
 
-Shared PostgreSQL access for the workspace, built with Drizzle ORM and
-`postgres.js`.
+Shared Turso/libSQL persistence for the DX BNRS and LGU packages, built with Drizzle ORM.
 
 ## Usage
 
-Set `DATABASE_URL` in the consuming app, then create the database client:
+Set `TURSO_DATABASE_URL` in the consuming app. A local database uses a `file:` URL and does not
+need a token; a remote Turso database also requires `TURSO_AUTH_TOKEN`.
 
 ```ts
 import { createDatabaseFromEnv } from "@repo/db";
 
-const db = createDatabaseFromEnv();
+const database = createDatabaseFromEnv();
 
-// Close the underlying postgres.js pool during process shutdown.
-await db.$client.end();
+// Close the underlying libSQL client during process shutdown.
+database.$client.close();
 ```
 
-For tests or scripts, pass the connection string explicitly with
-`createDatabase(databaseUrl, options)`.
+For tests or scripts, pass the URL explicitly with `createDatabase(url, options)`.
 
-Add tables and relations to `src/schema.ts`, then use the package scripts from
-the repository root:
+## Schema and migrations
+
+Add tables and relations to `src/schema.ts`, then use the package scripts from the repository
+root:
 
 ```sh
 bun --filter @repo/db db:generate
@@ -29,5 +30,6 @@ bun --filter @repo/db db:push
 bun --filter @repo/db db:studio
 ```
 
-`db:generate` writes versioned SQL migrations to `packages/db/drizzle`.
-Commands that connect to PostgreSQL require `DATABASE_URL`.
+The repository contains one fresh SQLite migration baseline in `packages/db/drizzle`. DX
+migrations use the `__dx_drizzle_migrations` ledger, so these tables can share the app's Turso
+database without colliding with the app's default `__drizzle_migrations` ledger.

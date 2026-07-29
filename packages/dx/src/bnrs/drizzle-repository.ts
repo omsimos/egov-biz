@@ -7,6 +7,7 @@ import {
 } from "@repo/db/schema";
 import { and, desc, eq, inArray, ne, notInArray } from "drizzle-orm";
 
+import { databaseErrorContains } from "../drizzle-errors.js";
 import {
   BnrsRepositoryConflict,
   type BnrsApplicationRecord,
@@ -14,13 +15,6 @@ import {
   type BnrsRepository,
 } from "./repository.js";
 import type { BnrsBusinessAddressInput, BnrsOwnerInformationInput } from "./types.js";
-
-function constraintName(error: unknown): string | undefined {
-  if (!error || typeof error !== "object") return undefined;
-  const record = error as Record<string, unknown>;
-  const constraint = record.constraint_name ?? record.constraint;
-  return typeof constraint === "string" ? constraint : undefined;
-}
 
 function applicationRecord(row: typeof bnrsApplications.$inferSelect): BnrsApplicationRecord {
   return row;
@@ -81,22 +75,13 @@ export function createDrizzleBnrsRepository(database: Database): BnrsRepository 
       .from(bnrsApplications)
       .where(eq(bnrsApplications.id, applicationId))
       .limit(1);
-    if (application?.latestPaymentId) {
-      const [payment] = await database
-        .select()
-        .from(bnrsPayments)
-        .where(eq(bnrsPayments.id, application.latestPaymentId))
-        .limit(1);
-      if (payment) return paymentRecord(payment);
-    }
-
-    const [legacyPayment] = await database
+    if (!application?.latestPaymentId) return null;
+    const [payment] = await database
       .select()
       .from(bnrsPayments)
-      .where(eq(bnrsPayments.applicationId, applicationId))
-      .orderBy(desc(bnrsPayments.createdAt))
+      .where(eq(bnrsPayments.id, application.latestPaymentId))
       .limit(1);
-    return legacyPayment ? paymentRecord(legacyPayment) : null;
+    return payment ? paymentRecord(payment) : null;
   }
 
   return {
@@ -112,10 +97,9 @@ export function createDrizzleBnrsRepository(database: Database): BnrsRepository 
         if (!created) throw new Error("BNRS application insert returned no row.");
         return applicationRecord(created);
       } catch (error) {
-        if (constraintName(error) !== "bnrs_one_active_application_per_user") throw error;
         const raced = await findActiveApplication(egovUserId);
-        if (!raced) throw error;
-        return raced;
+        if (raced) return raced;
+        throw error;
       }
     },
     async getApplication(applicationId) {
@@ -350,10 +334,9 @@ export function createDrizzleBnrsRepository(database: Database): BnrsRepository 
           };
         });
       } catch (error) {
-        const constraint = constraintName(error);
-        if (constraint === "bnrs_reserved_business_name_unique")
+        if (databaseErrorContains(error, "bnrs_applications.normalized_business_name"))
           throw new BnrsRepositoryConflict("BUSINESS_NAME_RESERVED");
-        if (constraint === "bnrs_one_pending_payment_per_application")
+        if (databaseErrorContains(error, "bnrs_payments.application_id"))
           throw new BnrsRepositoryConflict("PAYMENT_IN_PROGRESS");
         throw error;
       }
@@ -369,7 +352,6 @@ export function createDrizzleBnrsRepository(database: Database): BnrsRepository 
               eq(bnrsApplications.state, "PAYMENT_PENDING"),
             ),
           )
-          .for("update")
           .limit(1);
         if (!application) return null;
         const [payment] = await transaction
@@ -444,7 +426,6 @@ export function createDrizzleBnrsRepository(database: Database): BnrsRepository 
               eq(bnrsApplications.state, "PAYMENT_PENDING"),
             ),
           )
-          .for("update")
           .limit(1);
         if (!application) return null;
         const [payment] = await transaction
@@ -490,7 +471,6 @@ export function createDrizzleBnrsRepository(database: Database): BnrsRepository 
                   eq(bnrsApplications.state, "PAYMENT_READY"),
                 ),
               )
-              .for("update")
               .limit(1);
           }
           if (!application) return null;
@@ -553,7 +533,6 @@ export function createDrizzleBnrsRepository(database: Database): BnrsRepository 
                   eq(bnrsApplications.state, "COMPLETED"),
                 ),
               )
-              .for("update")
               .limit(1);
           }
           if (!application) return null;

@@ -1,47 +1,12 @@
 {
   "version": "7",
-  "dialect": "postgresql",
+  "dialect": "sqlite",
   "entries": [
     {
       "idx": 0,
-      "version": "7",
-      "when": 1785258959119,
-      "tag": "0000_curved_vin_gonzales",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1785312433449,
-      "tag": "0001_spooky_captain_midlands",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1785315914875,
-      "tag": "0002_short_starfox",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1785321496955,
-      "tag": "0003_rich_blizzard",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1785321588381,
-      "tag": "0004_backfill_bnrs_business_address_state",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1785323363358,
-      "tag": "0005_grey_ikaris",
+      "version": "6",
+      "when": 1785325187759,
+      "tag": "0000_graceful_exiles",
       "breakpoints": true
     }
   ]
