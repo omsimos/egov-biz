@@ -8,7 +8,8 @@ FROM oven/bun:1.3.14-slim AS dependencies
 WORKDIR /repo
 
 # Copy manifests first so dependency installation remains cached when source
-# files change. Bun needs every workspace manifest to honor the frozen lockfile.
+# files change. Bun needs every workspace manifest to honor the frozen lockfile,
+# so a new package under apps/ or packages/ has to be added here too.
 COPY package.json bun.lock ./
 COPY apps/egov-agentic-biz/package.json apps/egov-agentic-biz/package.json
 COPY apps/egov-ai-sample/package.json apps/egov-ai-sample/package.json
@@ -17,6 +18,8 @@ COPY apps/egov-sso-sample/package.json apps/egov-sso-sample/package.json
 COPY apps/rag-hor/package.json apps/rag-hor/package.json
 COPY apps/rag-hor/packages/transcript-scraper/package.json \
   apps/rag-hor/packages/transcript-scraper/package.json
+COPY packages/db/package.json packages/db/package.json
+COPY packages/dx/package.json packages/dx/package.json
 COPY packages/egov/package.json packages/egov/package.json
 COPY packages/transcript-scraper/package.json packages/transcript-scraper/package.json
 
