@@ -12,12 +12,10 @@
     "debug:business": "bun run dev:business 2>&1 | tee \"/tmp/ebiz\"",
     "dev:business": "turbo run dev --filter=egov-agentic-biz",
     "demo:reset-businesses": "bun --filter egov-agentic-biz run demo:reset-businesses",
-    "dev:sso": "turbo run dev --filter=@repo/egov-sso-sample",
+    "e2e:business": "turbo run e2e --filter=egov-stagehand-e2e",
     "format": "turbo run format",
     "format:check": "turbo run format:check",
     "lint": "turbo run lint",
-    "sample:ai": "turbo run sample --filter=@repo/egov-ai-sample --",
-    "smoke:egov": "turbo run smoke --filter=@repo/egov-smoke",
     "test": "turbo run test"
   },
   "devDependencies": {

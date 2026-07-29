@@ -19,10 +19,8 @@ egov-scripts/
 │   ├── egov/               # Typed client SDK for eGovPH partner APIs (9 services)  ← core
 │   └── transcript-scraper/ # YouTube timestamped-transcript extractor (TypeScript)
 ├── apps/
-│   ├── rag-hor/            # First product: RAG hearing agent (own docs/)
-│   ├── egov-ai-sample/     # Live eGov AI usage sample
-│   ├── egov-smoke/         # Live smoke harness across the eGov services
-│   └── egov-sso-sample/    # Reference eGov SSO login flow (server + client)
+│   ├── egov-agentic-biz/   # Agentic business-registration assistant
+│   └── rag-hor/            # RAG hearing agent (own docs/)
 ├── docs/                   # This reference
 ├── turbo.json              # Turborepo task graph
 └── .env.sample             # All service base URLs + credential slots
@@ -94,11 +92,9 @@ A typed, tree-shakeable SDK (`packages/egov/src`) exposing **9 eGovPH services**
 - **SAAODB records + dashboard:** the full appropriations → allotments → obligations → disbursements cascade, with `unobligated`/`unreleased`, obligation/disbursement **rates**, expense-class breakdown (`PS`/`MOOE`/`CO`/`FINEX`), and top entities. Queryable by `reportYear`, `period` (`FY`/`Q1`–`Q4`), `sheetScope` (`agency`/`sucs`/`summary`), and entity.
 - **SARO** records (release orders, by dept/agency/expense-class/SARO number), **NCA** records (cash allocations), **LGSF** records + dashboard (local government support fund, by region/province/municipality/program).
 
-The smoke harness queries it with `reportYear = current year`, so it is not hard-pinned to a single fiscal year in code.
-
 ### 3.4 eGovChain, eMessage, and the rest
 
-- **eGovChain** (`packages/egov/src/eGovChain`) is an **EVM-compatible JSON-RPC client** (`eth_*` methods, no auth in the smoke run). Anchoring a hash means submitting a transaction via `sendRawTransaction`; verification reads it back.
+- **eGovChain** (`packages/egov/src/eGovChain`) is an **EVM-compatible JSON-RPC client** (`eth_*` methods). Anchoring a hash means submitting a transaction via `sendRawTransaction`; verification reads it back.
 - **eMessage** implements **SMS push only** in code (the catalog blurb mentions email/in-app, but only `sendSms` is wired).
 - **eReport** is a full citizen-complaint workflow (OTP-gated) with PSGC location lookups.
 - **eGov SSO** is an OAuth-style citizen login returning a rich profile (national ID, passport, educational attainment). **eVerify / eGovPay / Face Liveness** cover identity, payments, and biometric liveness respectively.
@@ -109,6 +105,6 @@ The smoke harness queries it with `reportYear = current year`, so it is not hard
 
 - **Config:** every eGov service base URL and credential slot is declared in the root `.env.sample`; the SDK fails fast via `requireEgovEnvironment` when a credential is missing.
 - **Unit tests:** `packages/egov/test/` has a spec per service (`egov-ai`, `compass`, `emessage`, `egov-chain`, `everify`, `ereport`, `egov-sso`, `egov-pay`, `face-liveness`) plus `client` and `env`; `transcript-scraper` has its own test.
-- **Live smoke harness** (`apps/egov-smoke`, `bun run smoke:egov`): performs real calls against **eGov AI, eVerify, eReport, eGov Compass, and eGovChain** (e.g. AI issues a token and reads credits; Compass fetches a SAAODB page; Chain reads chain ID + block). It **deliberately skips** eGov SSO, eMessage, eGovPay, and Face Liveness because their only operations cause real side effects (send an SMS, create a payment, start a liveness session).
 
-The typed SDK + per-service tests + live smoke harness indicate the eGov integration is engineered, not speculative — any product can be assembled on a foundation that already talks to the real services.
+The typed SDK and per-service tests provide a reusable integration foundation for
+products that talk to the real services.

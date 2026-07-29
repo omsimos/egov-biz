@@ -325,9 +325,13 @@ export function PreviewStage() {
         {screen === "record" && (
           <BusinessDetailScreen
             business={previewBusinessDetail}
+            conversations={[]}
+            conversationsLoading={false}
             error={null}
             loading={false}
             onBack={() => setScreen("business")}
+            onNewChat={noop}
+            onOpenChat={noop}
             profile={previewProfile}
           />
         )}

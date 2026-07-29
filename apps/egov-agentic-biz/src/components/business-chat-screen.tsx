@@ -71,7 +71,7 @@ import {
 } from "@/lib/business-chat";
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import type { IntakeQuestion } from "@/lib/questions";
-import type { BusinessRecord, TaxObligation } from "@/lib/registered-business";
+import type { BusinessRecord, RegisteredBusiness, TaxObligation } from "@/lib/registered-business";
 
 type AskUserPart = Extract<BusinessChatMessage["parts"][number], { type: "tool-askUser" }>;
 type ReadyAskUserPart = AskUserPart & {
@@ -1421,6 +1421,7 @@ function PdfPreviewDialog({
 }
 
 export function BusinessChatScreen({
+  business,
   conversation,
   conversations,
   paymentStatus,
@@ -1430,6 +1431,7 @@ export function BusinessChatScreen({
   onSelectConversation,
   onDeleteConversation,
 }: {
+  business?: RegisteredBusiness | null;
   conversation: BusinessConversation;
   conversations: ConversationSummary[];
   profile: CitizenProfile | null;
@@ -1440,6 +1442,7 @@ export function BusinessChatScreen({
   onSelectConversation: (id: string) => void;
   onDeleteConversation: (conversation: ConversationSummary) => void;
 }) {
+  const management = conversation.purpose === "management";
   const [input, setInput] = useState("");
   const [paymentRequest, setPaymentRequest] = useState<PaymentRequest | null>(null);
   const [pdfArtifact, setPdfArtifact] = useState<BirFormArtifact | null>(null);
@@ -1542,13 +1545,14 @@ export function BusinessChatScreen({
     seeded.current = true;
     if (conversation.activeStreamId) {
       void resumeStream().finally(() => setMessages((current) => uniqueMessagesById(current)));
-    } else if (initialMessages.length === 0) {
+    } else if (initialMessages.length === 0 && !management) {
       void sendMessage({ text: initialPrompt });
     }
   }, [
     conversation.activeStreamId,
     initialMessages.length,
     initialPrompt,
+    management,
     resumeStream,
     sendMessage,
     setMessages,
@@ -1641,7 +1645,7 @@ export function BusinessChatScreen({
 
   return (
     <div className="screen agent-chat-screen">
-      {registrationFinalized && <CompletionConfetti />}
+      {!management && registrationFinalized && <CompletionConfetti />}
       <StatusBar />
       <header className="chat-header" ref={headerRef}>
         <button data-cuelume-toggle="page" onClick={onBack} aria-label="Go back">
@@ -1659,7 +1663,10 @@ export function BusinessChatScreen({
           <span>
             <h1>{conversation.title}</h1>
             <small>
-              <ShieldCheck weight="fill" /> Saved registration plan
+              <ShieldCheck weight="fill" />{" "}
+              {management
+                ? `${business?.name ?? "Business record"} · Saved business chat`
+                : "Saved registration plan"}
             </small>
           </span>
           {/* PlanDock's caret already turns over when its panel opens
@@ -1676,7 +1683,7 @@ export function BusinessChatScreen({
           className="chat-new-session"
           data-cuelume-toggle="page"
           onClick={onNewConversation}
-          aria-label="Create a new registration plan"
+          aria-label={management ? "Create a new business chat" : "Create a new registration plan"}
         >
           <Plus />
         </button>
@@ -1744,7 +1751,39 @@ export function BusinessChatScreen({
             </span>
           </div>
         )}
-        <div className="chat-day">Saved automatically</div>
+        <div className="chat-day">
+          {management ? `About ${business?.name ?? "this business"}` : "Saved automatically"}
+        </div>
+        {management && visibleMessages.length === 0 && !busy && (
+          <section className="mx-auto grid max-w-[300px] gap-4 px-3 pt-8 text-center">
+            <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-secondary text-primary">
+              <Buildings className="size-7" weight="duotone" />
+            </span>
+            <div>
+              <h2 className="text-lg -tracking-[.4px]">How can I help?</h2>
+              <p className="mt-1 text-sm leading-normal text-muted-foreground">
+                Ask about this business’s calendar, files, permits, or next obligations.
+              </p>
+            </div>
+            <div className="grid gap-2 text-left">
+              {[
+                "What’s next on my tax calendar?",
+                "Which business files do I have?",
+                "Is there anything I still need to complete?",
+              ].map((suggestion) => (
+                <button
+                  className="rounded-lg border border-border bg-white px-3 py-2.5 text-left text-sm font-semibold shadow-xs transition-[scale,border-color,background-color] duration-150 ease-[var(--ease-out)] hover:border-primary-border hover:bg-gray-50 active:scale-[var(--press-lg)]"
+                  data-cuelume-toggle="page"
+                  key={suggestion}
+                  onClick={() => void sendMessage({ text: suggestion })}
+                  type="button"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
         {visibleMessages.map((message) => {
           const user = message.role === "user";
           const text = textOf(message);
@@ -1788,7 +1827,11 @@ export function BusinessChatScreen({
         {busy && (
           <div className="chat-working" role="status" aria-live="polite">
             <AgentDot />
-            <div className="chat-working-shimmer">Preparing your next registration step…</div>
+            <div className="chat-working-shimmer">
+              {management
+                ? "Reviewing your saved business records…"
+                : "Preparing your next registration step…"}
+            </div>
           </div>
         )}
         {(error || continuationError) && (
@@ -1808,14 +1851,14 @@ export function BusinessChatScreen({
         )}
       </main>
       <footer className="chat-composer-shell">
-        {latestPlan && (
+        {!management && latestPlan && (
           <PlanDock
             plan={latestPlan.plan}
             active={latestPlan.active}
             collapseKey={pending?.part.toolCallId}
           />
         )}
-        {pending ? (
+        {!management && pending ? (
           <QuestionComposer
             key={pending.part.toolCallId}
             pending={pending}
@@ -1838,13 +1881,17 @@ export function BusinessChatScreen({
                   submit(event);
                 }
               }}
-              placeholder="Ask or correct your application…"
+              placeholder={
+                management ? "Ask about your business…" : "Ask or correct your application…"
+              }
               aria-label="Message"
             />
             <div className="flex items-center justify-between gap-2 py-1.5 pr-1.5 pl-3">
               <span className="flex items-center gap-1 text-2xs text-muted-foreground">
-                <ShieldCheck className="size-[11px] text-success" weight="fill" /> You can correct
-                any field here
+                <ShieldCheck className="size-[11px] text-success" weight="fill" />{" "}
+                {management
+                  ? "Uses this business’s saved records"
+                  : "You can correct any field here"}
               </span>
               {busy ? (
                 <IconButton
@@ -1871,7 +1918,7 @@ export function BusinessChatScreen({
           </form>
         )}
       </footer>
-      {paymentRequest && (
+      {!management && paymentRequest && (
         <PaymentDialog
           payment={paymentRequest}
           conversationId={conversation.id}

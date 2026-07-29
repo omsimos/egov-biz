@@ -6,11 +6,13 @@ import {
   BriefcaseIcon,
   CalendarDotsIcon,
   CaretRightIcon,
+  ChatCircleDotsIcon,
   CheckCircleIcon,
   CoffeeIcon,
   FileTextIcon,
   FolderOpenIcon,
   LaptopIcon,
+  PlusIcon,
   ShieldCheckIcon,
   ShoppingBagOpenIcon,
   SparkleIcon,
@@ -71,15 +73,23 @@ function formatBusinessDate(value: string) {
 
 export function BusinessDetailScreen({
   business,
+  conversations,
+  conversationsLoading,
   loading,
   error,
   onBack,
+  onNewChat,
+  onOpenChat,
   profile,
 }: {
   business: RegisteredBusinessDetail | null;
+  conversations: ConversationSummary[];
+  conversationsLoading: boolean;
   loading: boolean;
   error: string | null;
   onBack: () => void;
+  onNewChat: (businessId: string) => void;
+  onOpenChat: (conversationId: string) => void;
   profile: CitizenProfile;
 }) {
   const [tab, setTab] = useState<"overview" | "records" | "files" | "calendar">("overview");
@@ -229,6 +239,83 @@ export function BusinessDetailScreen({
                   </div>
                   <CaretRightIcon className="text-primary" weight="bold" />
                 </button>
+                <Card>
+                  <CardContent className="flex flex-col gap-3">
+                    <header className="flex items-start justify-between gap-3">
+                      <div>
+                        <span className="mb-0.5 block text-xs font-bold text-primary">
+                          Business assistant
+                        </span>
+                        <h2 className="text-md font-extrabold -tracking-[.2px]">Recent chats</h2>
+                        <p className="mt-1 text-2xs leading-normal text-muted-foreground">
+                          Ask about this business’s taxes, files, permits, and next obligations.
+                        </p>
+                      </div>
+                      <IconButton
+                        aria-label={`Start a new chat about ${business.name}`}
+                        className="shrink-0"
+                        data-cuelume-toggle="page"
+                        onClick={() => onNewChat(business.id)}
+                        variant="primary"
+                      >
+                        <PlusIcon weight="bold" />
+                      </IconButton>
+                    </header>
+                    {conversationsLoading ? (
+                      <div className="skeleton-card h-[58px] rounded-lg" />
+                    ) : conversations.length === 0 ? (
+                      <button
+                        className={cn(
+                          "grid min-h-[70px] grid-cols-[38px_1fr_16px] items-center gap-2.5 rounded-lg border border-dashed border-border px-3 py-2.5 text-left transition-[scale,border-color,background-color] duration-150 ease-[var(--ease-out)] hover:border-primary-border hover:bg-gray-50 active:scale-[var(--press-lg)]",
+                          FOCUS_RING,
+                        )}
+                        data-cuelume-toggle="page"
+                        onClick={() => onNewChat(business.id)}
+                        type="button"
+                      >
+                        <span className="grid size-[38px] place-items-center rounded-lg bg-secondary text-primary">
+                          <ChatCircleDotsIcon className="size-5" weight="duotone" />
+                        </span>
+                        <span className="grid gap-0.5">
+                          <strong className="text-xs">Start your first business chat</strong>
+                          <span className="text-2xs leading-normal text-muted-foreground">
+                            Your conversation will stay linked to this record.
+                          </span>
+                        </span>
+                        <CaretRightIcon className="text-primary" weight="bold" />
+                      </button>
+                    ) : (
+                      <div className="grid gap-1.5">
+                        {conversations.slice(0, 3).map((conversation) => (
+                          <button
+                            className={cn(
+                              "grid min-h-[52px] grid-cols-[34px_1fr_16px] items-center gap-2.5 rounded-lg border border-border px-2.5 py-2 text-left transition-[scale,border-color,background-color] duration-150 ease-[var(--ease-out)] hover:border-primary-border hover:bg-gray-50 active:scale-[var(--press-lg)]",
+                              FOCUS_RING,
+                            )}
+                            data-cuelume-toggle="page"
+                            key={conversation.id}
+                            onClick={() => onOpenChat(conversation.id)}
+                            type="button"
+                          >
+                            <span className="grid size-[34px] place-items-center rounded-md bg-secondary text-primary">
+                              <ChatCircleDotsIcon className="size-[18px]" weight="duotone" />
+                            </span>
+                            <span className="grid min-w-0 gap-0.5">
+                              <strong className="truncate text-xs">{conversation.title}</strong>
+                              <time
+                                className="text-2xs text-muted-foreground"
+                                dateTime={conversation.updatedAt}
+                              >
+                                Updated {formatBusinessDate(conversation.updatedAt)}
+                              </time>
+                            </span>
+                            <CaretRightIcon className="text-primary" weight="bold" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
                 <Alert variant="info">
                   <ShieldCheckIcon weight="fill" />
                   Demo records only. They are not official agency documents.
@@ -766,6 +853,8 @@ export function EgaphBusinessApp({
     initialConversation,
   );
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [businessConversations, setBusinessConversations] = useState<ConversationSummary[]>([]);
+  const [businessConversationsLoading, setBusinessConversationsLoading] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
   const [paymentService, setPaymentService] = useState<PaymentServiceType | null>(null);
   const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(null);
@@ -791,6 +880,22 @@ export function EgaphBusinessApp({
         ((await response.json()) as { conversations: ConversationSummary[] }).conversations,
       );
   }, []);
+  const refreshBusinessConversations = useCallback(async (businessId: string) => {
+    setBusinessConversationsLoading(true);
+    try {
+      const response = await fetch(
+        `/api/businesses/${encodeURIComponent(businessId)}/conversations`,
+        { cache: "no-store" },
+      );
+      if (!response.ok) {
+        setBusinessConversations([]);
+        return;
+      }
+      setBusinessConversations(((await response.json()) as { data: ConversationSummary[] }).data);
+    } finally {
+      setBusinessConversationsLoading(false);
+    }
+  }, []);
   const openConversation = useCallback(
     async (id: string, status?: string | null, serviceType?: PaymentServiceType | null) => {
       const response = await fetch(`/api/conversations/${encodeURIComponent(id)}`);
@@ -801,27 +906,33 @@ export function EgaphBusinessApp({
       setPrompt(current.initialPrompt);
       setPaymentStatus(status ?? null);
       setPaymentService(serviceType ?? null);
+      if (current.purpose === "management" && current.businessId) {
+        setSelectedBusinessId(current.businessId);
+        await refreshBusinessConversations(current.businessId);
+      }
       setScreen("chat");
       const url = new URL(window.location.href);
       url.search = "";
+      if (current.businessId) url.searchParams.set("business", current.businessId);
       url.searchParams.set("chat", current.id);
       window.history.replaceState({}, "", url);
-      await refreshConversations();
+      if (current.purpose === "registration") await refreshConversations();
     },
-    [refreshConversations],
+    [refreshBusinessConversations, refreshConversations],
   );
   useEffect(() => {
     void (async () => {
       await refreshConversations();
       const url = new URL(window.location.href);
-      const businessId = url.searchParams.get("business");
-      if (businessId) {
-        setSelectedBusinessId(businessId);
-        setScreen("business-detail");
-        return;
-      }
       const id = url.searchParams.get("chat");
+      const businessId = url.searchParams.get("business");
       if (!id) {
+        if (businessId) {
+          setSelectedBusinessId(businessId);
+          setScreen("business-detail");
+          await refreshBusinessConversations(businessId);
+          return;
+        }
         setScreen("home");
         return;
       }
@@ -847,7 +958,12 @@ export function EgaphBusinessApp({
       await openConversation(id, status, serviceType);
       setScreen((current) => (current === "restoring" ? "business" : current));
     })();
-  }, [initialConversation?.id, openConversation, refreshConversations]);
+  }, [
+    initialConversation?.id,
+    openConversation,
+    refreshBusinessConversations,
+    refreshConversations,
+  ]);
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [screen]);
@@ -868,22 +984,51 @@ export function EgaphBusinessApp({
     window.history.pushState({}, "", `?chat=${encodeURIComponent(created.id)}`);
     await refreshConversations();
   };
+  const startBusinessChat = async (businessId: string) => {
+    const response = await fetch(
+      `/api/businesses/${encodeURIComponent(businessId)}/conversations`,
+      { method: "POST" },
+    );
+    if (!response.ok) return;
+    const created = ((await response.json()) as { data: BusinessConversation }).data;
+    setSelectedBusinessId(businessId);
+    setConversation(created);
+    setPaymentStatus(null);
+    setPaymentService(null);
+    setScreen("chat");
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.searchParams.set("business", businessId);
+    url.searchParams.set("chat", created.id);
+    window.history.pushState({}, "", url);
+    await refreshBusinessConversations(businessId);
+  };
   const leaveChat = () => {
-    setScreen("business");
+    const businessId = conversation?.purpose === "management" ? conversation.businessId : null;
+    setScreen(businessId ? "business-detail" : "business");
     setConversation(null);
     setPaymentStatus(null);
     setPaymentService(null);
     setBusinessRevision((current) => current + 1);
-    window.history.pushState({}, "", window.location.pathname);
-    void refreshConversations();
+    if (businessId) {
+      setSelectedBusinessId(businessId);
+      window.history.pushState({}, "", `?business=${encodeURIComponent(businessId)}`);
+      void refreshBusinessConversations(businessId);
+    } else {
+      window.history.pushState({}, "", window.location.pathname);
+      void refreshConversations();
+    }
   };
   const openBusiness = (id: string) => {
     setSelectedBusinessId(id);
+    setBusinessConversations([]);
     setScreen("business-detail");
     window.history.pushState({}, "", `?business=${encodeURIComponent(id)}`);
+    void refreshBusinessConversations(id);
   };
   const leaveBusinessDetail = () => {
     setSelectedBusinessId(null);
+    setBusinessConversations([]);
     setScreen("business");
     window.history.pushState({}, "", window.location.pathname);
   };
@@ -893,6 +1038,7 @@ export function EgaphBusinessApp({
     });
     if (!response.ok) return;
     setConversations((current) => current.filter(({ id }) => id !== item.id));
+    setBusinessConversations((current) => current.filter(({ id }) => id !== item.id));
     if (conversation?.id === item.id) leaveChat();
   };
   const signOut = async () => {
@@ -1034,22 +1180,32 @@ export function EgaphBusinessApp({
               {screen === "business-detail" && (
                 <BusinessDetailScreen
                   business={selectedBusiness}
+                  conversations={businessConversations}
+                  conversationsLoading={businessConversationsLoading}
                   loading={selectedBusinessLoading}
                   error={selectedBusinessError}
                   onBack={leaveBusinessDetail}
+                  onNewChat={(businessId) => void startBusinessChat(businessId)}
+                  onOpenChat={(id) => void openConversation(id)}
                   profile={profile}
                 />
               )}
               {screen === "chat" && conversation && (
                 <BusinessChatScreen
+                  business={conversation.purpose === "management" ? selectedBusiness : null}
                   key={conversation.id}
                   conversation={conversation}
-                  conversations={conversations}
+                  conversations={
+                    conversation.purpose === "management" ? businessConversations : conversations
+                  }
                   profile={profile}
                   paymentStatus={paymentStatus}
                   paymentService={paymentService}
                   onBack={leaveChat}
-                  onNewConversation={leaveChat}
+                  onNewConversation={() => {
+                    if (conversation.businessId) void startBusinessChat(conversation.businessId);
+                    else leaveChat();
+                  }}
                   onSelectConversation={(id) => void openConversation(id)}
                   onDeleteConversation={setPendingDelete}
                 />
@@ -1059,10 +1215,12 @@ export function EgaphBusinessApp({
         )}
       </div>
       <ConfirmDialog
-        confirmLabel="Delete plan"
+        confirmLabel={pendingDelete?.purpose === "management" ? "Delete chat" : "Delete plan"}
         description={
           pendingDelete
-            ? `“${pendingDelete.title}” and its messages and payment history will be permanently removed. This cannot be undone.`
+            ? pendingDelete.purpose === "management"
+              ? `“${pendingDelete.title}” and its messages will be permanently removed. This cannot be undone.`
+              : `“${pendingDelete.title}” and its messages and payment history will be permanently removed. This cannot be undone.`
             : ""
         }
         onConfirm={() => {
@@ -1072,7 +1230,11 @@ export function EgaphBusinessApp({
           if (!next) setPendingDelete(null);
         }}
         open={pendingDelete !== null}
-        title="Delete this registration plan?"
+        title={
+          pendingDelete?.purpose === "management"
+            ? "Delete this business chat?"
+            : "Delete this registration plan?"
+        }
       />
     </div>
   );

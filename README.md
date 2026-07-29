@@ -19,11 +19,11 @@ product-agnostic — other ideas can build on the same APIs.
 ```
 egov-scripts/
 ├── apps/
-│   ├── rag-hor/            # The product: Next.js RAG agent for House hearings
-│   ├── egov-ai-sample/     # Live eGov AI usage sample
-│   ├── egov-smoke/         # Live smoke harness across the eGov services
-│   └── egov-sso-sample/    # Reference eGov SSO login flow (server + client)
+│   ├── egov-agentic-biz/   # Agentic business-registration assistant
+│   └── rag-hor/            # Next.js RAG agent for House hearings
 ├── packages/
+│   ├── db/                 # Shared database package
+│   ├── dx/                 # Shared developer-experience package
 │   ├── egov/               # Typed client SDK for 9 eGovPH partner services
 │   └── transcript-scraper/ # YouTube timestamped-transcript extractor
 ├── docs/                   # eGov API architecture & reference (shared)
@@ -54,11 +54,14 @@ Root scripts run through Turborepo:
 | `bun run test` | Run every workspace's tests |
 | `bun run lint` / `bun run format` | Lint / format all workspaces |
 | `bun run check-types` | Type-check all workspaces |
-| `bun run smoke:egov` | Live smoke-test the eGov services (`apps/egov-smoke`) |
-| `bun run sample:ai` | Run the eGov AI sample (`apps/egov-ai-sample`) |
-| `bun run dev:sso` | Run the eGov SSO sample (`apps/egov-sso-sample`) |
+| `bun run dev:business` | Run the eGov Agentic Business app |
 
 ## Workspaces
+
+### `apps/egov-agentic-biz` — agentic business registration
+
+A Next.js assistant for guiding citizens through business registration using
+authenticated eGov data and generated government-form artifacts.
 
 ### `apps/rag-hor` — the product
 

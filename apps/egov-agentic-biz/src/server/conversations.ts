@@ -8,6 +8,7 @@ import {
   uniqueMessagesById,
   type BusinessChatMessage,
   type BusinessConversation,
+  type ConversationPurpose,
   type ConversationSummary,
   type PlanProgress,
   type PaymentServiceType,
@@ -21,9 +22,9 @@ type ConversationRow = typeof schema.conversations.$inferSelect;
 // transcript was actually written in.
 const insertionOrder = sql`rowid`;
 
-function titleFor(prompt: string) {
+function titleFor(prompt: string, fallback = "New registration plan") {
   const title = prompt.replace(/\s+/g, " ").trim();
-  return title.slice(0, 68) || "New registration plan";
+  return title.slice(0, 68) || fallback;
 }
 
 /**
@@ -53,6 +54,8 @@ function mapSummary(
     id: row.id,
     title: row.title,
     initialPrompt: row.initialPrompt,
+    purpose: row.purpose,
+    businessId: row.businessId,
     activeStreamId: row.activeStreamId,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -71,11 +74,19 @@ function progressFromParts(partsJson: string): PlanProgress | null {
   return found ? planProgress(found.plan) : null;
 }
 
-export async function listConversations(): Promise<ConversationSummary[]> {
+export async function listConversations(
+  filter: { businessId?: string; purpose?: ConversationPurpose } = {},
+): Promise<ConversationSummary[]> {
   const database = await getDatabase();
   const rows = await database
     .select()
     .from(schema.conversations)
+    .where(
+      and(
+        filter.purpose ? eq(schema.conversations.purpose, filter.purpose) : undefined,
+        filter.businessId ? eq(schema.conversations.businessId, filter.businessId) : undefined,
+      ),
+    )
     .orderBy(desc(schema.conversations.updatedAt));
   // One extra query for the whole list, not one per row, and the LIKE keeps it
   // to the messages that actually carry a plan — the rest of a transcript is
@@ -94,7 +105,9 @@ export async function listConversations(): Promise<ConversationSummary[]> {
     const progress = progressFromParts(planRow.partsJson);
     if (progress) progressById.set(planRow.conversationId, progress);
   }
-  return rows.map((row) => mapSummary(row, progressById.get(row.id) ?? null));
+  return rows.map((row) =>
+    mapSummary(row, row.purpose === "registration" ? (progressById.get(row.id) ?? null) : null),
+  );
 }
 
 export async function getConversation(id: string): Promise<BusinessConversation | null> {
@@ -133,7 +146,7 @@ export async function getConversation(id: string): Promise<BusinessConversation 
   }));
   const plan = latestRegistrationPlan(parsed as Pick<BusinessChatMessage, "parts">[]);
   return {
-    ...mapSummary(row, plan ? planProgress(plan.plan) : null),
+    ...mapSummary(row, row.purpose === "registration" && plan ? planProgress(plan.plan) : null),
     paymentStatus: paymentStatuses["dti-business-name"] ?? null,
     paymentStatuses,
     messages: parsed,
@@ -142,17 +155,26 @@ export async function getConversation(id: string): Promise<BusinessConversation 
 
 export async function createConversation(
   initialPrompt: string,
-  id = randomUUID(),
+  options: {
+    businessId?: string | null;
+    id?: string;
+    purpose?: ConversationPurpose;
+    title?: string;
+  } = {},
 ): Promise<BusinessConversation> {
   const prompt = initialPrompt.trim();
+  const id = options.id ?? randomUUID();
+  const purpose = options.purpose ?? "registration";
   const now = new Date().toISOString();
   const database = await getDatabase();
   await database.insert(schema.conversations).values({
     activeStreamId: null,
+    businessId: options.businessId ?? null,
     createdAt: now,
     id,
     initialPrompt: prompt,
-    title: titleFor(prompt),
+    purpose,
+    title: options.title ?? titleFor(prompt),
     updatedAt: now,
   });
   return (await getConversation(id))!;
@@ -210,7 +232,26 @@ export async function saveMessages(conversationId: string, messages: UIMessage[]
     .set({ updatedAt: new Date().toISOString() })
     .where(eq(schema.conversations.id, conversationId));
 
-  await database.batch([prune, touch, ...upserts]);
+  const firstUserText = uniqueMessages
+    .filter((message) => message.role === "user")
+    .flatMap((message) =>
+      message.parts.filter((part) => part.type === "text").map((part) => part.text),
+    )
+    .find((text) => text.trim());
+  const rename = firstUserText
+    ? database
+        .update(schema.conversations)
+        .set({ title: titleFor(firstUserText, "New business chat") })
+        .where(
+          and(
+            eq(schema.conversations.id, conversationId),
+            eq(schema.conversations.purpose, "management"),
+            eq(schema.conversations.title, "New business chat"),
+          ),
+        )
+    : null;
+
+  await database.batch([prune, touch, ...upserts, ...(rename ? [rename] : [])]);
 }
 
 export async function markPaymentCheckpointComplete(conversationId: string) {

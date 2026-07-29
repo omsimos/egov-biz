@@ -1,5 +1,4 @@
 import { EgaphBusinessApp } from "@/components/egov-business-app";
-import { getConversation } from "@/server/conversations";
 
 export const dynamic = "force-dynamic";
 
@@ -10,16 +9,12 @@ export default async function Home({
 }) {
   const query = await searchParams;
   const requestedChatId = typeof query.chat === "string" ? query.chat : null;
-  const initialConversation = requestedChatId ? await getConversation(requestedChatId) : null;
   return (
     <main>
       <a className="skip-link" href="#app-content">
         Skip to content
       </a>
-      <EgaphBusinessApp
-        initialConversation={initialConversation}
-        requestedChatId={requestedChatId}
-      />
+      <EgaphBusinessApp requestedChatId={requestedChatId} />
     </main>
   );
 }

@@ -8,6 +8,7 @@ import {
   isToolUIPart,
   stepCountIs,
   streamText,
+  toUIMessageStream,
   tool,
   type UIMessage,
   type UIMessageStreamWriter,
@@ -56,6 +57,11 @@ import {
   buildSelfEmployedMockCompliance,
 } from "@/lib/mock-compliance";
 import { describesBusinessIdea, isRegistrationStart } from "@/lib/registration-intent";
+import {
+  businessManagementContext,
+  deterministicBusinessManagementResponse,
+} from "@/lib/business-management";
+import type { RegisteredBusiness } from "@/lib/registered-business";
 import { getConversation, saveMessages, setActiveStream } from "@/server/conversations";
 import {
   getLatestPaymentForConversation,
@@ -63,7 +69,7 @@ import {
   isPaidStatus,
 } from "@/server/payments";
 import { getResumableContext } from "@/server/resumable";
-import { upsertRegisteredBusiness } from "@/server/registered-businesses";
+import { getRegisteredBusiness, upsertRegisteredBusiness } from "@/server/registered-businesses";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -87,8 +93,16 @@ function birFormConsentQuestion(): IntakeQuestion {
     helpText: "The demo PDF will use verified fields from your authenticated eGov profile.",
     type: "single",
     options: [
-      { id: "yes", label: "Yes, generate it", description: "Create the prefilled PDF now" },
-      { id: "no", label: "No, not now", description: "Pause before generating the form" },
+      {
+        id: "yes",
+        label: "Yes, generate it",
+        description: "Create the prefilled PDF now",
+      },
+      {
+        id: "no",
+        label: "No, not now",
+        description: "Pause before generating the form",
+      },
     ],
   };
 }
@@ -502,6 +516,7 @@ function manualResponse(
   conversationId: string,
   messages: BusinessChatMessage[],
   execute: (writer: UIMessageStreamWriter<BusinessChatMessage>) => Promise<void> | void,
+  options: { resumable?: boolean } = {},
 ) {
   const stream = createUIMessageStream<BusinessChatMessage>({
     originalMessages: messages,
@@ -513,7 +528,72 @@ function manualResponse(
   });
   return createUIMessageStreamResponse({
     stream,
-    consumeSseStream: resumableConsumer(conversationId),
+    ...(options.resumable === false ? {} : { consumeSseStream: resumableConsumer(conversationId) }),
+  });
+}
+
+async function managementResponse(
+  conversationId: string,
+  business: RegisteredBusiness,
+  messages: BusinessChatMessage[],
+) {
+  const latestPrompt = latestUserText(messages);
+  if (!process.env.AI_GATEWAY_API_KEY)
+    return manualResponse(
+      conversationId,
+      messages,
+      (writer) => {
+        const textId = crypto.randomUUID();
+        writer.write({ type: "text-start", id: textId });
+        writer.write({
+          type: "text-delta",
+          id: textId,
+          delta: deterministicBusinessManagementResponse(business, latestPrompt),
+        });
+        writer.write({ type: "text-end", id: textId });
+      },
+      { resumable: false },
+    );
+
+  const model = createGateway({ apiKey: process.env.AI_GATEWAY_API_KEY }).chat(
+    process.env.CHAT_MODEL ?? "google/gemini-2.5-flash-lite",
+  );
+  const responseMessageId = crypto.randomUUID();
+  const result = streamText({
+    model,
+    system: `You are the post-registration business assistant for one Filipino business. Answer concisely and warmly using the saved business record below. Help with the tax calendar, saved files, registrations, permits, renewals, employer obligations, and remaining operational compliance.
+
+Treat the record as the only source of truth about this business. Never start or continue a new-business registration workflow. Never invent a filing, status, deadline, reference number, document, or completed government action. Say clearly when the record does not contain an answer. All records are demo data: distinguish what the saved record shows from what the citizen must confirm with BIR, the LGU, BFP, or another responsible agency. Prefer short paragraphs and lists; use a table only when comparing three or more records.
+
+Saved business record:
+${JSON.stringify(businessManagementContext(business))}`,
+    messages: await convertToModelMessages(messages, {
+      ignoreIncompleteToolCalls: true,
+    }),
+    timeout: { totalMs: 110_000 },
+    onEnd: async ({ text }) => {
+      await saveMessages(conversationId, [
+        ...messages,
+        {
+          id: responseMessageId,
+          role: "assistant",
+          parts: [{ type: "text", text }],
+        },
+      ]);
+      await setActiveStream(conversationId, null);
+    },
+  });
+  // Keep generating and saving even if the user navigates back while the
+  // response is streaming. Management chat persistence must not depend on
+  // the optional Redis-backed resumable stream service.
+  result.consumeStream();
+  return createUIMessageStreamResponse({
+    stream: toUIMessageStream({
+      stream: result.stream,
+      originalMessages: messages,
+      generateMessageId: () => responseMessageId,
+      sendReasoning: false,
+    }),
   });
 }
 
@@ -596,9 +676,16 @@ function toolAnswers(messages: UIMessage[]): IntakeAnswer[] {
   for (const message of messages)
     for (const part of message.parts) {
       if (part.type !== "tool-askUser" || part.state !== "output-available") continue;
-      const input = part.input as { questions?: IntakeQuestion[]; question?: IntakeQuestion };
+      const input = part.input as {
+        questions?: IntakeQuestion[];
+        question?: IntakeQuestion;
+      };
       const output = part.output as {
-        answers?: { questionId: string; value: string | string[]; labels: string[] }[];
+        answers?: {
+          questionId: string;
+          value: string | string[];
+          labels: string[];
+        }[];
         value?: string | string[];
         labels?: string[];
       };
@@ -606,7 +693,13 @@ function toolAnswers(messages: UIMessage[]): IntakeAnswer[] {
       const submitted =
         output.answers ??
         (questions[0] && output.value !== undefined
-          ? [{ questionId: questions[0].id, value: output.value, labels: output.labels ?? [] }]
+          ? [
+              {
+                questionId: questions[0].id,
+                value: output.value,
+                labels: output.labels ?? [],
+              },
+            ]
           : []);
       for (const answer of submitted) {
         const question = questions.find((item) => item.id === answer.questionId);
@@ -630,9 +723,16 @@ function invalidIntakeAnswerIds(messages: UIMessage[]) {
   for (const message of messages)
     for (const part of message.parts) {
       if (part.type !== "tool-askUser" || part.state !== "output-available") continue;
-      const input = part.input as { questions?: IntakeQuestion[]; question?: IntakeQuestion };
+      const input = part.input as {
+        questions?: IntakeQuestion[];
+        question?: IntakeQuestion;
+      };
       const output = part.output as {
-        answers?: { questionId: string; value: string | string[]; labels: string[] }[];
+        answers?: {
+          questionId: string;
+          value: string | string[];
+          labels: string[];
+        }[];
         value?: string | string[];
         labels?: string[];
       };
@@ -640,7 +740,13 @@ function invalidIntakeAnswerIds(messages: UIMessage[]) {
       const submitted =
         output.answers ??
         (questions[0] && output.value !== undefined
-          ? [{ questionId: questions[0].id, value: output.value, labels: output.labels ?? [] }]
+          ? [
+              {
+                questionId: questions[0].id,
+                value: output.value,
+                labels: output.labels ?? [],
+              },
+            ]
           : []);
       for (const answer of submitted) {
         const question = questions.find((item) => item.id === answer.questionId);
@@ -677,7 +783,12 @@ function emitTool(
   output: unknown,
 ) {
   const toolCallId = crypto.randomUUID();
-  writer.write({ type: "tool-input-available", toolCallId, toolName, input } as never);
+  writer.write({
+    type: "tool-input-available",
+    toolCallId,
+    toolName,
+    input,
+  } as never);
   writer.write({ type: "tool-output-available", toolCallId, output } as never);
 }
 
@@ -948,7 +1059,9 @@ function agentTools(
     askUser: tool({
       description:
         "Ask one compact batch of consequential structured questions. This is a client-side tool. Stop after calling it.",
-      inputSchema: z.object({ questions: z.array(questionSchema).min(1).max(6) }),
+      inputSchema: z.object({
+        questions: z.array(questionSchema).min(1).max(6),
+      }),
     }),
     webSearch: tool({
       description: "Search official Philippine government sources when current evidence is useful.",
@@ -999,18 +1112,27 @@ function agentTools(
     submitBarangayClearance: tool({
       description:
         "Submit an electronic barangay business-clearance request and return the clearance response.",
-      inputSchema: z.object({ application: barangayClearanceApplicationSchema }),
+      inputSchema: z.object({
+        application: barangayClearanceApplicationSchema,
+      }),
     }),
     submitEbplsBusinessPermit: tool({
       description:
         "Submit a mayor's or business-permit application through EBPLS (Electronic Business Permits and Licensing System).",
-      inputSchema: z.object({ application: ebplsBusinessPermitApplicationSchema }),
+      inputSchema: z.object({
+        application: ebplsBusinessPermitApplicationSchema,
+      }),
     }),
     updatePlan: tool({
       description: "Create or update the concise registration checklist whenever progress changes.",
-      inputSchema: registrationPlanSchema.extend({ note: z.string().max(180).optional() }),
+      inputSchema: registrationPlanSchema.extend({
+        note: z.string().max(180).optional(),
+      }),
       execute: (input) => ({
-        plan: normalizeRegistrationPlan({ title: input.title, steps: input.steps }),
+        plan: normalizeRegistrationPlan({
+          title: input.title,
+          steps: input.steps,
+        }),
       }),
     }),
   };
@@ -1024,9 +1146,16 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: "Invalid chat request" }, { status: 400 });
   const conversation = await getConversation(parsed.data.id);
   if (!conversation) return Response.json({ error: "Chat session not found" }, { status: 404 });
+  const managementBusiness =
+    conversation.purpose === "management" && conversation.businessId
+      ? await getRegisteredBusiness(session.profile.id, conversation.businessId)
+      : null;
+  if (conversation.purpose === "management" && !managementBusiness)
+    return Response.json({ error: "Chat session not found" }, { status: 404 });
   const messages = uniqueMessagesById(parsed.data.messages as BusinessChatMessage[]);
   await saveMessages(conversation.id, messages);
   await setActiveStream(conversation.id, null);
+  if (managementBusiness) return managementResponse(conversation.id, managementBusiness, messages);
   const profile = session.profile;
   const userInfoOutput: UserInfoOutput = {
     availableFields: availableUserInfoFields(profile),
@@ -1155,7 +1284,11 @@ export async function POST(request: Request) {
           },
         });
         await wait(EBPLS_PERMIT_MOCK_DELAY_MS);
-        writer.write({ type: "tool-output-available", toolCallId: ebplsId, output: { receipt } });
+        writer.write({
+          type: "tool-output-available",
+          toolCallId: ebplsId,
+          output: { receipt },
+        });
         emitTool(
           writer,
           "updatePlan",
@@ -1224,11 +1357,18 @@ export async function POST(request: Request) {
           },
         });
         await wait(EBPLS_PERMIT_MOCK_DELAY_MS);
-        writer.write({ type: "tool-output-available", toolCallId: ebplsId, output: { receipt } });
+        writer.write({
+          type: "tool-output-available",
+          toolCallId: ebplsId,
+          output: { receipt },
+        });
         emitTool(
           writer,
           "updatePlan",
-          { ...issuedPlan, note: "Mayor’s/business permit issued. Moving to BIR registration." },
+          {
+            ...issuedPlan,
+            note: "Mayor’s/business permit issued. Moving to BIR registration.",
+          },
           { plan: issuedPlan },
         );
         await wait(COMPLIANCE_MOCK_DELAY_MS);
@@ -1261,7 +1401,10 @@ export async function POST(request: Request) {
         emitTool(
           writer,
           "updatePlan",
-          { ...completedPlan, note: "Demo compliance setup complete and business record saved." },
+          {
+            ...completedPlan,
+            note: "Demo compliance setup complete and business record saved.",
+          },
           { plan: completedPlan },
         );
         emitTool(
@@ -1289,7 +1432,10 @@ export async function POST(request: Request) {
       emitTool(
         writer,
         "updatePlan",
-        { ...paidPlan, note: "Payment recorded. Moving to local clearance requirements." },
+        {
+          ...paidPlan,
+          note: "Payment recorded. Moving to local clearance requirements.",
+        },
         { plan: paidPlan },
       );
       const textId = crypto.randomUUID();
@@ -1328,7 +1474,10 @@ export async function POST(request: Request) {
       emitTool(
         writer,
         "updatePlan",
-        { ...paidPlan, note: "Barangay clearance assessed. Payment is required before approval." },
+        {
+          ...paidPlan,
+          note: "Barangay clearance assessed. Payment is required before approval.",
+        },
         { plan: paidPlan },
       );
     });
@@ -1487,7 +1636,10 @@ export async function POST(request: Request) {
           writer.write({
             type: "tool-output-available",
             toolCallId: taxToolId,
-            output: { records: registrationTaxRecords, obligations: compliance.taxObligations },
+            output: {
+              records: registrationTaxRecords,
+              obligations: compliance.taxObligations,
+            },
           });
           emitTool(
             writer,
@@ -1643,7 +1795,10 @@ export async function POST(request: Request) {
       emitTool(
         writer,
         "updatePlan",
-        { ...preparedPlan, note: "Self-employed route confirmed. DTI is not required." },
+        {
+          ...preparedPlan,
+          note: "Self-employed route confirmed. DTI is not required.",
+        },
         { plan: preparedPlan },
       );
       emitTool(writer, "user_info", {}, userInfoOutput);
@@ -1744,7 +1899,10 @@ export async function POST(request: Request) {
             type: "tool-input-available",
             toolCallId: id,
             toolName: "editDtiBusinessNameForm",
-            input: { form: next.form, note: "Prepared from your profile and conversation." },
+            input: {
+              form: next.form,
+              note: "Prepared from your profile and conversation.",
+            },
           });
           writer.write({
             type: "tool-output-available",
@@ -1752,7 +1910,11 @@ export async function POST(request: Request) {
             output: { form: next.form },
           });
         }
-        writer.write({ type: "data-plan", id: crypto.randomUUID(), data: { plan: next.plan } });
+        writer.write({
+          type: "data-plan",
+          id: crypto.randomUUID(),
+          data: { plan: next.plan },
+        });
         emitTool(
           writer,
           "updatePlan",
@@ -1817,12 +1979,19 @@ export async function POST(request: Request) {
         input: { query, numResults: 5 },
       });
       const search = await searchOfficialWeb(query, 5);
-      writer.write({ type: "tool-output-available", toolCallId: searchId, output: search });
+      writer.write({
+        type: "tool-output-available",
+        toolCallId: searchId,
+        output: search,
+      });
       const afterSearch = planForAnswers(answers, true, false, true);
       emitTool(
         writer,
         "updatePlan",
-        { ...afterSearch, note: "Official guidance checked. Preparing the application." },
+        {
+          ...afterSearch,
+          note: "Official guidance checked. Preparing the application.",
+        },
         { plan: afterSearch },
       );
       const formId = crypto.randomUUID();
@@ -1831,10 +2000,21 @@ export async function POST(request: Request) {
         type: "tool-input-available",
         toolCallId: formId,
         toolName: "editDtiBusinessNameForm",
-        input: { form, note: "Prepared from your profile and confirmed answers." },
+        input: {
+          form,
+          note: "Prepared from your profile and confirmed answers.",
+        },
       });
-      writer.write({ type: "tool-output-available", toolCallId: formId, output: { form } });
-      writer.write({ type: "data-plan", id: crypto.randomUUID(), data: { plan: businessPlan } });
+      writer.write({
+        type: "tool-output-available",
+        toolCallId: formId,
+        output: { form },
+      });
+      writer.write({
+        type: "data-plan",
+        id: crypto.randomUUID(),
+        data: { plan: businessPlan },
+      });
       const readyPlan = planForAnswers(answers, true, true, true);
       emitTool(
         writer,
@@ -1886,7 +2066,10 @@ The resolved business city is ${location.city}. Explicit locations override the 
 For a sole proprietor, call user_info before creating or updating a DTI Business Name Registration draft with editDtiBusinessNameForm. Verified profile values stay server-side and the registered address may be used only after explicit consent. DTI handles sole-proprietor business-name registration; do not call it a BIR form. Preserve known fields and copy the exact profile owner name. Never invent an address or fee. If the business city differs from the profile city and no full business address was supplied, leave the address blank and list Business address under missingFields. Use the official DTI territorial-scope fee plus documentary stamp supplied by the application; never invent a fee. The citizen may correct any field in ordinary chat; apply the correction by calling editDtiBusinessNameForm with the full revised form. Current form: ${JSON.stringify(lastForm ? { ...lastForm, ownerName: lastForm.ownerName ? "[server-prefilled verified name]" : "", businessAddress: lastForm.businessAddress ? "[server-confirmed business address]" : "" } : null)}.
 
 Use webSearch only when new current evidence is useful. Cite only returned official links. Never expose private reasoning. Do not claim submission or payment occurred. After every completed checkpoint, explicitly state the next concrete step.`,
-    messages: await convertToModelMessages(messages, { tools, ignoreIncompleteToolCalls: true }),
+    messages: await convertToModelMessages(messages, {
+      tools,
+      ignoreIncompleteToolCalls: true,
+    }),
     timeout: { totalMs: 110_000, toolMs: 90_000 },
   });
   return result.toUIMessageStreamResponse({
