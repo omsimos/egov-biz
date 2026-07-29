@@ -1106,7 +1106,7 @@ function BusinessCard({ business, onOpen }: { business: RegisteredBusiness; onOp
         <CaretRightIcon className="size-3.5 text-gray-500" weight="bold" />
       </div>
       {(nextFiling || onFile) && (
-        <div className="relative grid grid-cols-2 gap-3 border-t border-[var(--line-soft)] bg-[linear-gradient(90deg,var(--gray-50)_0%,#fff_60%)] px-3.5 py-[11px]">
+        <div className="relative grid grid-cols-2 gap-3 border-t border-[var(--line-soft)] bg-[linear-gradient(90deg,var(--gray-50)_0%,var(--surface)_60%)] px-3.5 py-[11px]">
           {nextFiling && (
             <span className="flex min-w-0 flex-col gap-0.5">
               <span className="inline-flex items-center gap-[5px] text-xs text-gray-600">

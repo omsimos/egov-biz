@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DtiFormCard, LguPermitCard, PaymentDialog } from "@/components/business-chat-screen";
+import { DtiFormCard, LguPermitCard, PaymentSheet } from "@/components/business-chat-screen";
 import { BusinessDetailScreen, BusinessLanding } from "@/components/egov-business-app";
 import { HomeScreen } from "@/components/home-screen";
 import { LoginScreen } from "@/components/login-screen";
@@ -135,8 +135,13 @@ const previewDtiForm: DtiBusinessNameForm = {
   businessAddress: "Unit 2, 88 Ayala Avenue, Barangay San Lorenzo",
   city: "Makati",
   feeLabel: "₱1,030.00",
+  feeBreakdown: { documentaryStamp: "₱30.00", registration: "₱1,000.00" },
   missingFields: [],
 };
+
+// The card shows the "Edited" note for labels in this set; the preview has no
+// agent to apply a change, so nothing is in it.
+const previewEditedFields = new Set<string>();
 
 const previewLguPermit: LguPermitSummary = {
   applicationId: "lgu-preview-application",
@@ -160,11 +165,17 @@ function ChatCardsPreview() {
         <button className="preview-cards-toggle" onClick={() => setShowPayment(true)} type="button">
           Show payment sheet
         </button>
-        <DtiFormCard form={previewDtiForm} paid={false} onSubmitPay={noop} />
+        <DtiFormCard
+          editedFields={previewEditedFields}
+          form={previewDtiForm}
+          onEditField={noop}
+          onSubmitPay={noop}
+          paid={false}
+        />
         <LguPermitCard permit={previewLguPermit} paid={false} onPay={noop} />
       </div>
       {showPayment && (
-        <PaymentDialog
+        <PaymentSheet
           conversationId="preview-conversation"
           onClose={() => setShowPayment(false)}
           payment={{
@@ -172,6 +183,10 @@ function ChatCardsPreview() {
             serviceLabel: "DTI Business Name Registration",
             proposedName: "Kape Diaria",
             feeLabel: "₱1,030.00",
+            feeLines: [
+              { amount: "₱1,000.00", label: "Kape Diaria" },
+              { amount: "₱30.00", label: "Documentary stamp" },
+            ],
           }}
         />
       )}

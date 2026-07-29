@@ -35,6 +35,13 @@ export type DtiBusinessNameForm = {
   };
   city: string;
   feeLabel: string;
+  /**
+   * The total split the way BNRS quotes it — a registration fee plus the
+   * documentary stamp tax — so the payment sheet can show what the citizen is
+   * paying for rather than one number. Optional so persisted pre-DX
+   * conversation messages stay renderable.
+   */
+  feeBreakdown?: { registration: string; documentaryStamp: string };
   termsAndConditions?: string;
   businessNameRequirements?: readonly string[];
   termsAccepted?: boolean;

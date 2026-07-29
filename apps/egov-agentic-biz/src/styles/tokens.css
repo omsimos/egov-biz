@@ -121,6 +121,13 @@
   /* Handoff values that were used on screen but never named. */
   --input-strong: #cfd9ec; /* emphasised input / outline-button border */
   --line-soft: #edf0f5; /* border on blurred and nav surfaces (lighter than Line) */
+  /* The payment island floats over the screen as device chrome would, and is
+     the only surface in the app that does. --ink (#17233b) is body text and
+     reads blue-grey at panel size; --overlay-success is the one green that
+     holds contrast on this near-black. */
+  --overlay-ink: #0b0e14;
+  --overlay-success: #5ecf8f;
+
   /* Divider *between* rows inside one bordered card. Lighter than --line-soft,
      which draws the card's own edge: at the same weight, eight grouped rows
      read as eight separate cards. */
