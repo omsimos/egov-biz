@@ -20,7 +20,7 @@ import {
   TrashIcon,
 } from "@phosphor-icons/react";
 import { AnimatePresence, motion } from "motion/react";
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrandLogo } from "@/components/brand-logo";
 import { BusinessChatScreen } from "@/components/business-chat-screen";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -41,7 +41,10 @@ import type {
   PaymentServiceType,
 } from "@/lib/business-chat";
 import type { CitizenProfile, RegisteredBusiness } from "@/lib/citizen-profile";
-import type { RegisteredBusiness as RegisteredBusinessDetail } from "@/lib/registered-business";
+import type {
+  BusinessFile,
+  RegisteredBusiness as RegisteredBusinessDetail,
+} from "@/lib/registered-business";
 import { SCREEN, SCREEN_DEPTH, SCREEN_VARIANTS } from "@/lib/motion";
 import { useApi } from "@/lib/use-api";
 import { useAuthSession } from "@/lib/use-auth-session";
@@ -71,6 +74,40 @@ function formatBusinessDate(value: string) {
   );
 }
 
+function isCertificateOfRegistrationFile(file: BusinessFile) {
+  if (file.id === "bir-form-2303") {
+    return true;
+  }
+
+  if (file.id !== "file-cor") {
+    return false;
+  }
+
+  const haystack = [file.title, file.filename, file.documentType, file.note]
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    haystack.includes("certificate of registration") ||
+    haystack.includes("form 2303") ||
+    haystack.includes("bir 2303") ||
+    /\b2303\b/.test(haystack)
+  );
+}
+
+function getLatestCertificateOfRegistrationFile(files: BusinessFile[]) {
+  return files
+    .filter(isCertificateOfRegistrationFile)
+    .slice()
+    .sort((left, right) => {
+      const leftTime = Date.parse(left.createdAt);
+      const rightTime = Date.parse(right.createdAt);
+      const safeLeft = Number.isFinite(leftTime) ? leftTime : 0;
+      const safeRight = Number.isFinite(rightTime) ? rightTime : 0;
+      return safeRight - safeLeft;
+    })[0];
+}
+
 export function BusinessDetailScreen({
   business,
   conversations,
@@ -93,6 +130,10 @@ export function BusinessDetailScreen({
   profile: CitizenProfile;
 }) {
   const [tab, setTab] = useState<"overview" | "records" | "files" | "calendar">("overview");
+  const latestCorFile = useMemo(
+    () => (business ? getLatestCertificateOfRegistrationFile(business.files) : undefined),
+    [business],
+  );
   return (
     <div className="screen business-detail-screen">
       <StatusBar />
@@ -205,6 +246,16 @@ export function BusinessDetailScreen({
                         </dd>
                       </div>
                     </dl>
+                    {latestCorFile ? (
+                      <a
+                        className="mt-0.5 inline-flex w-fit items-center text-2xs font-semibold text-primary/75 underline-offset-2 transition-colors hover:text-primary hover:underline"
+                        href={`/api/businesses/${business.id}/files/${latestCorFile.id}`}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        View CoR (2303) →
+                      </a>
+                    ) : null}
                   </CardContent>
                 </Card>
                 <Card>

@@ -1988,12 +1988,12 @@ export async function POST(request: Request) {
                 {
                   id: "bir-form-2303",
                   title: "BIR Certificate of Registration (Form 2303)",
-                  filename: "DEMO-BIR-Form-2303.pdf",
+                  filename: "BIR-Certificate-of-Registration-2303.html",
                   documentType: "Certificate of Registration",
                   status: "Available",
                   createdAt: new Date().toISOString(),
                   url: null,
-                  note: "Preview file. This is not an official certificate issued by BIR.",
+                  note: "Printable HTML preview populated from the saved business record. This is not an official certificate issued by BIR.",
                   demo: true,
                 },
                 {

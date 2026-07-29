@@ -118,14 +118,14 @@ const previewBusinessDetail: RegisteredBusinessDetail = {
   ],
   files: [
     {
-      id: "file-cor",
-      title: "BIR Certificate of Registration",
-      filename: "kape-diaria-bir-2303.pdf",
-      documentType: "BIR Form 2303",
-      status: "Generated",
+      id: "bir-form-2303",
+      title: "BIR Certificate of Registration (Form 2303)",
+      filename: "BIR-Certificate-of-Registration-2303.html",
+      documentType: "Certificate of Registration",
+      status: "Available",
       createdAt: "2026-07-22",
       url: null,
-      note: "Generated from your registration answers for the demo walkthrough.",
+      note: "Printable HTML preview populated from the saved business record. This is not an official certificate issued by BIR.",
       demo: true,
     },
     {
