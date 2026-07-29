@@ -25,6 +25,12 @@ remembered account details could outlive the authenticated session.
 
 - **Treat remembered account metadata as display-only, keep the server session authoritative, and extend the default session lifetime to seven days.** Keeping the one-hour session while indefinitely showing “Welcome back,” or reconstructing authentication from the remembered name, was rejected: the observed browser had only non-sensitive display metadata and all stored sessions were expired, so there was no credential that could be recovered safely. New sessions now default to seven days, and an expired or absent session is presented explicitly as signed out even when a previous account name is remembered ([session policy](../apps/egov-agentic-biz/src/lib/auth/session.ts), [environment example](../apps/egov-agentic-biz/.env.example), [signed-out UI](../apps/egov-agentic-biz/src/components/login-screen.tsx)).
 
+- **Preserve `main`’s DX-owned registration orchestration and move the live E2E contract to that flow.** Rebasing exposed overlapping payment and BIR changes from the DX migration. Restoring the older app-local barangay and EBPLS sequence would have undone that work, so conflict resolution kept the current BNRS certificate handoff, one combined LGU assessment, generated BIR Form 1901, and final BIR documentary-stamp payment. The Stagehand scenarios now answer the BNRS terms, dominant-name, descriptor, and scope checkpoints; distinguish sole-proprietor and direct-to-BIR self-employed paths; and verify the three current sole-proprietor payments or the single self-employed payment. The explicit `E2E_ALLOW_EGOVPAY` acknowledgement was removed at the user’s request, while the loopback-only target and rejection of visible non-test eGovPay credentials remain as hard safety boundaries ([complete sole-proprietor flow](../apps/egov-stagehand-e2e/src/whole-business-flow.e2e.ts), [self-employed flow](../apps/egov-stagehand-e2e/src/self-employed-professional-flow.e2e.ts), [shared payment harness](../apps/egov-stagehand-e2e/src/scenario-harness.ts), [E2E configuration](../apps/egov-stagehand-e2e/src/config.ts)).
+
+- **Refresh the selected business after finalization, not only the business list.** Browser dogfooding showed that the completed card could open the already-selected pre-BIR record from the client hook even though the database contained the final taxpayer registration, Form 2303, and tax calendar. A hard reload corrected the screen, confirming a client refresh gap rather than failed persistence. The selected-business request now shares the same revision key that `openBusiness` already advances, and the complete E2E waits for the Form 2303 checkpoint before asserting the final four records, two files, and four tax obligations ([business detail refresh](../apps/egov-agentic-biz/src/components/egov-business-app.tsx), [final record assertions](../apps/egov-stagehand-e2e/src/whole-business-flow.e2e.ts)).
+
+- **Keep the dev identity complete and make browser recovery state-aware.** The rebased dev profile lacked its region even though the selected profile-address path requires a complete BNRS address, so live Stagehand runs unexpectedly fell into the six-field manual-address branch. The fixture now includes National Capital Region. A separate eGovPay run showed that reloading an `INITIAL`/`Loading` checkout can advance directly to the test transaction page; retry logic now detects `Mark as Paid` before trying to reselect a method or click Pay Now again. After the Home redesign landed, the final business-card reopen moved to a deterministic visible-button match and direct control clicks began waiting for the enabled state, avoiding Stagehand’s variable-as-click-argument bug and chat-stream timing races. The E2E guide also records that the two intentionally unpaid DTI scenarios need separate DX database state because BNRS allows one active application per user ([dev identity](../apps/egov-agentic-biz/src/app/api/auth/dev-login/route.ts), [complete flow](../apps/egov-stagehand-e2e/src/whole-business-flow.e2e.ts), [shared payment recovery](../apps/egov-stagehand-e2e/src/scenario-harness.ts), [scenario isolation](../apps/egov-stagehand-e2e/README.md)).
+
 ## Final state
 
 The monorepo now installs `egov.js@0.1.0` from npm and uses its generated clients and
@@ -32,7 +38,12 @@ types for SSO, eGovPay, eMessage, shared profiles, DX integrations, and scripts.
 `packages/egov` was removed completely, with the workspace, lockfile, CI, Docker, and
 documentation updated around the published package. The SSO session default is seven
 days, remembered-account copy no longer implies an active login, and the Stagehand
-harness asserts that authentication survives a reload.
+harness asserts that authentication survives a reload. After rebasing onto `main`, the
+live scenarios also cover the DX-owned BNRS and combined LGU flow, the BIR documentary
+stamp payment and Form 2303 completion checkpoint, and the separate direct-to-BIR
+self-employed route without requiring a payment opt-in flag. Finalized business records
+also refresh in place, so their BIR records, files, and tax calendar no longer require a
+manual page reload.
 
 This diverged from the original brief in two requested ways: the old package was deleted
 instead of merely deprecated, and the temporary local link was replaced by the published

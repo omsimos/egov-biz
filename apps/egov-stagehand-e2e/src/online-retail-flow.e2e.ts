@@ -6,6 +6,7 @@ const config = readFlowConfig(process.env, new Date(), {
   stagingPaymentCount: 0,
 });
 const businessIdea = "I want to start a retail business in Poblacion, Makati and work alone";
+const proposedBusinessName = `${config.businessName} ONLINE SHOP`;
 
 await runScenario(
   {
@@ -25,27 +26,57 @@ await runScenario(
       "form button[type='submit']:not(:disabled)",
     );
 
-    await flow.waitForText("profile-address checkpoint", "Which address should this business use?");
+    await flow.waitForText(
+      "profile-address checkpoint",
+      "Which address should this registration use?",
+    );
     await flow.clickLabeledOption("use profile address", "Use my registered eGov address");
     await flow.clickControl("continue after address", "form button[type='submit']:not(:disabled)");
 
     await flow.waitForText(
-      "online-retail business-name checkpoint",
-      "What business name do you want to register?",
+      "online-retail BNRS terms",
+      "Do you accept the BNRS terms and conditions?",
+    );
+    await flow.clickLabeledOption("accept online-retail BNRS terms", "I accept");
+    await flow.clickControl(
+      "continue after BNRS terms",
+      "form button[type='submit']:not(:disabled)",
+    );
+    await flow.waitForText(
+      "online-retail dominant-name checkpoint",
+      "What distinctive name do you want to register?",
     );
     await flow.typeField(
-      "enter online-retail business name",
-      "input[placeholder='Proposed trade name']",
+      "enter online-retail dominant name",
+      "input[placeholder='For example, Molar Bear']",
       config.businessName,
     );
     await flow.clickControl(
-      "submit online-retail business name",
+      "continue after online-retail dominant name",
+      "form button[type='submit']:not(:disabled)",
+    );
+    await flow.waitForText(
+      "online-retail descriptor checkpoint",
+      "Which BNRS descriptor best matches the business?",
+    );
+    await flow.clickLabeledOption("choose online-shop descriptor", "ONLINE SHOP");
+    await flow.clickControl(
+      "continue after online-retail descriptor",
+      "form button[type='submit']:not(:disabled)",
+    );
+    await flow.waitForText(
+      "online-retail scope checkpoint",
+      "Where should the business name be protected?",
+    );
+    await flow.clickLabeledOption("choose online-retail city scope", "City / municipality");
+    await flow.clickControl(
+      "submit online-retail BNRS identity",
       "form button[type='submit']:not(:disabled)",
     );
 
     await flow.waitForText("online-retail DTI application", "Submit and pay", 240_000);
     await flow.expectDtiApplication({
-      proposedBusinessName: config.businessName,
+      proposedBusinessName,
       businessActivity: businessIdea,
     });
     await flow.pass("online-retail branch converged on DTI application");
@@ -53,7 +84,7 @@ await runScenario(
     return {
       expectedRegistrationType: "Sole proprietor",
       expectedUniqueCheckpoint: "Online work location",
-      proposedBusinessName: config.businessName,
+      proposedBusinessName,
       stagingPaymentsCreated: 0,
     };
   },

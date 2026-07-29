@@ -7,6 +7,7 @@ const config = readFlowConfig(process.env, new Date(), {
 });
 const businessIdea =
   "I want to start a vehicle rental business in Poblacion, Makati and work alone";
+const proposedBusinessName = `${config.businessName} TRAVEL AND TOURS`;
 
 await runScenario(
   {
@@ -30,27 +31,57 @@ await runScenario(
       "form button[type='submit']:not(:disabled)",
     );
 
-    await flow.waitForText("profile-address checkpoint", "Which address should this business use?");
+    await flow.waitForText(
+      "profile-address checkpoint",
+      "Which address should this registration use?",
+    );
     await flow.clickLabeledOption("use profile address", "Use my registered eGov address");
     await flow.clickControl("continue after address", "form button[type='submit']:not(:disabled)");
 
     await flow.waitForText(
-      "vehicle-rental business-name checkpoint",
-      "What business name do you want to register?",
+      "vehicle-rental BNRS terms",
+      "Do you accept the BNRS terms and conditions?",
+    );
+    await flow.clickLabeledOption("accept vehicle-rental BNRS terms", "I accept");
+    await flow.clickControl(
+      "continue after BNRS terms",
+      "form button[type='submit']:not(:disabled)",
+    );
+    await flow.waitForText(
+      "vehicle-rental dominant-name checkpoint",
+      "What distinctive name do you want to register?",
     );
     await flow.typeField(
-      "enter vehicle-rental business name",
-      "input[placeholder='Proposed trade name']",
+      "enter vehicle-rental dominant name",
+      "input[placeholder='For example, Molar Bear']",
       config.businessName,
     );
     await flow.clickControl(
-      "submit vehicle-rental business name",
+      "continue after vehicle-rental dominant name",
+      "form button[type='submit']:not(:disabled)",
+    );
+    await flow.waitForText(
+      "vehicle-rental descriptor checkpoint",
+      "Which BNRS descriptor best matches the business?",
+    );
+    await flow.clickLabeledOption("choose travel descriptor", "TRAVEL AND TOURS");
+    await flow.clickControl(
+      "continue after vehicle-rental descriptor",
+      "form button[type='submit']:not(:disabled)",
+    );
+    await flow.waitForText(
+      "vehicle-rental scope checkpoint",
+      "Where should the business name be protected?",
+    );
+    await flow.clickLabeledOption("choose vehicle-rental city scope", "City / municipality");
+    await flow.clickControl(
+      "submit vehicle-rental BNRS identity",
       "form button[type='submit']:not(:disabled)",
     );
 
     await flow.waitForText("vehicle-rental DTI application", "Submit and pay", 240_000);
     await flow.expectDtiApplication({
-      proposedBusinessName: config.businessName,
+      proposedBusinessName,
       businessActivity: businessIdea,
     });
     await flow.pass("vehicle-rental branch converged on DTI application");
@@ -58,7 +89,7 @@ await runScenario(
     return {
       expectedRegistrationType: "Sole proprietor",
       expectedUniqueCheckpoint: "Self-drive rental",
-      proposedBusinessName: config.businessName,
+      proposedBusinessName,
       stagingPaymentsCreated: 0,
     };
   },

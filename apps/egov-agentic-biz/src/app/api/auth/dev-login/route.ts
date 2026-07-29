@@ -37,6 +37,7 @@ const DEV_PROFILE: EgovSsoCitizenProfile = {
   photo: null,
   postal: "1223",
   province: "Metro Manila",
+  region: "National Capital Region",
   street: "Unit 2, 88 Ayala Avenue",
   tin_id: "123456789000",
   uniqid: "dev-josh-preview",

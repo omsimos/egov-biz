@@ -86,7 +86,7 @@ export class ScenarioHarness {
       },
       selfHeal: true,
       systemPrompt:
-        "You are testing a local eGovPH Business demo. Act only on active visible controls. Prefer the bottom-most active checkpoint. Never invent or alter the scenario’s requested business details.",
+        "You are testing a local eGovPH Business demo. Act only on active visible controls. Prefer the bottom-most active checkpoint or latest unpaid card. Never invent or alter the scenario’s requested business details or payment method.",
       verbose: 1,
     });
     await this.stagehand.init();
@@ -140,21 +140,33 @@ export class ScenarioHarness {
   async clickControl(name: string, selector: string) {
     this.lastStep = name;
     console.log(`→ ${name}`);
-    const page = await this.activePage();
-    const control = page.locator(selector);
+    const deadline = Date.now() + 30_000;
+    let count = 0;
+    while (Date.now() < deadline) {
+      const page = await this.activePage();
+      count = await page.locator(selector).count();
+      if (count > 1)
+        assert.fail(
+          `Expected one enabled control for ${name}, but found ${count} using selector ${JSON.stringify(selector)}.`,
+        );
+      if (count === 1) {
+        const clicked = await page.evaluate((target) => {
+          const element = document.querySelector(target);
+          if (!(element instanceof HTMLElement)) return false;
+          element.click();
+          return true;
+        }, selector);
+        assert.equal(clicked, true, `${name} should click its resolved browser element.`);
+        await page.waitForTimeout(500);
+        return;
+      }
+      await sleep(250);
+    }
     assert.equal(
-      await control.count(),
+      count,
       1,
-      `Expected one enabled control for ${name}, using selector ${JSON.stringify(selector)}.`,
+      `Timed out waiting for one enabled control for ${name}, using selector ${JSON.stringify(selector)}.`,
     );
-    const clicked = await page.evaluate((target) => {
-      const element = document.querySelector(target);
-      if (!(element instanceof HTMLElement)) return false;
-      element.click();
-      return true;
-    }, selector);
-    assert.equal(clicked, true, `${name} should click its resolved browser element.`);
-    await page.waitForTimeout(500);
   }
 
   async clickLabeledOption(name: string, label: string) {
@@ -252,6 +264,99 @@ export class ScenarioHarness {
       expected,
       "The DTI application should exactly preserve the scenario's business name and activity.",
     );
+  }
+
+  async completePayment(input: { amount: RegExp; card: string; next: RegExp; service: string }) {
+    const { amount, card, next, service } = input;
+    await this.waitForText(`${service} payment card`, card);
+    await this.expectBody(amount, `${service} should show the expected staging amount.`);
+    await this.act(
+      `open ${service} payment`,
+      `In the latest unpaid ${service} card at the bottom of the eGovPH Business chat, click its payment button.`,
+    );
+    await this.waitForText(`${service} secure-payment dialog`, "Continue to secure payment");
+    await this.expectBody(amount, `${service} payment dialog should preserve the expected amount.`);
+    await this.act(
+      `continue ${service} to eGovPay`,
+      "In the secure eGovPay dialog, click the primary “Continue to eGovPay” button.",
+    );
+    await this.waitFor(
+      `${service} hosted checkout`,
+      ({ text, url }) =>
+        !url.startsWith(this.config.baseUrl.origin) &&
+        /Cash Payments|Payment Method|Pay Now/i.test(text),
+    );
+    await this.screenshot(`${service} hosted checkout`);
+    await this.act(
+      `select Cash Payments for ${service}`,
+      "On the hosted eGovPay checkout, select the “Cash Payments” payment method. Do not select a card, bank, or wallet.",
+    );
+    await this.act(
+      `submit ${service} payment`,
+      "On the Cash Payments checkout, click the enabled “Pay Now” button to continue in the staging payment flow.",
+    );
+    try {
+      await this.waitForText(`${service} staging confirmation`, /Mark as Paid/i, 60_000);
+    } catch (error) {
+      const checkout = await this.activePage();
+      const state = await this.bodyText(checkout);
+      if (!/\bINITIAL\b/i.test(state) || !/Loading/i.test(state)) throw error;
+      await checkout.goto(checkout.url(), { waitUntil: "load", timeoutMs: 30_000 });
+      const reloaded = await this.waitFor(
+        `${service} reloaded checkout`,
+        ({ text }) => /Mark as Paid|Cash Payments|Pay Now/i.test(text),
+        30_000,
+      );
+      if (!/Mark as Paid/i.test(reloaded.text)) {
+        await this.act(
+          `reselect Cash Payments for ${service}`,
+          `The ${service} staging checkout was still INITIAL after a gateway loading timeout. Select “Cash Payments” again after this single reload.`,
+        );
+        const selected = await this.waitFor(
+          `${service} payment method after reload`,
+          ({ text }) => /Mark as Paid|Pay Now/i.test(text),
+          30_000,
+        );
+        if (!/Mark as Paid/i.test(selected.text))
+          await this.act(
+            `retry ${service} payment once`,
+            `The ${service} staging transaction is still explicitly INITIAL. Click the enabled “Pay Now” button once to retry the test checkout.`,
+          );
+        await this.waitForText(
+          `${service} staging confirmation after retry`,
+          /Mark as Paid/i,
+          90_000,
+        );
+      }
+    }
+    await this.act(
+      `mark ${service} paid`,
+      "This is the explicitly authorized eGovPay test checkout. Click “Mark as Paid”.",
+    );
+    await this.waitForText(
+      `${service} paid result`,
+      /Transaction Success|Payment Successful|PAID/i,
+      90_000,
+    );
+    await sleep(5_000);
+    await this.act(
+      `return ${service} to merchant`,
+      "Click “Go Back to Merchant” (or the equivalent “Back to merchant” button) after the successful test payment.",
+    );
+    await this.waitFor(
+      `${service} merchant return`,
+      ({ url }) => url.startsWith(this.config.baseUrl.origin),
+      90_000,
+    );
+    try {
+      await this.waitForText(`${service} continuation`, next, 45_000);
+    } catch (error) {
+      const merchant = await this.activePage();
+      if (!merchant.url().includes("payment=return")) throw error;
+      await merchant.goto(merchant.url(), { waitUntil: "load", timeoutMs: 30_000 });
+      await this.waitForText(`${service} continuation after status refresh`, next, 180_000);
+    }
+    await this.pass(`${service} paid and continued`);
   }
 
   async authenticateAndOpenBusiness() {

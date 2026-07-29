@@ -1,5 +1,4 @@
 export type FlowConfig = {
-  allowEgovPay: boolean;
   baseUrl: URL;
   businessName: string;
   headless: boolean;
@@ -49,11 +48,6 @@ export function readFlowConfig(
   if (!Number.isInteger(stagingPaymentCount) || stagingPaymentCount < 0)
     throw new Error("stagingPaymentCount must be a non-negative integer.");
 
-  const allowEgovPay = booleanValue(environment.E2E_ALLOW_EGOVPAY, false);
-  if (stagingPaymentCount > 0 && !allowEgovPay)
-    throw new Error(
-      `Set E2E_ALLOW_EGOVPAY=1 to acknowledge that this test creates ${stagingPaymentCount} staging payment${stagingPaymentCount === 1 ? "" : "s"}.`,
-    );
   if (
     stagingPaymentCount > 0 &&
     environment.EGOVPAY_API_KEY?.trim() &&
@@ -76,7 +70,6 @@ export function readFlowConfig(
 
   const runId = safeRunId(environment.E2E_RUN_ID, now);
   return {
-    allowEgovPay,
     baseUrl,
     businessName: `${options.businessNamePrefix ?? "Stagehand Coffee Club"} ${runId}`,
     headless: booleanValue(environment.E2E_HEADLESS, true),

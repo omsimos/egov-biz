@@ -7,7 +7,7 @@ its own E2E file and package script:
 | Script               | E2E file                                 | Coverage                                                                                  |
 | -------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------- |
 | `e2e:food`           | `whole-business-flow.e2e.ts`             | Complete sole-proprietor food flow, three payments, business record, and management chats |
-| `e2e:self-employed`  | `self-employed-professional-flow.e2e.ts` | Direct-to-BIR professional flow, Form 1901 generation, tax setup, and business record     |
+| `e2e:self-employed`  | `self-employed-professional-flow.e2e.ts` | Direct-to-BIR professional flow, Form 1901, DST payment, Form 2303, and business record   |
 | `e2e:online-retail`  | `online-retail-flow.e2e.ts`              | Online work-location branch through the converged DTI application checkpoint              |
 | `e2e:vehicle-rental` | `vehicle-rental-flow.e2e.ts`             | Vehicle-use intake branch through the converged DTI application checkpoint                |
 
@@ -15,10 +15,12 @@ The complete food-business journey:
 
 1. authenticate through the loopback-only dev session;
 2. register a Makati coffee-subscription business;
-3. answer the RDO, premises, staffing, address, and proposed-name checkpoints;
-4. complete the DTI, barangay, and EBPLS fees through eGovPay staging using
+3. answer the RDO, premises, staffing, address, BNRS terms, dominant-name,
+   descriptor, and territorial-scope checkpoints;
+4. complete the DTI business-name, combined DX LGU permit, and BIR documentary
+   stamp tax fees through eGovPay staging using
    **Cash Payments → Pay Now → Mark as Paid → Go Back to Merchant**;
-5. verify the completed 10/10 plan and business-record Overview, Records, Files,
+5. verify the completed 7/7 required plan and business-record Overview, Records, Files,
    and Tax calendar tabs;
 6. create two post-registration chats, ask about taxes, fire safety, and files,
    then verify per-business persistence across chat, business-record, Business,
@@ -33,6 +35,7 @@ Start the target app’s Redis dependency and dev server first:
 
 ```bash
 docker compose -f apps/egov-agentic-biz/docker-compose.yml up -d redis
+bun --filter @repo/db db:migrate
 bun run dev:business
 ```
 
@@ -52,12 +55,17 @@ bun run e2e:online-retail
 bun run e2e:vehicle-rental
 ```
 
-The food flow creates three stateful eGovPay staging payments, so it additionally
-requires explicit acknowledgement:
+The online-retail and vehicle-rental scenarios intentionally stop at an unpaid
+DTI application. DX BNRS permits one active application per eGov user, so run
+each of those scenarios against a fresh migrated DX database (or explicitly
+abandon the previous test draft) rather than running them concurrently under
+the shared dev identity.
+
+The food flow creates three stateful eGovPay staging payments:
 
 ```bash
 cd apps/egov-stagehand-e2e
-E2E_ALLOW_EGOVPAY=1 bun run e2e:food
+bun run e2e:food
 ```
 
 Required for every scenario:
@@ -66,7 +74,7 @@ Required for every scenario:
   Stagehand model, or `OPENAI_API_KEY` when selecting an OpenAI model;
 - a running local `egov-agentic-biz` app and its Redis dependency.
 
-Required only for `e2e:food`:
+Required for `e2e:food` and `e2e:self-employed`:
 
 - the existing eGovPay staging configuration used by `egov-agentic-biz`;
 - an `EGOVPAY_API_KEY` beginning with `test_` when that key is visible to this
@@ -81,8 +89,7 @@ Required only for `e2e:self-employed`:
 
 Every scenario refuses non-loopback targets because it depends on
 `/api/auth/dev-login`, which is intentionally unavailable outside local
-development. Only the food flow refuses to run until
-`E2E_ALLOW_EGOVPAY=1` is set.
+development.
 
 Each run writes screenshots and a JSON result under `artifacts/<run-id>/` or
 `artifacts/<run-id>-<scenario>/`. Created demo businesses, chat sessions, PDF
