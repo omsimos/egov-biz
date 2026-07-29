@@ -821,6 +821,26 @@ function AgentDot() {
   );
 }
 
+function taxReminderMessageFromInput(input: {
+  businessName?: string;
+  dueDate?: string;
+  formCode?: string;
+  taxTitle?: string;
+}) {
+  const business = input.businessName ? ` for ${input.businessName}` : "";
+  const tax = input.taxTitle || input.formCode || "tax payment";
+  const form = input.taxTitle && input.formCode ? ` (${input.formCode})` : "";
+  const due = input.dueDate
+    ? ` due on ${new Date(`${input.dueDate}T00:00:00Z`).toLocaleDateString("en-PH", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        timeZone: "Asia/Manila",
+      })}`
+    : "";
+  return `SIMULATION — eGov tax reminder${business}: Your upcoming ${tax}${form} is${due || " approaching"}. Please review your BIR tax calendar and pay on or before the deadline. Confirm the filing and deadline with BIR.`;
+}
+
 function SearchTool({
   part,
 }: {
@@ -999,6 +1019,54 @@ function ToolPart({
   if (!isToolUIPart(part)) return null;
   const name = getToolName(part);
   if (name === "askUser") return null;
+  if (part.type === "tool-send_sms_message" || part.type === "tool-simulate_tax_payment_reminder") {
+    const reminder = part.type === "tool-simulate_tax_payment_reminder";
+    if (part.state === "output-error")
+      return (
+        <div className="chat-tool-row error">
+          <X />
+          <div>
+            <small>{reminder ? "Tax reminder not sent" : "SMS not sent"}</small>
+            <span>Check the recipient and eMessage configuration</span>
+          </div>
+          <PaperPlaneRightIcon />
+        </div>
+      );
+    if (part.state === "output-available") {
+      const sentMessage =
+        part.output.message ||
+        (reminder ? taxReminderMessageFromInput(part.input) : part.input.message) ||
+        "Message text is unavailable for this earlier result.";
+      return (
+        <details className="chat-tool-disclosure">
+          <summary className="chat-tool-row complete">
+            <CheckCircle weight="fill" />
+            <div>
+              <small>
+                {reminder ? "Simulated tax reminder accepted" : "SMS accepted by eMessage"}
+              </small>
+              <span>{part.output.recipient} · Handset delivery not confirmed</span>
+            </div>
+            <CaretDownIcon className="chat-tool-disclosure-caret" />
+          </summary>
+          <div className="chat-tool-disclosure-body">
+            <small>Message sent</small>
+            <p>{sentMessage}</p>
+          </div>
+        </details>
+      );
+    }
+    return (
+      <div className="chat-tool-row active">
+        <CircleNotch className="spin" />
+        <div>
+          <small>{reminder ? "Sending simulated tax reminder" : "Sending SMS"}</small>
+          <span className="chat-shimmer">Using eMessage securely</span>
+        </div>
+        <PaperPlaneRightIcon />
+      </div>
+    );
+  }
   if (part.type === "tool-user_info")
     return (
       <div className={`chat-tool-row ${part.state === "output-available" ? "complete" : "active"}`}>

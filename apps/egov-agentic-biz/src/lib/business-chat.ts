@@ -2,6 +2,12 @@ import type { UIMessage } from "ai";
 import type { BirFormArtifact } from "@/lib/bir-form/artifact";
 import type { GenerateBirFormInput } from "@/lib/bir-form/schema";
 import type { CitizenProfile } from "@/lib/citizen-profile";
+import type {
+  SendSmsMessageInput,
+  SendSmsMessageOutput,
+  SimulateTaxPaymentReminderInput,
+  SimulateTaxPaymentReminderOutput,
+} from "@/lib/emessage";
 import type { BusinessPlan, IntakeQuestion } from "@/lib/questions";
 import type { BusinessRecord, TaxObligation } from "@/lib/registered-business";
 
@@ -133,6 +139,11 @@ export type GenerateBirFormOutput = {
 export type BusinessChatTools = {
   user_info: { input: Record<string, never>; output: UserInfoOutput };
   generate_bir_form: { input: GenerateBirFormInput; output: GenerateBirFormOutput };
+  send_sms_message: { input: SendSmsMessageInput; output: SendSmsMessageOutput };
+  simulate_tax_payment_reminder: {
+    input: SimulateTaxPaymentReminderInput;
+    output: SimulateTaxPaymentReminderOutput;
+  };
   askUser: { input: AskUserInput; output: AskUserOutput };
   webSearch: { input: WebSearchInput; output: WebSearchOutput };
   editDtiBusinessNameForm: { input: EditDtiInput; output: EditDtiOutput };

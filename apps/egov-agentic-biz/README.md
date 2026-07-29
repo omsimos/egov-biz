@@ -52,12 +52,14 @@ against the same schema.
 
 Set these in the project (all server-side):
 
-| Variable | Where it comes from |
-| --- | --- |
-| `TURSO_DATABASE_URL` | `turso db show --url <database>` |
-| `TURSO_AUTH_TOKEN` | `turso db tokens create <database>` |
-| `REDIS_URL` | Upstash — the `rediss://` TCP URL |
-| `R2_BASE_URL`, `R2_ACCESS_KEY`, `R2_SECRET_KEY` | Cloudflare R2 |
+| Variable                                        | Where it comes from                                                             |
+| ----------------------------------------------- | ------------------------------------------------------------------------------- |
+| `TURSO_DATABASE_URL`                            | `turso db show --url <database>`                                                |
+| `TURSO_AUTH_TOKEN`                              | `turso db tokens create <database>`                                             |
+| `REDIS_URL`                                     | Upstash — the `rediss://` TCP URL                                               |
+| `R2_BASE_URL`, `R2_ACCESS_KEY`, `R2_SECRET_KEY` | Cloudflare R2                                                                   |
+| `EMESSAGE_BASE_URL`, `EMESSAGE_ACCESS_TOKEN`    | eMessage SMS provider                                                           |
+| `EMESSAGE_ALLOWED_RECIPIENTS`                   | Comma-separated verified demo/test mobile numbers; SSO mobile is always allowed |
 
 Create the database once, then run `bun run db:migrate` against it as part of
 releasing:
