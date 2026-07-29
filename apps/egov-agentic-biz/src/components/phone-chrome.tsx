@@ -2,9 +2,13 @@
 
 import {
   BellSlashIcon,
+  FileTextIcon,
   HouseIcon,
+  IdentificationCardIcon,
   NewspaperIcon,
   QrCodeIcon,
+  ScanIcon,
+  SquaresFourIcon,
   UserIcon,
   WalletIcon,
 } from "@phosphor-icons/react";
@@ -44,41 +48,53 @@ export function StatusBar() {
   );
 }
 
+// Two shells, one bar. The launcher is the eGovPH app itself and carries its
+// nav (Scan, Digital ID, History, Account); everything under Business carries
+// the product's own (News, QR, Wallet, Me). `active` already told them apart at
+// every call site, so it selects the item set too rather than a second prop.
+const NAV_ITEMS = {
+  home: [
+    { Icon: ScanIcon, label: "Scan" },
+    { Icon: FileTextIcon, label: "History" },
+    { Icon: SquaresFourIcon, label: "Account" },
+  ],
+  business: [
+    { Icon: NewspaperIcon, label: "News" },
+    { Icon: WalletIcon, label: "Wallet" },
+    { Icon: UserIcon, label: "Me" },
+  ],
+} as const;
+
 export function BottomNav({ active = "home" }: { active?: "home" | "business" }) {
   // Only Home ever lights up — there is no dedicated Business tab, and the
   // other four items are a placeholder nav shell with nothing behind them
   // yet, so a <button> that does nothing reads as broken and makes screen
   // readers announce five dead controls (mirrors HomeScreen's service tiles).
-  const homeActive = active === "home" || active === "business";
+  const [first, ...rest] = NAV_ITEMS[active];
+  const Orb = active === "home" ? IdentificationCardIcon : QrCodeIcon;
   return (
     <nav className="bottom-nav" aria-label="Primary navigation">
-      <div
-        aria-current={homeActive ? "page" : undefined}
-        className={homeActive ? "active" : ""}
-        data-cuelume-toggle="tick"
-      >
-        <HouseIcon weight={homeActive ? "fill" : "regular"} />
+      <div aria-current="page" className="active" data-cuelume-toggle="tick">
+        <HouseIcon weight="fill" />
         <span>Home</span>
       </div>
       <div className="unbuilt" data-cuelume-toggle="tick">
-        <NewspaperIcon />
-        <span>News</span>
+        <first.Icon />
+        <span>{first.label}</span>
       </div>
       {/* Decoration: nothing behind it, so no name worth announcing and no click
           sound — a sound would claim something happened. */}
       <div aria-hidden="true">
         <span className="qr-orb">
-          <QrCodeIcon weight="fill" />
+          <Orb weight="fill" />
         </span>
       </div>
-      <div className="unbuilt" data-cuelume-toggle="tick">
-        <WalletIcon />
-        <span>Wallet</span>
-      </div>
-      <div className="unbuilt" data-cuelume-toggle="tick">
-        <UserIcon />
-        <span>Me</span>
-      </div>
+      {rest.map(({ Icon, label }) => (
+        <div className="unbuilt" data-cuelume-toggle="tick" key={label}>
+          <Icon />
+          <span>{label}</span>
+        </div>
+      ))}
     </nav>
   );
 }

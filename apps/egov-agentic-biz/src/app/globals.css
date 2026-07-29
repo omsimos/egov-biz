@@ -43,6 +43,10 @@
   --color-primary-border: var(--primary-border);
   --color-primary-border-strong: var(--primary-border-strong);
   --color-primary-ink: var(--primary-ink);
+  --color-primary-lift: var(--primary-lift);
+  --color-primary-deep: var(--primary-deep);
+  --color-primary-deeper: var(--primary-deeper);
+  --color-gold-soft: var(--gold-soft);
   --color-success-soft: var(--success-soft);
   --color-success-border: var(--success-border);
   --color-success-ink: var(--success-ink);
@@ -72,7 +76,9 @@
   --font-sans: var(--font-sans);
   --text-2xs: var(--text-2xs);
   --text-xs: var(--text-xs);
+  --text-meta: var(--text-meta);
   --text-sm: var(--text-sm);
+  --text-copy: var(--text-copy);
   --text-base: var(--text-base);
   --text-md: var(--text-md);
   --text-lg: var(--text-lg);

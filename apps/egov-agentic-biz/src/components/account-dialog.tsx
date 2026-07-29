@@ -19,11 +19,17 @@ import { cn, FOCUS_RING } from "@/lib/utils";
 // on the screen, so it now opens this sheet and sign-out is an explicit,
 // labelled item inside it.
 export function AccountDialog({
+  avatarClassName,
   onLogout,
   profile,
+  size = "lg",
 }: {
+  // The trigger is the same control on every screen but not the same mark: the
+  // launcher draws a 38px solid-blue initial, the Business header a tinted one.
+  avatarClassName?: string;
   onLogout: () => void;
   profile: CitizenProfile;
+  size?: "md" | "lg";
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -33,7 +39,7 @@ export function AccountDialog({
         className={cn("shrink-0 rounded-full", FOCUS_RING)}
         data-cuelume-toggle="tick"
       >
-        <Avatar size="lg">
+        <Avatar className={avatarClassName} size={size}>
           {profile.avatarUrl && (
             <AvatarImage alt={`${profile.fullName} profile`} src={profile.avatarUrl} />
           )}
