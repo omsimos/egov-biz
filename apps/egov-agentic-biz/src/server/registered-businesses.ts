@@ -1,116 +1,105 @@
 import { randomUUID } from "node:crypto";
+import { and, desc, eq, sql } from "drizzle-orm";
 import type {
   BusinessFinalizationInput,
   RegisteredBusiness,
   RegisteredBusinessListItem,
 } from "@/lib/registered-business";
-import { getDatabase } from "@/server/db";
+import { getDatabase, schema } from "@/server/db";
 
-type BusinessRow = {
-  id: string;
-  conversation_id: string;
-  name: string;
-  type: string;
-  category: RegisteredBusiness["category"];
-  registration_number: string;
-  status: RegisteredBusiness["status"];
-  owner_name: string;
-  business_activity: string;
-  business_address: string;
-  city: string;
-  rdo: string;
-  tin_masked: string;
-  records_json: string;
-  tax_obligations_json: string;
-  files_json: string;
-  finalized_at: string;
-};
+type BusinessRow = typeof schema.registeredBusinesses.$inferSelect;
 
 function mapBusiness(row: BusinessRow): RegisteredBusiness {
   return {
     id: row.id,
-    conversationId: row.conversation_id,
+    conversationId: row.conversationId,
     name: row.name,
     type: row.type,
     category: row.category,
-    registrationNumber: row.registration_number,
+    registrationNumber: row.registrationNumber,
     status: row.status,
-    ownerName: row.owner_name,
-    businessActivity: row.business_activity,
-    businessAddress: row.business_address,
+    ownerName: row.ownerName,
+    businessActivity: row.businessActivity,
+    businessAddress: row.businessAddress,
     city: row.city,
     rdo: row.rdo,
-    tinMasked: row.tin_masked,
-    records: JSON.parse(row.records_json) as RegisteredBusiness["records"],
-    taxObligations: JSON.parse(row.tax_obligations_json) as RegisteredBusiness["taxObligations"],
-    files: JSON.parse(row.files_json || "[]") as RegisteredBusiness["files"],
-    finalizedAt: row.finalized_at,
+    tinMasked: row.tinMasked,
+    records: JSON.parse(row.recordsJson) as RegisteredBusiness["records"],
+    taxObligations: JSON.parse(row.taxObligationsJson) as RegisteredBusiness["taxObligations"],
+    files: JSON.parse(row.filesJson || "[]") as RegisteredBusiness["files"],
+    finalizedAt: row.finalizedAt,
   };
 }
 
-export function upsertRegisteredBusiness(profileId: string, input: BusinessFinalizationInput) {
-  const database = getDatabase();
-  const existing = database
-    .prepare("SELECT id FROM registered_businesses WHERE conversation_id = ?")
-    .get(input.conversationId) as { id: string } | undefined;
-  const id = existing?.id ?? randomUUID();
+export async function upsertRegisteredBusiness(
+  profileId: string,
+  input: BusinessFinalizationInput,
+) {
+  const database = await getDatabase();
   const now = new Date().toISOString();
   const finalizedAt = input.finalizedAt ?? now;
-  database
-    .prepare(`
-      INSERT INTO registered_businesses (
-        id, conversation_id, profile_id, name, type, category, registration_number, status,
-        owner_name, business_activity, business_address, city, rdo, tin_masked, records_json,
-        tax_obligations_json, files_json, finalized_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(conversation_id) DO UPDATE SET
-        profile_id = excluded.profile_id,
-        name = excluded.name,
-        type = excluded.type,
-        category = excluded.category,
-        registration_number = excluded.registration_number,
-        status = excluded.status,
-        owner_name = excluded.owner_name,
-        business_activity = excluded.business_activity,
-        business_address = excluded.business_address,
-        city = excluded.city,
-        rdo = excluded.rdo,
-        tin_masked = excluded.tin_masked,
-        records_json = excluded.records_json,
-        tax_obligations_json = excluded.tax_obligations_json,
-        files_json = excluded.files_json,
-        finalized_at = excluded.finalized_at,
-        updated_at = excluded.updated_at
-    `)
-    .run(
-      id,
-      input.conversationId,
-      profileId,
-      input.name,
-      input.type,
-      input.category,
-      input.registrationNumber,
-      input.status,
-      input.ownerName,
-      input.businessActivity,
-      input.businessAddress,
-      input.city,
-      input.rdo,
-      input.tinMasked,
-      JSON.stringify(input.records),
-      JSON.stringify(input.taxObligations),
-      JSON.stringify(input.files),
+
+  // conversation_id is unique, so the conflict target keeps one business per
+  // conversation and the existing row's id survives an update.
+  const [row] = await database
+    .insert(schema.registeredBusinesses)
+    .values({
+      businessActivity: input.businessActivity,
+      businessAddress: input.businessAddress,
+      category: input.category,
+      city: input.city,
+      conversationId: input.conversationId,
+      createdAt: now,
+      filesJson: JSON.stringify(input.files),
       finalizedAt,
-      now,
-      now,
-    );
-  return getRegisteredBusiness(profileId, id)!;
+      id: randomUUID(),
+      name: input.name,
+      ownerName: input.ownerName,
+      profileId,
+      rdo: input.rdo,
+      recordsJson: JSON.stringify(input.records),
+      registrationNumber: input.registrationNumber,
+      status: input.status,
+      taxObligationsJson: JSON.stringify(input.taxObligations),
+      tinMasked: input.tinMasked,
+      type: input.type,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      set: {
+        businessActivity: sql`excluded.business_activity`,
+        businessAddress: sql`excluded.business_address`,
+        category: sql`excluded.category`,
+        city: sql`excluded.city`,
+        filesJson: sql`excluded.files_json`,
+        finalizedAt: sql`excluded.finalized_at`,
+        name: sql`excluded.name`,
+        ownerName: sql`excluded.owner_name`,
+        profileId: sql`excluded.profile_id`,
+        rdo: sql`excluded.rdo`,
+        recordsJson: sql`excluded.records_json`,
+        registrationNumber: sql`excluded.registration_number`,
+        status: sql`excluded.status`,
+        taxObligationsJson: sql`excluded.tax_obligations_json`,
+        tinMasked: sql`excluded.tin_masked`,
+        type: sql`excluded.type`,
+        updatedAt: sql`excluded.updated_at`,
+      },
+      target: schema.registeredBusinesses.conversationId,
+    })
+    .returning();
+  return mapBusiness(row!);
 }
 
-export function listRegisteredBusinesses(profileId: string): RegisteredBusinessListItem[] {
-  const rows = getDatabase()
-    .prepare("SELECT * FROM registered_businesses WHERE profile_id = ? ORDER BY updated_at DESC")
-    .all(profileId) as BusinessRow[];
+export async function listRegisteredBusinesses(
+  profileId: string,
+): Promise<RegisteredBusinessListItem[]> {
+  const database = await getDatabase();
+  const rows = await database
+    .select()
+    .from(schema.registeredBusinesses)
+    .where(eq(schema.registeredBusinesses.profileId, profileId))
+    .orderBy(desc(schema.registeredBusinesses.updatedAt));
   return rows.map((row) => {
     const business = mapBusiness(row);
     return {
@@ -125,9 +114,17 @@ export function listRegisteredBusinesses(profileId: string): RegisteredBusinessL
   });
 }
 
-export function getRegisteredBusiness(profileId: string, id: string) {
-  const row = getDatabase()
-    .prepare("SELECT * FROM registered_businesses WHERE id = ? AND profile_id = ?")
-    .get(id, profileId) as BusinessRow | undefined;
+export async function getRegisteredBusiness(profileId: string, id: string) {
+  const database = await getDatabase();
+  const [row] = await database
+    .select()
+    .from(schema.registeredBusinesses)
+    .where(
+      and(
+        eq(schema.registeredBusinesses.id, id),
+        eq(schema.registeredBusinesses.profileId, profileId),
+      ),
+    )
+    .limit(1);
   return row ? mapBusiness(row) : null;
 }

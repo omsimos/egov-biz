@@ -42,44 +42,44 @@ function requestFor(sessionId: string) {
   });
 }
 
-afterEach(() => {
-  for (const sessionId of createdSessionIds.splice(0)) deleteSession(requestFor(sessionId));
+afterEach(async () => {
+  for (const sessionId of createdSessionIds.splice(0)) await deleteSession(requestFor(sessionId));
   storedSessions.clear();
 });
 
 describe("authenticated session", () => {
-  test("restores the session from persistent storage after the process cache is cleared", () => {
+  test("restores the session from persistent storage after the process cache is cleared", async () => {
     const rawProfile = {
       email: "juan@example.test",
       first_name: "Juan",
       last_name: "Dela Cruz",
       uniqid: `session-test-${crypto.randomUUID()}`,
     } as EgovSsoCitizenProfile;
-    const { sessionId } = createSession(rawProfile);
+    const { sessionId } = await createSession(rawProfile);
     createdSessionIds.push(sessionId);
 
     globalSessionRegistry.egovAgenticBizSessions = new Map();
 
-    expect(readSession(requestFor(sessionId))?.profile).toMatchObject({
+    expect((await readSession(requestFor(sessionId)))?.profile).toMatchObject({
       email: "juan@example.test",
       fullName: "Juan Dela Cruz",
       id: rawProfile.uniqid,
     });
-    expect(readSession(requestFor(sessionId))?.id).toBe(sessionId);
-    expect(birFormArtifactOwnerId(readSession(requestFor(sessionId))!)).toBe(
+    expect((await readSession(requestFor(sessionId)))?.id).toBe(sessionId);
+    expect(birFormArtifactOwnerId((await readSession(requestFor(sessionId)))!)).toBe(
       `citizen:${rawProfile.uniqid}`,
     );
   });
 
-  test("provides storage ownership even when the SSO profile has no uniqid", () => {
-    const { sessionId } = createSession({
+  test("provides storage ownership even when the SSO profile has no uniqid", async () => {
+    const { sessionId } = await createSession({
       email: "no-id@example.test",
       first_name: "No",
       last_name: "ID",
     } as EgovSsoCitizenProfile);
     createdSessionIds.push(sessionId);
 
-    const session = readSession(requestFor(sessionId));
+    const session = await readSession(requestFor(sessionId));
     expect(session?.id).toBe(sessionId);
     expect(birFormArtifactOwnerId(session!)).toBe(`session:${sessionId}`);
   });

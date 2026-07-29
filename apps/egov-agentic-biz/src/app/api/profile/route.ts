@@ -4,7 +4,7 @@ import { readSession } from "@/lib/auth/session";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const session = readSession(request);
+  const session = await readSession(request);
   if (!session) {
     return NextResponse.json(
       { error: "Authentication required." },

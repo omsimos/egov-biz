@@ -65,7 +65,7 @@ export async function GET(request: Request) {
     return new NextResponse(null, { status: 404 });
   }
 
-  const { maxAge, sessionId } = createSession(DEV_PROFILE);
+  const { maxAge, sessionId } = await createSession(DEV_PROFILE);
   const response = NextResponse.redirect(new URL("/", request.url));
   response.headers.set("Cache-Control", "no-store");
   response.cookies.set(AUTH_COOKIE_NAME, sessionId, sessionCookieOptions(request, maxAge));

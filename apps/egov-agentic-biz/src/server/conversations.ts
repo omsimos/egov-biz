@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { and, asc, desc, eq, like, notInArray, sql } from "drizzle-orm";
 import type { UIMessage } from "ai";
 import {
   latestPlanInParts,
@@ -11,26 +12,37 @@ import {
   type PlanProgress,
   type PaymentServiceType,
 } from "@/lib/business-chat";
-import { getDatabase } from "@/server/db";
+import { getDatabase, schema } from "@/server/db";
 
-type ConversationRow = {
-  id: string;
-  title: string;
-  initial_prompt: string;
-  active_stream_id: string | null;
-  created_at: string;
-  updated_at: string;
-};
+type ConversationRow = typeof schema.conversations.$inferSelect;
 
-type MessageRow = { id: string; role: UIMessage["role"]; parts_json: string };
+// `created_at` is only millisecond-precise, so rows written in the same tick can
+// tie. rowid breaks the tie by insertion order, which is the order the
+// transcript was actually written in.
+const insertionOrder = sql`rowid`;
 
 function titleFor(prompt: string) {
   const title = prompt.replace(/\s+/g, " ").trim();
   return title.slice(0, 68) || "New registration plan";
 }
 
-export function deleteConversation(id: string) {
-  return getDatabase().prepare("DELETE FROM conversations WHERE id = ?").run(id).changes > 0;
+/**
+ * Removes the conversation and everything hanging off it.
+ *
+ * The child rows are deleted explicitly rather than left to `ON DELETE CASCADE`.
+ * Turso ships with foreign key enforcement off by default, and `PRAGMA
+ * foreign_keys = ON` is connection-scoped, so it cannot be relied on over a
+ * stateless HTTP connection. Doing it by hand behaves the same against a local
+ * file and a remote database; the schema keeps the constraints as documentation.
+ */
+export async function deleteConversation(id: string) {
+  const database = await getDatabase();
+  const [, , conversation] = await database.batch([
+    database.delete(schema.messages).where(eq(schema.messages.conversationId, id)),
+    database.delete(schema.payments).where(eq(schema.payments.conversationId, id)),
+    database.delete(schema.conversations).where(eq(schema.conversations.id, id)),
+  ]);
+  return conversation.rowsAffected > 0;
 }
 
 function mapSummary(
@@ -40,10 +52,10 @@ function mapSummary(
   return {
     id: row.id,
     title: row.title,
-    initialPrompt: row.initial_prompt,
-    activeStreamId: row.active_stream_id,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    initialPrompt: row.initialPrompt,
+    activeStreamId: row.activeStreamId,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
     progress,
   };
 }
@@ -59,53 +71,65 @@ function progressFromParts(partsJson: string): PlanProgress | null {
   return found ? planProgress(found.plan) : null;
 }
 
-export function listConversations(): ConversationSummary[] {
-  const database = getDatabase();
-  const rows = database
-    .prepare("SELECT * FROM conversations ORDER BY updated_at DESC")
-    .all() as ConversationRow[];
+export async function listConversations(): Promise<ConversationSummary[]> {
+  const database = await getDatabase();
+  const rows = await database
+    .select()
+    .from(schema.conversations)
+    .orderBy(desc(schema.conversations.updatedAt));
   // One extra query for the whole list, not one per row, and the LIKE keeps it
   // to the messages that actually carry a plan — the rest of a transcript is
   // large and irrelevant here. Rows arrive oldest-first so the last write per
   // conversation wins.
-  const planRows = database
-    .prepare(`
-      SELECT conversation_id, parts_json FROM messages
-      WHERE parts_json LIKE '%tool-updatePlan%'
-      ORDER BY created_at ASC, rowid ASC
-    `)
-    .all() as { conversation_id: string; parts_json: string }[];
+  const planRows = await database
+    .select({
+      conversationId: schema.messages.conversationId,
+      partsJson: schema.messages.partsJson,
+    })
+    .from(schema.messages)
+    .where(like(schema.messages.partsJson, "%tool-updatePlan%"))
+    .orderBy(asc(schema.messages.createdAt), insertionOrder);
   const progressById = new Map<string, PlanProgress>();
   for (const planRow of planRows) {
-    const progress = progressFromParts(planRow.parts_json);
-    if (progress) progressById.set(planRow.conversation_id, progress);
+    const progress = progressFromParts(planRow.partsJson);
+    if (progress) progressById.set(planRow.conversationId, progress);
   }
   return rows.map((row) => mapSummary(row, progressById.get(row.id) ?? null));
 }
 
-export function getConversation(id: string): BusinessConversation | null {
-  const database = getDatabase();
-  const row = database.prepare("SELECT * FROM conversations WHERE id = ?").get(id) as
-    | ConversationRow
-    | undefined;
+export async function getConversation(id: string): Promise<BusinessConversation | null> {
+  const database = await getDatabase();
+  const [row] = await database
+    .select()
+    .from(schema.conversations)
+    .where(eq(schema.conversations.id, id))
+    .limit(1);
   if (!row) return null;
-  const payments = database
-    .prepare(
-      "SELECT service_type, status FROM payments WHERE conversation_id = ? ORDER BY created_at ASC, rowid ASC",
-    )
-    .all(id) as { service_type: PaymentServiceType; status: string }[];
+
+  const [payments, messageRows] = await Promise.all([
+    database
+      .select({ serviceType: schema.payments.serviceType, status: schema.payments.status })
+      .from(schema.payments)
+      .where(eq(schema.payments.conversationId, id))
+      .orderBy(asc(schema.payments.createdAt), insertionOrder),
+    database
+      .select({
+        id: schema.messages.id,
+        role: schema.messages.role,
+        partsJson: schema.messages.partsJson,
+      })
+      .from(schema.messages)
+      .where(eq(schema.messages.conversationId, id))
+      .orderBy(asc(schema.messages.createdAt), insertionOrder),
+  ]);
+
   const paymentStatuses = Object.fromEntries(
-    payments.map((payment) => [payment.service_type, payment.status]),
-  );
-  const messages = database
-    .prepare(
-      "SELECT id, role, parts_json FROM messages WHERE conversation_id = ? ORDER BY created_at ASC, rowid ASC",
-    )
-    .all(id) as MessageRow[];
-  const parsed = messages.map((message) => ({
+    payments.map((payment) => [payment.serviceType, payment.status]),
+  ) as Partial<Record<PaymentServiceType, string>>;
+  const parsed = messageRows.map((message) => ({
     id: message.id,
     role: message.role,
-    parts: JSON.parse(message.parts_json) as UIMessage["parts"],
+    parts: JSON.parse(message.partsJson) as UIMessage["parts"],
   }));
   const plan = latestRegistrationPlan(parsed as Pick<BusinessChatMessage, "parts">[]);
   return {
@@ -116,60 +140,81 @@ export function getConversation(id: string): BusinessConversation | null {
   } as BusinessConversation;
 }
 
-export function createConversation(initialPrompt: string, id = randomUUID()): BusinessConversation {
+export async function createConversation(
+  initialPrompt: string,
+  id = randomUUID(),
+): Promise<BusinessConversation> {
   const prompt = initialPrompt.trim();
   const now = new Date().toISOString();
-  getDatabase()
-    .prepare(`
-    INSERT INTO conversations (id, title, initial_prompt, active_stream_id, created_at, updated_at)
-    VALUES (?, ?, ?, NULL, ?, ?)
-  `)
-    .run(id, titleFor(prompt), prompt, now, now);
-  return getConversation(id)!;
+  const database = await getDatabase();
+  await database.insert(schema.conversations).values({
+    activeStreamId: null,
+    createdAt: now,
+    id,
+    initialPrompt: prompt,
+    title: titleFor(prompt),
+    updatedAt: now,
+  });
+  return (await getConversation(id))!;
 }
 
-export function setActiveStream(id: string, streamId: string | null) {
-  getDatabase()
-    .prepare("UPDATE conversations SET active_stream_id = ?, updated_at = ? WHERE id = ?")
-    .run(streamId, new Date().toISOString(), id);
+export async function setActiveStream(id: string, streamId: string | null) {
+  const database = await getDatabase();
+  await database
+    .update(schema.conversations)
+    .set({ activeStreamId: streamId, updatedAt: new Date().toISOString() })
+    .where(eq(schema.conversations.id, id));
 }
 
-export function saveMessages(conversationId: string, messages: UIMessage[]) {
+export async function saveMessages(conversationId: string, messages: UIMessage[]) {
   const uniqueMessages = uniqueMessagesById(messages);
-  const database = getDatabase();
-  database.transaction(() => {
-    const existing = new Set(
-      (
-        database
-          .prepare("SELECT id FROM messages WHERE conversation_id = ?")
-          .all(conversationId) as { id: string }[]
-      ).map(({ id }) => id),
-    );
-    const upsert = database.prepare(`
-      INSERT INTO messages (id, conversation_id, role, parts_json, created_at)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET role = excluded.role, parts_json = excluded.parts_json
-    `);
-    uniqueMessages.forEach((message, index) => {
-      upsert.run(
-        message.id,
-        conversationId,
-        message.role,
-        JSON.stringify(message.parts),
-        new Date(Date.now() + index).toISOString(),
-      );
-      existing.delete(message.id);
-    });
-    const remove = database.prepare("DELETE FROM messages WHERE id = ? AND conversation_id = ?");
-    for (const id of existing) remove.run(id, conversationId);
+  const database = await getDatabase();
+  const now = Date.now();
+
+  // `batch` runs inside a single implicit libSQL transaction, so the upserts and
+  // the pruning delete commit or roll back together. It replaces the previous
+  // read-then-write transaction, which could not have stayed atomic across a
+  // remote connection.
+  const upserts = uniqueMessages.map((message, index) =>
     database
-      .prepare("UPDATE conversations SET updated_at = ? WHERE id = ?")
-      .run(new Date().toISOString(), conversationId);
-  })();
+      .insert(schema.messages)
+      .values({
+        conversationId,
+        createdAt: new Date(now + index).toISOString(),
+        id: message.id,
+        partsJson: JSON.stringify(message.parts),
+        role: message.role,
+      })
+      // Deliberately leaves created_at alone so an edited message keeps its
+      // original position in the transcript.
+      .onConflictDoUpdate({
+        set: { partsJson: sql`excluded.parts_json`, role: sql`excluded.role` },
+        target: schema.messages.id,
+      }),
+  );
+
+  const keptIds = uniqueMessages.map((message) => message.id);
+  const prune = keptIds.length
+    ? database
+        .delete(schema.messages)
+        .where(
+          and(
+            eq(schema.messages.conversationId, conversationId),
+            notInArray(schema.messages.id, keptIds),
+          ),
+        )
+    : database.delete(schema.messages).where(eq(schema.messages.conversationId, conversationId));
+
+  const touch = database
+    .update(schema.conversations)
+    .set({ updatedAt: new Date().toISOString() })
+    .where(eq(schema.conversations.id, conversationId));
+
+  await database.batch([prune, touch, ...upserts]);
 }
 
-export function markPaymentCheckpointComplete(conversationId: string) {
-  const conversation = getConversation(conversationId);
+export async function markPaymentCheckpointComplete(conversationId: string) {
+  const conversation = await getConversation(conversationId);
   if (!conversation) return;
   let changed = false;
   for (const message of [...conversation.messages].reverse()) {
@@ -194,5 +239,5 @@ export function markPaymentCheckpointComplete(conversationId: string) {
     }
     if (changed) break;
   }
-  if (changed) saveMessages(conversationId, conversation.messages);
+  if (changed) await saveMessages(conversationId, conversation.messages);
 }

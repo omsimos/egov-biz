@@ -4,14 +4,14 @@ import { getRegisteredBusiness } from "@/server/registered-businesses";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
-  const session = readSession(request);
+  const session = await readSession(request);
   if (!session)
     return Response.json(
       { error: "Authentication required." },
       { headers: { "Cache-Control": "no-store" }, status: 401 },
     );
   const { id } = await context.params;
-  const business = getRegisteredBusiness(session.profile.id, id);
+  const business = await getRegisteredBusiness(session.profile.id, id);
   if (!business)
     return Response.json(
       { error: "Business record not found." },

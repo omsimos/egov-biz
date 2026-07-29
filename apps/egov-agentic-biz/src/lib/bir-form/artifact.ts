@@ -64,7 +64,7 @@ export async function createBirFormArtifact(
     }
   }
   const mediaType = "application/pdf" as const;
-  const session = readSession(request);
+  const session = await readSession(request);
   if (!session) throw new Error("The authenticated session is no longer available");
   const ownerId = birFormArtifactOwnerId(session);
 

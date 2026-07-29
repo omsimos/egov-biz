@@ -54,16 +54,16 @@ function cookieValue(request: Request, name: string): string | undefined {
   return undefined;
 }
 
-function pruneExpiredSessions() {
+async function pruneExpiredSessions() {
   const now = Date.now();
   for (const [sessionId, session] of sessions()) {
     if (session.expiresAt <= now) sessions().delete(sessionId);
   }
-  pruneStoredAuthSessions(now);
+  await pruneStoredAuthSessions(now);
 }
 
-export function createSession(rawProfile: EgovSsoCitizenProfile) {
-  pruneExpiredSessions();
+export async function createSession(rawProfile: EgovSsoCitizenProfile) {
+  await pruneExpiredSessions();
   const sessionId = crypto.randomUUID();
   const maxAge = sessionTtlSeconds();
   const session: AuthenticatedSession = {
@@ -72,18 +72,23 @@ export function createSession(rawProfile: EgovSsoCitizenProfile) {
     profile: mapEgovCitizenProfile(rawProfile),
     rawProfile,
   };
-  storeAuthSession(sessionId, rawProfile, session.expiresAt);
+  await storeAuthSession(sessionId, rawProfile, session.expiresAt);
   sessions().set(sessionId, session);
   return { maxAge, session, sessionId };
 }
 
-export function readSession(request: Request): AuthenticatedSession | undefined {
+/**
+ * The in-process map is only a read cache. Serverless instances each start cold
+ * and hold their own copy, so a miss falls through to the shared database
+ * instead of logging the citizen out.
+ */
+export async function readSession(request: Request): Promise<AuthenticatedSession | undefined> {
   const sessionId = cookieValue(request, AUTH_COOKIE_NAME);
   if (!sessionId) return undefined;
 
   let session = sessions().get(sessionId);
   if (!session) {
-    const storedSession = readStoredAuthSession(sessionId);
+    const storedSession = await readStoredAuthSession(sessionId);
     if (!storedSession) return undefined;
     session = {
       expiresAt: storedSession.expiresAt,
@@ -95,18 +100,18 @@ export function readSession(request: Request): AuthenticatedSession | undefined 
   }
   if (session.expiresAt <= Date.now()) {
     sessions().delete(sessionId);
-    deleteStoredAuthSession(sessionId);
+    await deleteStoredAuthSession(sessionId);
     return undefined;
   }
 
   return session;
 }
 
-export function deleteSession(request: Request) {
+export async function deleteSession(request: Request) {
   const sessionId = cookieValue(request, AUTH_COOKIE_NAME);
   if (sessionId) {
     sessions().delete(sessionId);
-    deleteStoredAuthSession(sessionId);
+    await deleteStoredAuthSession(sessionId);
   }
 }
 

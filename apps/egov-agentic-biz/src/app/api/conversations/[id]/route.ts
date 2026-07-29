@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const conversation = getConversation(id);
+  const conversation = await getConversation(id);
   return conversation
     ? Response.json({ conversation })
     : Response.json({ error: "Chat session not found" }, { status: 404 });
@@ -12,7 +12,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return deleteConversation(id)
+  return (await deleteConversation(id))
     ? new Response(null, { status: 204 })
     : Response.json({ error: "Chat session not found" }, { status: 404 });
 }
