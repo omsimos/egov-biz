@@ -282,7 +282,7 @@ async function run() {
     "open Business",
     "On the eGovPH home screen, click the interactive Business service tile.",
   );
-  await waitForText("Business landing", "Start something new");
+  await waitForText("Business landing", /Describe your business|Start something new/);
   await typeField(
     "fill registration idea",
     "[aria-label='Describe your business idea']",
