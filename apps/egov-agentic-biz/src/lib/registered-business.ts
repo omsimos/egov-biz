@@ -12,7 +12,7 @@ export type BusinessRecord = {
   issuedAt: string | null;
   validUntil: string | null;
   note: string;
-  demo: true;
+  source: "DX";
 };
 
 export type BusinessFile = {
@@ -24,7 +24,7 @@ export type BusinessFile = {
   createdAt: string;
   url: string | null;
   note: string;
-  demo: true;
+  source: "DX";
 };
 
 export type TaxObligation = {

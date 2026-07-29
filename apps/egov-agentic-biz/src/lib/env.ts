@@ -1,6 +1,6 @@
-// Turso and R2 read their own settings lazily, in src/server/db/config.ts and
-// src/server/r2.ts, so a missing credential fails at the call site with a
-// specific message instead of at import time.
+// Turso and the shared DX file-storage adapter read their settings lazily, so a
+// missing credential fails at the call site with a specific message instead of
+// at import time.
 
 function redisUrlFrom(value: string | undefined) {
   const configured = value?.trim();

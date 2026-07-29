@@ -11,7 +11,7 @@ const business: RegisteredBusiness = {
   name: "Kape Diaria",
   type: "Sole proprietor",
   category: "food-service",
-  registrationNumber: "DEMO-REG-1001",
+  registrationNumber: "DX-REG-1001",
   status: "Active",
   ownerName: "Mara Reyes",
   businessActivity: "Coffee subscription boxes",
@@ -26,12 +26,12 @@ const business: RegisteredBusiness = {
       kind: "permit",
       agency: "Bureau of Fire Protection",
       title: "Fire safety inspection certificate",
-      referenceNumber: "DEMO-BFP-1001",
+      referenceNumber: "DX-BFP-1001",
       status: "Issued",
       issuedAt: "2026-07-20T00:00:00.000Z",
       validUntil: "2027-07-20T00:00:00.000Z",
-      note: "Mock fire-safety result for the declared premises.",
-      demo: true,
+      note: "Saved result for the declared premises.",
+      source: "DX",
     },
   ],
   taxObligations: [
@@ -43,20 +43,20 @@ const business: RegisteredBusiness = {
       periodLabel: "Q2 2026",
       dueDate: "2026-08-25",
       status: "Upcoming",
-      note: "Mock schedule.",
+      note: "Saved schedule.",
     },
   ],
   files: [
     {
       id: "tax-calendar",
       title: "Recurring tax filing calendar",
-      filename: "DEMO-Tax-Calendar.pdf",
+      filename: "DX-Tax-Calendar.pdf",
       documentType: "Tax calendar",
       status: "Available",
       createdAt: "2026-07-20T00:00:00.000Z",
       url: null,
-      note: "Demo schedule.",
-      demo: true,
+      note: "Saved schedule.",
+      source: "DX",
     },
   ],
 };
@@ -64,9 +64,9 @@ const business: RegisteredBusiness = {
 describe("post-registration business chat", () => {
   test("grounds model context in one business record", () => {
     expect(businessManagementContext(business)).toMatchObject({
-      business: { name: "Kape Diaria", registrationNumber: "DEMO-REG-1001" },
-      files: [{ filename: "DEMO-Tax-Calendar.pdf" }],
-      records: [{ referenceNumber: "DEMO-BFP-1001" }],
+      business: { name: "Kape Diaria", registrationNumber: "DX-REG-1001" },
+      files: [{ filename: "DX-Tax-Calendar.pdf" }],
+      records: [{ referenceNumber: "DX-BFP-1001" }],
       taxCalendar: [{ formCode: "BIR Form 1701Q" }],
     });
   });

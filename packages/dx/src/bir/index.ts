@@ -12,3 +12,4 @@ export type {
   Bir1905FormInput,
   GenerateBirFormInput,
 } from "@repo/utils/bir-form";
+export { generateBirFormInputSchema } from "@repo/utils/bir-form";

@@ -6,14 +6,11 @@ import {
   ArrowRight,
   ArrowRightIcon,
   ArrowSquareOut,
-  Check,
   CheckCircle,
   CheckCircleIcon,
   CheckIcon,
   CircleNotch,
   Buildings,
-  CalendarDots,
-  Certificate,
   DownloadSimple,
   FilePdf,
   FileText,
@@ -29,7 +26,6 @@ import {
   PencilSimpleIcon,
   ShieldCheck,
   SparkleIcon,
-  Storefront,
   StopCircle,
   Plus,
   CaretDown,
@@ -60,18 +56,17 @@ import type { BirFormArtifact } from "@/lib/bir-form/artifact";
 import {
   latestRegistrationPlan,
   uniqueMessagesById,
-  type BarangayClearance,
   type BusinessChatMessage,
   type BusinessConversation,
   type ConversationSummary,
   type DtiBusinessNameForm,
-  type EbplsBusinessPermitReceipt,
+  type LguPermitSummary,
   type PaymentServiceType,
   type RegistrationPlan,
 } from "@/lib/business-chat";
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import type { IntakeQuestion } from "@/lib/questions";
-import type { BusinessRecord, RegisteredBusiness, TaxObligation } from "@/lib/registered-business";
+import type { RegisteredBusiness } from "@/lib/registered-business";
 
 type AskUserPart = Extract<BusinessChatMessage["parts"][number], { type: "tool-askUser" }>;
 type ReadyAskUserPart = AskUserPart & {
@@ -100,60 +95,6 @@ function textOf(message: BusinessChatMessage) {
     .join("");
 }
 
-function CompletionConfetti() {
-  return (
-    <div className="completion-confetti" aria-hidden="true">
-      {Array.from({ length: 40 }, (_, index) => (
-        <i key={index} />
-      ))}
-    </div>
-  );
-}
-
-export function ComplianceResultCard({
-  title,
-  subtitle,
-  records,
-  obligations = [],
-}: {
-  title: string;
-  subtitle: string;
-  records: BusinessRecord[];
-  obligations?: TaxObligation[];
-}) {
-  return (
-    <article className="compliance-result-card">
-      <header>
-        <span>
-          <ShieldCheck weight="duotone" />
-        </span>
-        <div>
-          <small>Setup result</small>
-          <strong>{title}</strong>
-          <p>{subtitle}</p>
-        </div>
-      </header>
-      <ul>
-        {records.map((record) => (
-          <li key={record.id}>
-            <div>
-              <strong>{record.title}</strong>
-              <span>{record.agency}</span>
-            </div>
-            <i className={record.status === "Not required" ? "muted" : ""}>{record.status}</i>
-          </li>
-        ))}
-      </ul>
-      {obligations.length > 0 && (
-        <footer>
-          <CalendarDots weight="duotone" />
-          <span>{obligations.length} tax reminders added to the business calendar</span>
-        </footer>
-      )}
-    </article>
-  );
-}
-
 function DetailRows({ rows }: { rows: [string, string][] }) {
   return (
     <div className="local-permit-fields">
@@ -167,115 +108,16 @@ function DetailRows({ rows }: { rows: [string, string][] }) {
   );
 }
 
-export function BarangayClearanceCard({
-  clearance,
+export function LguPermitCard({
+  permit,
   paid,
   onPay,
 }: {
-  clearance: BarangayClearance;
+  permit: LguPermitSummary;
   paid: boolean;
   onPay: (request: PaymentRequest) => void;
 }) {
-  const approved = clearance.status === "Approved";
-  return (
-    <article className={`local-permit-card ${approved ? "approved" : "payment-due"}`}>
-      <header>
-        <span>
-          <Certificate weight="duotone" />
-        </span>
-        <div>
-          <small>Electronic barangay clearance</small>
-          <strong>
-            {clearance.barangay}, {clearance.city}
-          </strong>
-        </div>
-        <i>
-          {approved ? (
-            <>
-              <CheckCircle weight="fill" /> Approved
-            </>
-          ) : (
-            "Payment required"
-          )}
-        </i>
-      </header>
-      <DetailRows
-        rows={[
-          ["Reference", clearance.referenceNumber],
-          ["Business", clearance.businessName],
-          ["Owner", clearance.ownerName],
-          ["Activity", clearance.businessActivity],
-          ["Business address", clearance.businessAddress],
-          [
-            approved ? "Valid until" : "Assessed fee",
-            approved && clearance.validUntil
-              ? new Date(clearance.validUntil).toLocaleDateString("en-PH", {
-                  year: "numeric",
-                  month: "short",
-                  day: "numeric",
-                })
-              : clearance.feeLabel,
-          ],
-        ]}
-      />
-      <section>
-        <small>Documents submitted</small>
-        <ul>
-          {clearance.supportingDocuments.map((document) => (
-            <li key={document}>
-              <FileText /> {document}
-            </li>
-          ))}
-        </ul>
-      </section>
-      <section className="local-permit-use">
-        <small>Used for</small>
-        <ul>
-          {clearance.usedFor.map((use) => (
-            <li key={use}>
-              <Check /> {use}
-            </li>
-          ))}
-        </ul>
-      </section>
-      {!approved && (
-        <footer className="local-permit-payment">
-          <div>
-            <small>Barangay clearance fee</small>
-            <strong>{clearance.feeLabel}</strong>
-          </div>
-          <button
-            type="button"
-            data-cuelume-toggle="page"
-            disabled={paid}
-            onClick={() =>
-              onPay({
-                serviceType: "barangay-clearance",
-                serviceLabel: "Barangay Business Clearance",
-                proposedName: clearance.businessName,
-                feeLabel: clearance.feeLabel,
-                serviceReference: clearance.referenceNumber,
-              })
-            }
-          >
-            {paid ? "Paid" : "Pay with eGovPay"} <ArrowRight weight="bold" />
-          </button>
-        </footer>
-      )}
-    </article>
-  );
-}
-
-export function EbplsPermitCard({
-  receipt,
-  paid,
-  onPay,
-}: {
-  receipt: EbplsBusinessPermitReceipt;
-  paid: boolean;
-  onPay: (request: PaymentRequest) => void;
-}) {
-  const issued = receipt.status === "Permit issued";
+  const issued = permit.state === "COMPLETED";
   return (
     <article className={`local-permit-card ebpls ${issued ? "approved" : "payment-due"}`}>
       <header>
@@ -283,8 +125,8 @@ export function EbplsPermitCard({
           <Buildings weight="duotone" />
         </span>
         <div>
-          <small>EBPLS</small>
-          <strong>Mayor’s / business permit</strong>
+          <small>DX LGU</small>
+          <strong>Business permit + barangay clearance</strong>
         </div>
         <i>
           {issued ? (
@@ -297,58 +139,55 @@ export function EbplsPermitCard({
         </i>
       </header>
       <p className="ebpls-expansion">
-        <strong>Electronic Business Permits and Licensing System</strong>
+        <strong>One authoritative local-permit flow</strong>
         <span>
           {issued
-            ? "The LGU permit has been issued electronically."
-            : "The LGU assessment is complete and ready for payment."}
+            ? "DX issued both documents after verifying the eGovPay transaction."
+            : "The BNRS credential passed validation and one combined LGU fee is ready."}
         </span>
       </p>
       <DetailRows
-        rows={[
-          ["EBPLS reference", receipt.referenceNumber],
-          ["Application", receipt.permitType],
-          ["Business", receipt.businessName],
-          ["Location", `${receipt.barangay}, ${receipt.city}`],
-          ["Barangay clearance", receipt.barangayClearanceReference],
-          [
-            issued ? "Valid until" : "Assessed fee",
-            issued && receipt.validUntil
-              ? new Date(receipt.validUntil).toLocaleDateString("en-PH", {
-                  year: "numeric",
-                  month: "short",
-                  day: "numeric",
-                })
-              : receipt.feeLabel,
-          ],
-        ]}
+        rows={
+          issued
+            ? [
+                ["Business", permit.businessName],
+                ["Issuing city", permit.city],
+                ["Business permit", permit.businessPermitNumber ?? "Issued"],
+                ["Barangay clearance", permit.barangayClearanceNumber ?? "Approved"],
+                [
+                  "Valid until",
+                  permit.validUntil
+                    ? new Date(permit.validUntil).toLocaleDateString("en-PH", {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })
+                    : "See issued documents",
+                ],
+              ]
+            : [
+                ["Business", permit.businessName],
+                ["Issuing city", permit.city],
+                ["Includes", "Business permit and barangay clearance"],
+                ["Assessed fee", permit.feeLabel],
+              ]
+        }
       />
-      <section>
-        <small>Attachments sent</small>
-        <ul>
-          {receipt.attachments.map((attachment) => (
-            <li key={attachment}>
-              <FileText /> {attachment}
-            </li>
-          ))}
-        </ul>
-      </section>
       {!issued && (
         <footer className="local-permit-payment">
           <div>
-            <small>Assessed LGU fees</small>
-            <strong>{receipt.feeLabel}</strong>
+            <small>Combined LGU fee</small>
+            <strong>{permit.feeLabel}</strong>
           </div>
           <button
             type="button"
             disabled={paid}
             onClick={() =>
               onPay({
-                serviceType: "ebpls-business-permit",
-                serviceLabel: "EBPLS Mayor’s / Business Permit",
-                proposedName: receipt.businessName,
-                feeLabel: receipt.feeLabel,
-                serviceReference: receipt.referenceNumber,
+                serviceType: "lgu-business-permit",
+                serviceLabel: "DX LGU Business Permit",
+                proposedName: permit.businessName,
+                feeLabel: permit.feeLabel,
               })
             }
           >
@@ -356,13 +195,6 @@ export function EbplsPermitCard({
           </button>
         </footer>
       )}
-      <footer>
-        <CircleNotch />
-        <span>
-          <small>NEXT</small>
-          <strong>{receipt.nextAction}</strong>
-        </span>
-      </footer>
     </article>
   );
 }
@@ -1135,24 +967,29 @@ function ToolPart({
       </div>
     );
   }
-  if (part.type === "tool-setupBooksAndInvoices") {
-    if (part.state !== "output-available")
+  if (
+    part.type === "tool-prepareLguBusinessPermit" ||
+    part.type === "tool-issueLguBusinessPermit"
+  ) {
+    if (part.state === "output-available")
       return (
-        <div className="chat-tool-row active">
-          <CircleNotch className="spin" />
-          <div>
-            <small>Setting up books and invoices</small>
-            <span className="chat-shimmer">Preparing mock accounting records</span>
-          </div>
-          <FileText />
-        </div>
+        <LguPermitCard
+          permit={part.output.permit}
+          paid={paidServices.has("lgu-business-permit")}
+          onPay={onSubmitPay}
+        />
       );
     return (
-      <ComplianceResultCard
-        title="Books and invoices set up"
-        subtitle="Accounting books and sample invoice controls are ready"
-        records={part.output.records}
-      />
+      <div className="local-permit-processing ebpls" role="status">
+        <span>
+          <CircleNotch className="spin" />
+        </span>
+        <div>
+          <small>DX LGU business permit</small>
+          <strong>Validating the BNRS credential…</strong>
+          <em>Preparing the combined permit and barangay-clearance assessment</em>
+        </div>
+      </div>
     );
   }
   if (part.type === "tool-prepareSelfEmployedRegistration") {
@@ -1192,67 +1029,6 @@ function ToolPart({
       </article>
     );
   }
-  if (part.type === "tool-setupTaxCompliance") {
-    if (part.state !== "output-available")
-      return (
-        <div className="chat-tool-row active">
-          <CircleNotch className="spin" />
-          <div>
-            <small>Setting up recurring tax filings</small>
-            <span className="chat-shimmer">Building the mock BIR filing calendar</span>
-          </div>
-          <CalendarDots />
-        </div>
-      );
-    return (
-      <ComplianceResultCard
-        title="Tax calendar set up"
-        subtitle="BIR registration and recurring filing reminders"
-        records={part.output.records}
-        obligations={part.output.obligations}
-      />
-    );
-  }
-  if (part.type === "tool-completeSectorPermits") {
-    if (part.state !== "output-available") return null;
-    return (
-      <ComplianceResultCard
-        title="Sector checks resolved"
-        subtitle="Food, fire, sanitary, and sector requirements"
-        records={part.output.records}
-      />
-    );
-  }
-  if (part.type === "tool-registerEmployerAgencies") {
-    if (part.state !== "output-available") return null;
-    return (
-      <ComplianceResultCard
-        title="Employer registrations resolved"
-        subtitle="SSS, PhilHealth, and Pag-IBIG applicability"
-        records={part.output.records}
-      />
-    );
-  }
-  if (part.type === "tool-finalizeBusinessRegistration") {
-    if (part.state !== "output-available") return null;
-    return (
-      <a
-        className="business-finalized-card"
-        data-cuelume-toggle="page"
-        href={`/?business=${part.output.businessId}`}
-      >
-        <span>
-          <Storefront weight="duotone" />
-        </span>
-        <div>
-          <small>All set up</small>
-          <strong>{part.output.businessName}</strong>
-          <p>Open records and tax calendar</p>
-        </div>
-        <ArrowRight weight="bold" />
-      </a>
-    );
-  }
   if (part.type === "tool-webSearch") return <SearchTool part={part} />;
   if (part.type === "tool-updatePlan") return null;
   if (part.type === "tool-editDtiBusinessNameForm") {
@@ -1282,53 +1058,6 @@ function ToolPart({
           <span className="chat-shimmer">Preparing your DTI form</span>
         </div>
         <PencilSimple />
-      </div>
-    );
-  }
-  if (part.type === "tool-submitBarangayClearance") {
-    if (part.state === "output-available")
-      return (
-        <BarangayClearanceCard
-          clearance={part.output.clearance}
-          paid={paidServices.has("barangay-clearance")}
-          onPay={onSubmitPay}
-        />
-      );
-    const barangay = "input" in part && part.input?.application?.barangay;
-    return (
-      <div className="local-permit-processing" role="status">
-        <span>
-          <CircleNotch className="spin" />
-        </span>
-        <div>
-          <small>Electronic barangay clearance</small>
-          <strong>Submitting{barangay ? ` to ${barangay}` : ""}…</strong>
-          <em>Checking registration and business-address documents</em>
-        </div>
-      </div>
-    );
-  }
-  if (part.type === "tool-submitEbplsBusinessPermit") {
-    if (part.state === "output-available")
-      return (
-        <EbplsPermitCard
-          receipt={part.output.receipt}
-          paid={paidServices.has("ebpls-business-permit")}
-          onPay={onSubmitPay}
-        />
-      );
-    return (
-      <div className="local-permit-processing ebpls" role="status">
-        <span>
-          <CircleNotch className="spin" />
-        </span>
-        <div>
-          <small>EBPLS · Electronic Business Permits and Licensing System</small>
-          <strong>LGU assessment in progress…</strong>
-          <em>
-            Validating the application, approved barangay clearance, and submitted attachments
-          </em>
-        </div>
       </div>
     );
   }
@@ -1362,16 +1091,7 @@ export function PaymentDialog({
       const response = await fetch("/api/payments/egovpay", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          payment.serviceType === "dti-business-name"
-            ? { conversationId, serviceType: payment.serviceType }
-            : {
-                conversationId,
-                serviceType: payment.serviceType,
-                proposedName: payment.proposedName,
-                serviceReference: payment.serviceReference,
-              },
-        ),
+        body: JSON.stringify({ conversationId, serviceType: payment.serviceType }),
       });
       const result = (await response.json()) as {
         checkoutUrl?: string;
@@ -1594,17 +1314,10 @@ export function BusinessChatScreen({
     [localPaymentStatuses],
   );
   const latestPlan = latestRegistrationPlan(visibleMessages);
-  const registrationFinalized = visibleMessages.some((message) =>
-    message.parts.some(
-      (part) =>
-        part.type === "tool-finalizeBusinessRegistration" && part.state === "output-available",
-    ),
-  );
   const completedPlanSteps =
     latestPlan?.plan.steps.filter((step) => step.status === "completed").length ?? 0;
   const previousStatus = useRef(status);
   const previousCompletedPlanSteps = useRef(completedPlanSteps);
-  const wasRegistrationFinalized = useRef(registrationFinalized);
   const hadError = useRef(Boolean(error));
   const pending: PendingQuestion | null = (() => {
     for (const message of [...visibleMessages].reverse()) {
@@ -1653,23 +1366,17 @@ export function BusinessChatScreen({
     if (
       status === "ready" &&
       (previous === "submitted" || previous === "streaming") &&
-      !registrationFinalized &&
       completedPlanSteps <= previousCompletedPlanSteps.current &&
       !error &&
       !continuationError
     )
       play("ready");
     previousStatus.current = status;
-  }, [completedPlanSteps, continuationError, error, registrationFinalized, status]);
+  }, [completedPlanSteps, continuationError, error, status]);
   useEffect(() => {
-    if (completedPlanSteps > previousCompletedPlanSteps.current && !registrationFinalized)
-      play("success");
+    if (completedPlanSteps > previousCompletedPlanSteps.current) play("success");
     previousCompletedPlanSteps.current = completedPlanSteps;
-  }, [completedPlanSteps, registrationFinalized]);
-  useEffect(() => {
-    if (registrationFinalized && !wasRegistrationFinalized.current) play("success");
-    wasRegistrationFinalized.current = registrationFinalized;
-  }, [registrationFinalized]);
+  }, [completedPlanSteps]);
   useEffect(() => {
     const failed = Boolean(error || continuationError);
     if (failed && !hadError.current) play("error");
@@ -1729,7 +1436,6 @@ export function BusinessChatScreen({
 
   return (
     <div className="screen agent-chat-screen">
-      {!management && registrationFinalized && <CompletionConfetti />}
       <StatusBar />
       <header className="chat-header" ref={headerRef}>
         <button data-cuelume-toggle="page" onClick={onBack} aria-label="Go back">

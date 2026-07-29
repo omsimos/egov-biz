@@ -32,6 +32,8 @@ export const conversations = sqliteTable(
     bnrsApplicationId: text("bnrs_application_id"),
     bnrsTransactionUuid: text("bnrs_transaction_uuid"),
     bnrsCertificateNumber: text("bnrs_certificate_number"),
+    lguApplicationId: text("lgu_application_id"),
+    lguTransactionUuid: text("lgu_transaction_uuid"),
     activeStreamId: text("active_stream_id"),
     createdAt: isoTimestamp("created_at"),
     updatedAt: isoTimestamp("updated_at"),
@@ -42,7 +44,29 @@ export const conversations = sqliteTable(
     uniqueIndex("idx_conversations_bnrs_application").on(table.bnrsApplicationId),
     uniqueIndex("idx_conversations_bnrs_transaction").on(table.bnrsTransactionUuid),
     uniqueIndex("idx_conversations_bnrs_certificate").on(table.bnrsCertificateNumber),
+    uniqueIndex("idx_conversations_lgu_application").on(table.lguApplicationId),
+    uniqueIndex("idx_conversations_lgu_transaction").on(table.lguTransactionUuid),
     index("idx_conversations_business_updated").on(table.businessId, table.updatedAt),
+  ],
+);
+
+export const conversationArtifacts = sqliteTable(
+  "conversation_artifacts",
+  {
+    artifactId: text("artifact_id").primaryKey(),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    ownerEgovUserId: text("owner_egov_user_id").notNull(),
+    kind: text("kind").$type<"BIR_FORM_1901" | "BIR_FORM_1905">().notNull(),
+    createdAt: isoTimestamp("created_at"),
+  },
+  (table) => [
+    index("idx_conversation_artifacts_conversation_created").on(
+      table.conversationId,
+      table.createdAt,
+    ),
+    index("idx_conversation_artifacts_owner_created").on(table.ownerEgovUserId, table.createdAt),
   ],
 );
 
@@ -179,9 +203,17 @@ export const authSessions = sqliteTable(
 );
 
 export const conversationsRelations = relations(conversations, ({ many }) => ({
+  artifacts: many(conversationArtifacts),
   messages: many(messages),
   payments: many(payments),
   smsDispatches: many(smsDispatches),
+}));
+
+export const conversationArtifactsRelations = relations(conversationArtifacts, ({ one }) => ({
+  conversation: one(conversations, {
+    fields: [conversationArtifacts.conversationId],
+    references: [conversations.id],
+  }),
 }));
 
 export const messagesRelations = relations(messages, ({ one }) => ({

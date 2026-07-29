@@ -16,7 +16,6 @@ export async function GET(request: Request) {
 
   const businesses = await listBusinesses({
     actor: bnrsActorFromProfile(session.rawProfile),
-    legacyProfileId: session.profile.id,
   });
   return NextResponse.json({ data: businesses }, { headers: { "Cache-Control": "no-store" } });
 }
