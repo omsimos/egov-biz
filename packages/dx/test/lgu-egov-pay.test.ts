@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type {
-  EgovPayClient,
-  EgovPayGeneratePaymentRequest,
-  EgovPayTransaction,
-} from "@repo/egov/eGovPay/types";
+import type { EgovPayTransaction } from "egov.js";
+import type { EgovPayClient, EgovPayGeneratePaymentRequest } from "../src/egov-pay.js";
 
 import {
   createEgovPayLguPaymentProvider,

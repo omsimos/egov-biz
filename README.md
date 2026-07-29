@@ -1,7 +1,8 @@
 # egov-scripts
 
-Monorepo for **Omsimos**' eGov Hackathon work: a shared, typed **eGov API foundation**
-(the `packages/egov` SDK + `transcript-scraper`) plus the products built on it.
+Monorepo for **Omsimos**' eGov Hackathon work: products built on the standalone
+[`egov.js`](https://github.com/omsimos/egov.js) SDK plus shared data, DX, and
+transcript tooling.
 
 The flagship product is **`rag-hor`**, a fact-checked view of Philippine congressional
 hearings: long-form hearing videos are transcribed with timestamps, refined, and handed
@@ -24,7 +25,6 @@ egov-scripts/
 ├── packages/
 │   ├── db/                 # Shared database package
 │   ├── dx/                 # BNRS, LGU, and BIR business-registration flows
-│   ├── egov/               # Typed client SDK for 9 eGovPH partner services
 │   └── transcript-scraper/ # YouTube timestamped-transcript extractor
 ├── docs/                   # eGov API architecture & reference (shared)
 ├── turbo.json              # Turborepo task graph
@@ -48,13 +48,13 @@ cp .env.sample .env      # fill in the eGov credentials you need
 
 Root scripts run through Turborepo:
 
-| Command | What it does |
-|---|---|
-| `bun run build` | Build all packages/apps |
-| `bun run test` | Run every workspace's tests |
-| `bun run lint` / `bun run format` | Lint / format all workspaces |
-| `bun run check-types` | Type-check all workspaces |
-| `bun run dev:business` | Run the eGov Agentic Business app |
+| Command                           | What it does                      |
+| --------------------------------- | --------------------------------- |
+| `bun run build`                   | Build all packages/apps           |
+| `bun run test`                    | Run every workspace's tests       |
+| `bun run lint` / `bun run format` | Lint / format all workspaces      |
+| `bun run check-types`             | Type-check all workspaces         |
+| `bun run dev:business`            | Run the eGov Agentic Business app |
 
 ## Workspaces
 
@@ -73,13 +73,12 @@ timestamp-aware vectors, SQLite for metadata/conversations, Redis for resumable
 streams. Setup, ingestion, and agent details are in its own
 [README](./apps/rag-hor/README.md).
 
-### `packages/egov` — eGovPH SDK
+### `egov.js` — eGovPH SDK
 
-A typed, tree-shakeable SDK wrapping nine eGovPH partner services (eGov AI, Compass,
-eMessage, eGovChain, eReport, eGov SSO, eVerify, eGovPay, Face Liveness). Each service
-exposes `create(...)` / `fromEnv(...)`, ships unit tests, and self-documents via an
-endpoint catalog. Which services the product uses (and why) is covered in
-[`docs/architecture.md`](./docs/architecture.md) §3.
+The SDK is maintained in
+[`omsimos/egov.js`](https://github.com/omsimos/egov.js) and consumed from npm as
+[`egov.js`](https://www.npmjs.com/package/egov.js). It provides generated clients and
+types for nine eGovPH partner services from a canonical OpenAPI document.
 
 ### `packages/transcript-scraper` — transcript extraction
 
@@ -88,7 +87,7 @@ segments + SRT. See its [README](./packages/transcript-scraper/README.md).
 
 ## Configuration
 
-All eGov service base URLs and credential slots are declared in `.env.sample`. The SDK
-fails fast when a required credential is missing. Base URLs currently target
+All eGov service base URLs and credential slots are declared in `.env.sample`. App
+integration code fails fast when a required credential is missing. Base URLs currently target
 hackathon/staging hosts (`hackathon-*.e.gov.ph`, `*.oueg.info`); promote to production
 endpoints before any real deployment. Keep all credentials server-side.

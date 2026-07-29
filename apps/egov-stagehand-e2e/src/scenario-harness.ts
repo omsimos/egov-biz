@@ -263,6 +263,14 @@ export class ScenarioHarness {
     await this.waitForText("authenticated home", "Hi, Josh", 60_000);
     await this.pass("dev session authenticated");
 
+    await page.reload({ waitUntil: "load", timeoutMs: 30_000 });
+    await this.waitForText("authenticated home after reload", "Hi, Josh", 60_000);
+    await this.expectBodyNot(
+      /Sign in again|Sign in to eGovPH/,
+      "Reloading must restore the authenticated session instead of showing remembered-account login.",
+    );
+    await this.pass("authenticated session survives reload");
+
     await this.clickControl("open Business", "nav[aria-label='eGovPH services'] button");
     await this.waitForText("Business landing", /Describe your business|Start something new/);
   }

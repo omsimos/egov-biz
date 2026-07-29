@@ -1,10 +1,10 @@
 # eGov API Architecture & Reference
 
-*Grounded in the repository as of 2026-07-21. This is the shared foundation — the eGov
+_Grounded in the repositories as of 2026-07-30. This is the shared foundation — the eGov
 service SDK and supporting packages — that any Omsimos product idea can build on. The first
 product built on it is the congressional hearing fact-checker (`apps/rag-hor`); its
 product-specific architecture lives in
-[`apps/rag-hor/docs/architecture.md`](../apps/rag-hor/docs/architecture.md).*
+[`apps/rag-hor/docs/architecture.md`](../apps/rag-hor/docs/architecture.md)._
 
 ---
 
@@ -16,7 +16,7 @@ foundation; the apps are consumers of it.
 ```
 egov-scripts/
 ├── packages/
-│   ├── egov/               # Typed client SDK for eGovPH partner APIs (9 services)  ← core
+│   ├── egov/               # Deprecated SDK retained only during migration
 │   └── transcript-scraper/ # YouTube timestamped-transcript extractor (TypeScript)
 ├── apps/
 │   ├── egov-agentic-biz/   # Agentic business-registration assistant
@@ -26,7 +26,7 @@ egov-scripts/
 └── .env.sample             # All service base URLs + credential slots
 ```
 
-The **egov SDK** gives typed, tested access to the eGovPH partner services; the
+The sibling **`egov.js` SDK** gives typed, tested access to the eGovPH partner services; the
 **transcript-scraper** turns a YouTube video into timestamped text. These are
 product-agnostic building blocks — the same SDK can back a hearing fact-checker, a citizen
 services bot, a budget explorer, or any other idea that consumes eGov APIs.
@@ -44,34 +44,40 @@ A dependency-free TypeScript module (`packages/transcript-scraper/src/api.ts`) t
 
 A video URL yields **timestamped** segments with a language code and an auto-generated flag.
 
-## 3. Package: `egov` — the eGovPH SDK
+## 3. Package: `egov.js` — the eGovPH SDK
 
-A typed, tree-shakeable SDK (`packages/egov/src`) exposing **9 eGovPH services** as independent submodule exports. A shared `core/` provides:
+A typed, generated SDK maintained in the separate
+[`omsimos/egov.js`](https://github.com/omsimos/egov.js) repository and linked into this
+workspace as `egov.js`. Its OpenAPI 3.1 document is the source of truth for **9 eGovPH
+services**.
 
-- `client.ts` — `createEgovTransport()`, a thin `fetch` wrapper (URL/query building, JSON/raw bodies, `Accept: application/json`, error normalization to `EgovApiError`).
-- `env.ts` — typed environment resolution (`requireEgovEnvironment`) over Bun/Node env; the union `EgovEnvironmentName` enumerates every credential the SDK reads.
-- `catalog.ts` — a self-describing endpoint catalog (`defineEgovCatalog`) so each service documents its own endpoints, methods, params, and responses.
-- Every service ships `create(...)` (explicit config) and `fromEnv(...)` (reads credentials from env), plus unit tests under `packages/egov/test/`.
+- `createClient({ baseUrl })` creates a provider-scoped generated Fetch client.
+- Named service classes such as `egovSso`, `egovPay`, `egovAi`, and `compass` group
+  generated operations.
+- Calls use grouped `body`, `path`, and `query` input plus shared `auth`, `signal`,
+  and `throwOnError` options.
+- Types and operations are exported from the package root; the OpenAPI artifact is
+  available as `egov.js/openapi.json`.
 
 ### 3.1 Service inventory (from code + `.env.sample`)
 
-| Service | Base URL (`.env.sample`) | Auth (env) | Implemented capability | Example use |
-|---|---|---|---|---|
-| **eGov AI** | `egov-ai-core-ws.oueg.info` | `EGOVAI_ACCESS_CODE` → short-lived bearer + **credits** | `ai_assistant`, `translator`, `document_extractor` (OCR), `speech_maker`, `laws_and_regulations`, `tourism`, `credits` | Text repair, translation, summarization, PDF OCR |
-| **eGov Compass** | `dbm-ws.oueg.info` | `EGOVCOMPASS_API_KEY` | SARO, NCA, SAAODB (records + dashboard), LGSF (records + dashboard) | Budget lookups / fact-checking |
-| **eMessage** | `ws-message.e.gov.ph` | `EMESSAGE_ACCESS_TOKEN` | `sendSms` (POST `/messaging/v1/sms/push`) | SMS notifications |
-| **eGovChain** | (EVM JSON-RPC) | none (public RPC) | `eth_*` JSON-RPC: `blockNumber`, `chainId`, `getBalance`, `getLogs`, `call`, `sendRawTransaction` | Anchor/verify document or record hashes |
-| **eReport** | `stg-ereport-ws.oueg.info` | `EREPORT_ACCESS_TOKEN` | submit complaint (+OTP flow), list reports/types, region→barangay lookups | Citizen reporting workflows |
-| **eGov SSO** | `hackathon-sso.e.gov.ph` | `EGOVSSO_PARTNER_CODE`/`SECRET` | OAuth-style citizen login → citizen profile | Verified user accounts |
-| **eVerify** | `hackathon-everify-api.e.gov.ph` | `EVERIFY_CLIENT_ID`/`SECRET`/`PUBKEY` | identity verification, QR verify | PhilSys identity checks |
-| **eGovPay** | `egovpay-pgi-ws-dev.oueg.info` | `EGOVPAY_API_KEY` | payments/settlement | Government payments |
-| **eGov Face Liveness** | `hackathon-face-liveness-api.e.gov.ph` | `EGOVLIVENESS_API_KEY` | biometric liveness sessions | Anti-spoofing during identity checks |
+| Service                | Base URL (`.env.sample`)               | Auth (env)                                              | Implemented capability                                                                                                 | Example use                                      |
+| ---------------------- | -------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| **eGov AI**            | `egov-ai-core-ws.oueg.info`            | `EGOVAI_ACCESS_CODE` → short-lived bearer + **credits** | `ai_assistant`, `translator`, `document_extractor` (OCR), `speech_maker`, `laws_and_regulations`, `tourism`, `credits` | Text repair, translation, summarization, PDF OCR |
+| **eGov Compass**       | `dbm-ws.oueg.info`                     | `EGOVCOMPASS_API_KEY`                                   | SARO, NCA, SAAODB (records + dashboard), LGSF (records + dashboard)                                                    | Budget lookups / fact-checking                   |
+| **eMessage**           | `ws-message.e.gov.ph`                  | `EMESSAGE_ACCESS_TOKEN`                                 | `sendSms` (POST `/messaging/v1/sms/push`)                                                                              | SMS notifications                                |
+| **eGovChain**          | (EVM JSON-RPC)                         | none (public RPC)                                       | `eth_*` JSON-RPC: `blockNumber`, `chainId`, `getBalance`, `getLogs`, `call`, `sendRawTransaction`                      | Anchor/verify document or record hashes          |
+| **eReport**            | `stg-ereport-ws.oueg.info`             | `EREPORT_ACCESS_TOKEN`                                  | submit complaint (+OTP flow), list reports/types, region→barangay lookups                                              | Citizen reporting workflows                      |
+| **eGov SSO**           | `hackathon-sso.e.gov.ph`               | `EGOVSSO_PARTNER_CODE`/`SECRET`                         | OAuth-style citizen login → citizen profile                                                                            | Verified user accounts                           |
+| **eVerify**            | `hackathon-everify-api.e.gov.ph`       | `EVERIFY_CLIENT_ID`/`SECRET`/`PUBKEY`                   | identity verification, QR verify                                                                                       | PhilSys identity checks                          |
+| **eGovPay**            | `egovpay-pgi-ws-dev.oueg.info`         | `EGOVPAY_API_KEY`                                       | payments/settlement                                                                                                    | Government payments                              |
+| **eGov Face Liveness** | `hackathon-face-liveness-api.e.gov.ph` | `EGOVLIVENESS_API_KEY`                                  | biometric liveness sessions                                                                                            | Anti-spoofing during identity checks             |
 
 > Base URLs are **hackathon/staging** hosts (`hackathon-*.e.gov.ph`, `*.oueg.info`), not production. This must be accounted for before any real deployment.
 
 ### 3.2 eGov AI — the detail that matters most
 
-`packages/egov/src/eGovAi/api.ts` implements a **credit-metered, token-based** service:
+The generated `egovAi` service implements a **credit-metered, token-based** API:
 
 1. `generateAccessToken(accessCode)` → `{ access_token, credits_total, credits_remaining, expires_in_seconds }`. All subsequent calls send `Authorization: Bearer <access_token>`.
 2. Generation endpoints take `{ prompt, category }` and return `{ data, session_id }`: **`ai_assistant`** (general conversational generation), `laws_and_regulations`, `speech_maker`, `tourism`.
@@ -80,6 +86,7 @@ A typed, tree-shakeable SDK (`packages/egov/src`) exposing **9 eGovPH services**
 5. `getTokenCredits()` → `{ credits_used, credits_remaining, credits_total, expires_at }`.
 
 **Key facts:**
+
 - **There is no speech-to-text.** `speech_maker` is generation (TTS-style), not transcription.
 - **Credits are a hard, metered cost.** Every AI call draws down a finite team credit balance tied to a short-lived token — it must shape batching/caching decisions in any consumer.
 - **It is not an embeddings or streamed-tool-call provider** — its catalog exposes neither, so it fits as a text-generation/translation/OCR tool, not as an agent's model backend.
@@ -87,14 +94,14 @@ A typed, tree-shakeable SDK (`packages/egov/src`) exposing **9 eGovPH services**
 
 ### 3.3 eGov Compass — authenticated budget data
 
-`packages/egov/src/eGovCompass/*` is an **authenticated partner client** (`dbm-ws.oueg.info`, `EGOVCOMPASS_API_KEY`) — distinct from, and stronger than, the public undocumented `compass-api.dbm.gov.ph`. It returns structured, typed budget data:
+The generated `compass` service is an **authenticated partner client** (`dbm-ws.oueg.info`, `EGOVCOMPASS_API_KEY`) — distinct from, and stronger than, the public undocumented `compass-api.dbm.gov.ph`. It returns structured, typed budget data:
 
 - **SAAODB records + dashboard:** the full appropriations → allotments → obligations → disbursements cascade, with `unobligated`/`unreleased`, obligation/disbursement **rates**, expense-class breakdown (`PS`/`MOOE`/`CO`/`FINEX`), and top entities. Queryable by `reportYear`, `period` (`FY`/`Q1`–`Q4`), `sheetScope` (`agency`/`sucs`/`summary`), and entity.
 - **SARO** records (release orders, by dept/agency/expense-class/SARO number), **NCA** records (cash allocations), **LGSF** records + dashboard (local government support fund, by region/province/municipality/program).
 
 ### 3.4 eGovChain, eMessage, and the rest
 
-- **eGovChain** (`packages/egov/src/eGovChain`) is an **EVM-compatible JSON-RPC client** (`eth_*` methods). Anchoring a hash means submitting a transaction via `sendRawTransaction`; verification reads it back.
+- **eGovChain** is an **EVM-compatible JSON-RPC client**. Anchoring a hash means submitting a documented JSON-RPC transaction; verification reads it back.
 - **eMessage** implements **SMS push only** in code (the catalog blurb mentions email/in-app, but only `sendSms` is wired).
 - **eReport** is a full citizen-complaint workflow (OTP-gated) with PSGC location lookups.
 - **eGov SSO** is an OAuth-style citizen login returning a rich profile (national ID, passport, educational attainment). **eVerify / eGovPay / Face Liveness** cover identity, payments, and biometric liveness respectively.
@@ -103,8 +110,10 @@ A typed, tree-shakeable SDK (`packages/egov/src`) exposing **9 eGovPH services**
 
 ## 4. Configuration, testing, and maturity
 
-- **Config:** every eGov service base URL and credential slot is declared in the root `.env.sample`; the SDK fails fast via `requireEgovEnvironment` when a credential is missing.
-- **Unit tests:** `packages/egov/test/` has a spec per service (`egov-ai`, `compass`, `emessage`, `egov-chain`, `everify`, `ereport`, `egov-sso`, `egov-pay`, `face-liveness`) plus `client` and `env`; `transcript-scraper` has its own test.
+- **Config:** every eGov service base URL and credential slot is declared in the root `.env.sample`; application integration code reads credentials and configures provider-scoped clients.
+- **Unit tests:** the standalone SDK tests generated serialization, authentication,
+  error handling, and all service groupings in its own repository; this monorepo tests
+  the SSO, payment, and business-flow integrations that consume it.
 
 The typed SDK and per-service tests provide a reusable integration foundation for
 products that talk to the real services.

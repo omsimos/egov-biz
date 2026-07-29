@@ -1,7 +1,7 @@
 # Grounding the Gavel: A Multi-Agent Civic Platform for Understanding and Fact-Checking Philippine Congressional Proceedings
 
-*Philippine eGov Hackathon — Concept & Feasibility Paper*
-*Prepared 2026-07-21. Factual claims about data sources were verified against primary sources on this date; verification is a point-in-time snapshot and endpoints may change.*
+_Philippine eGov Hackathon — Concept & Feasibility Paper_
+_Prepared 2026-07-21. Factual claims about data sources were verified against primary sources on this date; verification is a point-in-time snapshot and endpoints may change._
 
 ---
 
@@ -9,9 +9,9 @@
 
 Philippine congressional sessions and committee hearings are streamed publicly, yet they remain effectively closed to the citizens they serve: they run for hours, are conducted in Filipino and Taglish, and offer no way to tell whether what is said on the floor is true. Publicity is not the same as accessibility, and accessibility without verifiability is not the same as informed citizenship.
 
-We — the Omsimos team — propose a civic platform that turns these proceedings into an accessible, comprehensible, and *verifiable* public record. A citizen can ask a plain-language question and be guided to the relevant hearings; open a session and receive a grounded summary of what was said and decided; and see every notable claim checked against authoritative government records — each returned as **claim → verdict → cited source → backing excerpt**. Surrounding the conversation are two structured surfaces that make the institution legible: an **agenda calendar** of sessions, hearings, and committee meetings, and a **legislative-data explorer** of bills, legislators, sessions, and statistics. Crucially, these surfaces are not decoration — they share the same authoritative data the fact-checker uses, so browsing and verification reinforce one another.
+We — the Omsimos team — propose a civic platform that turns these proceedings into an accessible, comprehensible, and _verifiable_ public record. A citizen can ask a plain-language question and be guided to the relevant hearings; open a session and receive a grounded summary of what was said and decided; and see every notable claim checked against authoritative government records — each returned as **claim → verdict → cited source → backing excerpt**. Surrounding the conversation are two structured surfaces that make the institution legible: an **agenda calendar** of sessions, hearings, and committee meetings, and a **legislative-data explorer** of bills, legislators, sessions, and statistics. Crucially, these surfaces are not decoration — they share the same authoritative data the fact-checker uses, so browsing and verification reinforce one another.
 
-The design is deliberately *not* "transcribe and dump into a chatbot." A working transcription proof-of-concept and a running RAG hearing agent already exist (`apps/rag-hor`: timestamp-grounded retrieval over hearing transcripts with inline citations); on top of that foundation Omsimos is adding an eGov-AI text-refinement layer, specialized per-source subagents (agent orchestration is moving to **eve** (Vercel)), and a fact-checker whose every verdict is traceable to a government record. The government data backbone — legislative records, jurisprudence, and the national budget — is confirmed live and openly accessible today, so the premise is feasible now, not aspirational.
+The design is deliberately _not_ "transcribe and dump into a chatbot." A working transcription proof-of-concept and a running RAG hearing agent already exist (`apps/rag-hor`: timestamp-grounded retrieval over hearing transcripts with inline citations); on top of that foundation Omsimos is adding an eGov-AI text-refinement layer, specialized per-source subagents (agent orchestration is moving to **eve** (Vercel)), and a fact-checker whose every verdict is traceable to a government record. The government data backbone — legislative records, jurisprudence, and the national budget — is confirmed live and openly accessible today, so the premise is feasible now, not aspirational.
 
 ---
 
@@ -23,11 +23,11 @@ In practice, four barriers stand between a citizen and that material:
 
 1. **Duration.** Sessions and hearings run for hours. A single session captured by our proof-of-concept — "19th Congress 3rd Regular Session #07" — runs ~97 minutes (5,840 seconds); full hearing days routinely run far longer. Few citizens can watch proceedings end to end to learn what was decided.
 
-2. **Comprehension.** Proceedings are conducted in Filipino and Taglish (Tagalog-English code-switching). Filipino is under-resourced in language technology relative to major languages — the very gap the *Batayan* Filipino NLP benchmark was built to measure ([arXiv:2502.14911](https://arxiv.org/abs/2502.14911)) — and automatic captions reflect it: our sample auto-caption output contains visibly degraded fragments. Raw captions are a weak substitute for understanding.
+2. **Comprehension.** Proceedings are conducted in Filipino and Taglish (Tagalog-English code-switching). Filipino is under-resourced in language technology relative to major languages — the very gap the _Batayan_ Filipino NLP benchmark was built to measure ([arXiv:2502.14911](https://arxiv.org/abs/2502.14911)) — and automatic captions reflect it: our sample auto-caption output contains visibly degraded fragments. Raw captions are a weak substitute for understanding.
 
 3. **Verifiability.** Even a citizen who watches an entire hearing cannot easily check whether a floor statement — "this bill already passed on third reading," "the agency's budget was cut," "the Supreme Court already ruled on this" — is accurate. Claims are not linked to the records that would confirm or refute them.
 
-4. **Navigability.** There is no single, citizen-friendly way to see *what is being discussed, when, and by whom* — to move from "I care about education spending" to the specific hearings, bills, and legislators involved. The information exists across separate government portals; connecting it is manual, expert work.
+4. **Navigability.** There is no single, citizen-friendly way to see _what is being discussed, when, and by whom_ — to move from "I care about education spending" to the specific hearings, bills, and legislators involved. The information exists across separate government portals; connecting it is manual, expert work.
 
 The accessibility gap is therefore not merely "too long to watch." It is the absence of a fast, comprehensible, verifiable, and navigable rendering of what government is doing — and, downstream, an electorate forced to judge its representatives on rhetoric and virality rather than record. In an information environment where misinformation spreads faster than correction, that gap is a direct threat to the quality of civic decisions, including how people vote.
 
@@ -39,7 +39,7 @@ The accessibility gap is therefore not merely "too long to watch." It is the abs
 
 A civic platform with two tightly integrated halves:
 
-- **A conversational agent** that helps citizens *find, understand, and verify* congressional activity.
+- **A conversational agent** that helps citizens _find, understand, and verify_ congressional activity.
 - **Structured views** — an agenda calendar and a legislative-data explorer — that make the institution browsable and that share their data with the agent.
 
 The connective tissue is a shared, authoritative data foundation (§5): the same government records power the views, ground the agent's answers, and back the fact-checker's verdicts. Nothing the platform asserts is unsourced.
@@ -48,9 +48,9 @@ The connective tissue is a shared, authoritative data foundation (§5): the same
 
 The agent operates at two levels of scope, matching how a citizen actually engages:
 
-- **General discovery.** A user asks a plain-language question — *"What is Congress doing about flood-control funding?"* — and the agent searches the legislative data and trusted sources, then **suggests the relevant hearings, sessions, and bills**, with a short grounded explanation of each and why it matches. Discovery turns a vague civic interest into concrete, cited entry points.
+- **General discovery.** A user asks a plain-language question — _"What is Congress doing about flood-control funding?"_ — and the agent searches the legislative data and trusted sources, then **suggests the relevant hearings, sessions, and bills**, with a short grounded explanation of each and why it matches. Discovery turns a vague civic interest into concrete, cited entry points.
 
-- **Session-scoped conversation.** The user opens a specific hearing and the agent **narrows its scope to that session**: it works from that session's transcript (§4.1) and its associated bills, committee, and participants, answering questions about *this* proceeding and fact-checking *its* claims. Scoping keeps answers precise and citations tight, and prevents the context-dilution that makes a general chatbot vague.
+- **Session-scoped conversation.** The user opens a specific hearing and the agent **narrows its scope to that session**: it works from that session's transcript (§4.1) and its associated bills, committee, and participants, answering questions about _this_ proceeding and fact-checking _its_ claims. Scoping keeps answers precise and citations tight, and prevents the context-dilution that makes a general chatbot vague.
 
 ### 3.3 Structured views: agenda calendar and legislative-data explorer
 
@@ -59,6 +59,7 @@ Two browsable surfaces complement the conversation:
 **Agenda calendar.** A unified calendar of **plenary sessions, committee hearings, and committee meetings** across both chambers — what is scheduled, what has occurred, and links into the corresponding streams and transcripts. Meeting schedules are ingested from the official House committee-meetings listing ([congress.gov.ph/committees/committee-meetings](https://congress.gov.ph/committees/committee-meetings)) and joined to the structured committee and legislator data from the backbone (§5.1), so a scheduled meeting resolves to its committee, its members, and — once it airs — its transcript. This answers "what is happening and when," and is the natural jumping-off point into a session-scoped conversation.
 
 **Legislative-data explorer.** Structured, filterable views over the legislative record:
+
 - **Bills** — all measures, with **House bills** and **Senate bills** distinguished, filterable by congress, type, author, status, and date, and searchable.
 - **People in government** — **senators and representatives**, with their authored measures and committee memberships.
 - **Congressional sessions** — the congresses and their sittings.
@@ -70,7 +71,7 @@ These views are powered directly by the government data backbone (§5.1), so the
 
 The views are not a separate product bolted onto a chatbot — they and the agent **share one data layer and continuously supplement each other**:
 
-- When the agent fact-checks a floor claim about a bill's status, it draws on the *same* legislative records the Bills view exposes; a user can click from a verdict straight into the underlying bill.
+- When the agent fact-checks a floor claim about a bill's status, it draws on the _same_ legislative records the Bills view exposes; a user can click from a verdict straight into the underlying bill.
 - When the agent suggests hearings during discovery, those suggestions land the user in the calendar and the relevant legislative entities.
 - When a user browses a legislator or a bill, the agent can summarize and contextualize it, and surface the hearings where it was discussed.
 
@@ -78,7 +79,7 @@ The result is a loop: **structured data makes the agent's answers verifiable; th
 
 ### 3.5 Integration with eGovPH
 
-The platform is designed as an eGovPH-native civic service. Omsimos maintains an in-repo typed SDK (`packages/egov/`) that already wraps nine eGovPH services; the product uses a deliberate subset:
+The platform is designed as an eGovPH-native civic service. Omsimos maintains the standalone typed [`egov.js`](https://github.com/omsimos/egov.js) SDK for nine eGovPH services; the product uses a deliberate subset:
 
 - **Government data as the source of truth.** Legislative records, jurisprudence, and budget data come from open Philippine government and civic-tech data services (§5.1) — including the authenticated **eGov Compass** partner API for the national budget — not from a model's memory or generic web content.
 - **eGov AI as building blocks.** Omsimos uses **AI Assistant**, **Translator**, and **Document Extractor** as the building blocks of its refinement layer (§4.2, §5.3). eGov AI offers no speech-to-text, so it does not replace the transcription source, and its Filipino/Taglish quality must be validated empirically.
@@ -101,11 +102,12 @@ A working proof-of-concept (`packages/transcript-scraper/`, dependency-free Type
 ### 4.2 Transcription-refinement middleware (built on eGovPH AI services)
 
 Before the transcript reaches the agent, it passes through a server-side refinement middleware — an Omsimos component built on eGovPH's AI Assistant and Translator — that performs **one pass with three outputs**:
-1. **Repair (eGov AI Assistant).** An LLM cleans each caption segment *in place* — fixing garble, restoring punctuation and casing — operating **within** segment boundaries so timestamps are preserved.
-2. **Confidence flagging.** Spans the pass cannot confidently reconstruct are tagged; these flags travel downstream so the fact-checker can *flag, not force-check* unreliable spans rather than fabricate a verdict.
+
+1. **Repair (eGov AI Assistant).** An LLM cleans each caption segment _in place_ — fixing garble, restoring punctuation and casing — operating **within** segment boundaries so timestamps are preserved.
+2. **Confidence flagging.** Spans the pass cannot confidently reconstruct are tagged; these flags travel downstream so the fact-checker can _flag, not force-check_ unreliable spans rather than fabricate a verdict.
 3. **Translation (eGov Translator).** A clean parallel version (e.g. English alongside Filipino) supports accessibility and claim extraction.
 
-Two invariants make this safe: **the raw caption is retained as source-of-truth** (repair is a display/aid layer, never presented as ground truth), and **timestamp alignment is non-negotiable** (so every claim still maps to the moment it was spoken). eGov improves the transcript *as text*, not its acoustic accuracy; raising raw accuracy is future work (§8).
+Two invariants make this safe: **the raw caption is retained as source-of-truth** (repair is a display/aid layer, never presented as ground truth), and **timestamp alignment is non-negotiable** (so every claim still maps to the moment it was spoken). eGov improves the transcript _as text_, not its acoustic accuracy; raising raw accuracy is future work (§8).
 
 ### 4.3 Multi-agent pipeline and RAG
 
@@ -138,18 +140,18 @@ YouTube transcription  (timestamped FIL/Taglish captions)
 - **Agent layer (specialized subagents).** The target agent layer is not one monolithic prompt but a set of **specialized subagents**, each owning one source and its access protocol: an **eGov AI subagent** (its own endpoint — repair/translate/summarize/OCR), a **BetterGov + Juris subagent** with **direct MCP access** to jurisprudence and legislative records, a **Compass budget subagent** over the typed SDK, and a **web-search subagent** restricted to the trusted allowlist for corroboration. The orchestrator classifies each claim, dispatches it to the subagent that owns the authoritative source, and aggregates the verdicts. Every subagent is **language-aware** — proceedings are Filipino with frequent Taglish code-switching — and leans on the translation and flag layers. Isolating each source in its own subagent keeps credentials/tools scoped and lets a source's protocol (REST, MCP, SDK) stay encapsulated.
   - **Orchestration:** the current implementation (`apps/rag-hor`) runs a single **AI SDK 7 `ToolLoopAgent`** over the hearing transcript (Qdrant) plus web tools; the team is **migrating orchestration to eve (Vercel)** and splitting that agent into the subagents above. Today's tools (`searchHearing`, `webSearch`, `fetchWebPage`) are the seed of tomorrow's subagents. See the [product architecture](./architecture.md) §2–3.
 - **Grounding mix.** Retrieval prioritizes the **authoritative government data layer** (§5.1) and uses **trusted-source web search** (§5.2) only to corroborate or fill gaps — never as a substitute for an authoritative record. Verdicts grounded only in web search are labeled lower-tier.
-- **RAG.** Rather than dumping a whole transcript plus generic knowledge into a prompt, the RAG layer fetches the *specific* records relevant to a claim (a specific bill, decision, or budget line) and passes them, with identifiers and source URLs, as the evidence the model reasons over. Retrieval is on-demand and record-level — small context, current data, full attribution.
+- **RAG.** Rather than dumping a whole transcript plus generic knowledge into a prompt, the RAG layer fetches the _specific_ records relevant to a claim (a specific bill, decision, or budget line) and passes them, with identifiers and source URLs, as the evidence the model reasons over. Retrieval is on-demand and record-level — small context, current data, full attribution.
 
 ### 4.4 Fact-checking methodology
 
 For each check-worthy statement, the fact-checker produces a structured, traceable result:
 
 1. **Claim extraction.** The agent scans the timestamped transcript — reading it as Filipino/Taglish and using the middleware's repaired text and translation — and extracts factual assertions (not opinion or procedure), each retaining its timestamp and (where available) speaker. Extraction is conservative and driven by the confidence-flag layer: low-confidence spans are surfaced, not force-checked.
-2. **Classification and routing.** Each claim is typed and routed: *legislative status* → BetterGov Open Congress; *legal claim* (a ruling or Republic Act) → Juris.ph; *budget figure* → DBM COMPASS; *general factual* → trusted-source web search (corroboration).
-3. **Verdict production.** The claim is compared to the retrieved record and returned as **claim → verdict → cited source → backing excerpt**, where *verdict* is one of *supported / contradicted / partially accurate / unverified*, *cited source* is the record's URL and identifier, and *backing excerpt* is the specific passage that justifies it.
-4. **Reliability handling.** No verdict is stronger than its evidence: partial or low-confidence matches are downgraded to *partially accurate* or *unverified* rather than asserted, and high-stakes verdicts defer to canonical full text over any AI-generated summary. The output is always "what the authoritative record says, with a citation" — never an unbacked opinion.
+2. **Classification and routing.** Each claim is typed and routed: _legislative status_ → BetterGov Open Congress; _legal claim_ (a ruling or Republic Act) → Juris.ph; _budget figure_ → DBM COMPASS; _general factual_ → trusted-source web search (corroboration).
+3. **Verdict production.** The claim is compared to the retrieved record and returned as **claim → verdict → cited source → backing excerpt**, where _verdict_ is one of _supported / contradicted / partially accurate / unverified_, _cited source_ is the record's URL and identifier, and _backing excerpt_ is the specific passage that justifies it.
+4. **Reliability handling.** No verdict is stronger than its evidence: partial or low-confidence matches are downgraded to _partially accurate_ or _unverified_ rather than asserted, and high-stakes verdicts defer to canonical full text over any AI-generated summary. The output is always "what the authoritative record says, with a citation" — never an unbacked opinion.
 
-**Why this beats naive transcribe-and-dump:** answers are constructed from *retrieved authoritative records*, every claim carries a verifiable citation, the chain from spoken sentence to confirming record is explicit and inspectable, and an unsupported assertion is returned as *unverified* rather than fabricated — because a verdict with no backing excerpt cannot be issued.
+**Why this beats naive transcribe-and-dump:** answers are constructed from _retrieved authoritative records_, every claim carries a verifiable citation, the chain from spoken sentence to confirming record is explicit and inspectable, and an unsupported assertion is returned as _unverified_ rather than fabricated — because a verdict with no backing excerpt cannot be issued.
 
 ---
 
@@ -161,15 +163,15 @@ The platform stands on two tiers of source: an **authoritative government-data b
 
 Three sources form the backbone. All were confirmed reachable and openly accessible on the verification date.
 
-**BetterGov Open Congress API — legislative records.** A public REST API at `https://open-congress-api.bettergov.ph/api`, with a machine-readable OpenAPI spec and open source ([github.com/bettergovph/open-congress-api](https://github.com/bettergovph/open-congress-api), CC0). No authentication; JSON with pagination and filters. It exposes exactly the entities the legislative-data views need: bills (`/documents`, `/search/documents`), legislators (`/people`), sessions (`/congresses`), committees, and aggregate statistics (`/stats`). Confirmed coverage: **~165,162 bills (143,156 House / 22,006 Senate) across the 8th–20th Congress; 1,179 legislators; 200 committees.** This single API drives the Bills, House/Senate Bills, People, Sessions, and Statistics views, and is the fact-checker's backbone for legislative-status claims. *Caveat:* the maintainers note data is manually encoded and some fields may be sparse, so high-stakes checks defer to the linked official document.
+**BetterGov Open Congress API — legislative records.** A public REST API at `https://open-congress-api.bettergov.ph/api`, with a machine-readable OpenAPI spec and open source ([github.com/bettergovph/open-congress-api](https://github.com/bettergovph/open-congress-api), CC0). No authentication; JSON with pagination and filters. It exposes exactly the entities the legislative-data views need: bills (`/documents`, `/search/documents`), legislators (`/people`), sessions (`/congresses`), committees, and aggregate statistics (`/stats`). Confirmed coverage: **~165,162 bills (143,156 House / 22,006 Senate) across the 8th–20th Congress; 1,179 legislators; 200 committees.** This single API drives the Bills, House/Senate Bills, People, Sessions, and Statistics views, and is the fact-checker's backbone for legislative-status claims. _Caveat:_ the maintainers note data is manually encoded and some fields may be sparse, so high-stakes checks defer to the linked official document.
 
 **Juris.ph — jurisprudence and Republic Acts.** A live Model Context Protocol server at `https://juris.ph/mcp` (JSON-RPC, no auth), exposing `search_jurisprudence`, `search_republic_acts`, `get_case`, and `get_republic_act`, returning structured records that link to official PDFs. Content is sourced from lawphil.net (Arellano Law Foundation, CC BY-NC 4.0); AI-generated summaries are treated as retrieval aids, with the linked full text as authority. This grounds legal claims made in hearings.
 
-**eGov Compass (DBM) — national budget.** Omsimos uses the **authenticated eGov Compass partner API** (`dbm-ws.oueg.info`, `EGOVCOMPASS_API_KEY`), accessed through the in-repo typed SDK (`packages/egov/src/eGovCompass`). It returns structured budget data: **SAAODB** records and a dashboard exposing the full appropriations → allotments → obligations → disbursements cascade with obligation/disbursement **rates** and expense-class breakdown (PS/MOOE/CO/FINEX); **SARO** (release orders), **NCA** (cash allocations), and **LGSF** (local government support fund) records and dashboards — queryable by report year, period (FY/Q1–Q4), scope (agency/SUCs/summary), and entity. This is the sanctioned, richer counterpart to the public *Centralized Open Monitoring Platform for Appropriations and Spending Statistics* ([compass.dbm.gov.ph](https://compass.dbm.gov.ph), launched 26 June 2026 per [PIA](https://pia.gov.ph/press-release/pbbm-launches-dbm-compass-to-strengthen-transparency-accountability-in-government-spending/)) and grounds every budget-figure claim. *Caveat:* the SDK currently targets the hackathon/staging host and defers to the enacted GAA / prior-year sources for years the endpoint does not serve.
+**eGov Compass (DBM) — national budget.** Omsimos uses the **authenticated eGov Compass partner API** (`dbm-ws.oueg.info`, `EGOVCOMPASS_API_KEY`), accessed through the standalone `egov.js` SDK. It returns structured budget data: **SAAODB** records and a dashboard exposing the full appropriations → allotments → obligations → disbursements cascade with obligation/disbursement **rates** and expense-class breakdown (PS/MOOE/CO/FINEX); **SARO** (release orders), **NCA** (cash allocations), and **LGSF** (local government support fund) records and dashboards — queryable by report year, period (FY/Q1–Q4), scope (agency/SUCs/summary), and entity. This is the sanctioned, richer counterpart to the public _Centralized Open Monitoring Platform for Appropriations and Spending Statistics_ ([compass.dbm.gov.ph](https://compass.dbm.gov.ph), launched 26 June 2026 per [PIA](https://pia.gov.ph/press-release/pbbm-launches-dbm-compass-to-strengthen-transparency-accountability-in-government-spending/)) and grounds every budget-figure claim. _Caveat:_ the SDK currently targets the hackathon/staging host and defers to the enacted GAA / prior-year sources for years the endpoint does not serve.
 
 ### 5.2 Trusted web-search sources
 
-Beyond the backbone, the agent performs **web search restricted to a curated list of authoritative Philippine sources**, used to corroborate and contextualize — never as the sole basis for a verdict. These are trusted *sources*, not scraping targets: the agent reads and cites them the way a careful researcher would, and cross-references anything material against the government-data backbone above. The curated list includes:
+Beyond the backbone, the agent performs **web search restricted to a curated list of authoritative Philippine sources**, used to corroborate and contextualize — never as the sole basis for a verdict. These are trusted _sources_, not scraping targets: the agent reads and cites them the way a careful researcher would, and cross-references anything material against the government-data backbone above. The curated list includes:
 
 - **Laws, issuances, jurisprudence:** Official Gazette ([officialgazette.gov.ph](https://www.officialgazette.gov.ph/)), LawPhil ([lawphil.net](https://lawphil.net/)), the Supreme Court and its E-Library ([sc.judiciary.gov.ph](https://sc.judiciary.gov.ph/), [elibrary.judiciary.gov.ph](https://elibrary.judiciary.gov.ph/)).
 - **Legislative primary sources:** House of Representatives ([congress.gov.ph](https://www.congress.gov.ph/)) and Senate ([legacy.senate.gov.ph](https://legacy.senate.gov.ph/), [ldr.senate.gov.ph](https://ldr.senate.gov.ph/)).
@@ -180,7 +182,7 @@ Restricting web search to this allowlist is a deliberate trust control: it keeps
 
 ### 5.3 eGov AI services
 
-Omsimos's partner access to eGov AI provides the building blocks for the refinement middleware (§4.2), wired in the in-repo SDK (`packages/egov/src/eGovAi`): **AI Assistant** (`ai_assistant`; listed as "Chat AI" on the public catalog) for transcript repair and summarization, **Translator** (`translator`, ISO-639, returns translated + transliterated text) for Filipino↔English, and **Document Extractor** (`document_extractor`) for OCR of bill/COA/GAA PDFs. The service is **token-based and credit-metered**: an access code mints a short-lived bearer token carrying a finite credit balance (`getTokenCredits` reports usage). eGov AI offers **no speech-to-text**, so the middleware operates on text the transcription POC already produced; and the Filipino/Taglish quality of these services is **unverified** (no capability detail is documented) and must be validated empirically against real hearing captions. Note that eGov AI is **not** the platform's model backend: the current app runs chat and embeddings on Vercel AI Gateway (its catalog exposes neither embeddings nor streamed tool calls), so eGov AI is used as a dedicated text-refinement tool rather than the agent's reasoning model. Credentials remain server-side under the data-sharing agreement. See the [eGov API reference](../../../docs/architecture.md) §3.2 and [product architecture](./architecture.md) §3.
+Omsimos's partner access to eGov AI provides the building blocks for the refinement middleware (§4.2), exposed by the standalone `egov.js` SDK: **AI Assistant** (`ai_assistant`; listed as "Chat AI" on the public catalog) for transcript repair and summarization, **Translator** (`translator`, ISO-639, returns translated + transliterated text) for Filipino↔English, and **Document Extractor** (`document_extractor`) for OCR of bill/COA/GAA PDFs. The service is **token-based and credit-metered**: an access code mints a short-lived bearer token carrying a finite credit balance (`getTokenCredits` reports usage). eGov AI offers **no speech-to-text**, so the middleware operates on text the transcription POC already produced; and the Filipino/Taglish quality of these services is **unverified** (no capability detail is documented) and must be validated empirically against real hearing captions. Note that eGov AI is **not** the platform's model backend: the current app runs chat and embeddings on Vercel AI Gateway (its contract exposes neither embeddings nor streamed tool calls), so eGov AI is used as a dedicated text-refinement tool rather than the agent's reasoning model. Credentials remain server-side under the data-sharing agreement. See the [eGov API reference](../../../docs/architecture.md) §3.2 and [product architecture](./architecture.md) §3.
 
 ---
 
@@ -191,32 +193,32 @@ Omsimos's partner access to eGov AI provides the building blocks for the refinem
 The platform's impact compounds along a chain — from access, to understanding, to awareness, to better civic decisions:
 
 - **Accessibility.** Hours of untracked video become minutes of grounded, timestamped substance, in a language the citizen can read. A right that existed only on paper becomes one a person can actually exercise.
-- **Comprehension.** Summaries explain what a measure *does*, where it *stands*, and what was *contested* — converting procedural noise into civic meaning, and teaching how the legislative process works.
+- **Comprehension.** Summaries explain what a measure _does_, where it _stands_, and what was _contested_ — converting procedural noise into civic meaning, and teaching how the legislative process works.
 - **Awareness of country, laws, and governance.** By linking floor claims to bills, laws, jurisprudence, and the budget — with citations — the platform doubles as civic education, drawing citizens into the primary sources of Philippine law and public spending.
 - **Fact-based electoral choice.** Because every verdict is traceable (**claim → verdict → cited source → backing excerpt**), voters, journalists, and civil-society groups can judge officials on verifiable conduct rather than rhetoric. Against an information environment where disinformation outpaces correction, a tool whose every output cites an authoritative government record is a direct counterweight.
 - **Good governance and accountability.** Routine, cheap, citable scrutiny of the floor raises the reputational cost of misstatement and the visibility of good work, strengthening the citizen-representative feedback loop that accountability depends on.
 
-**Boundary of the claim:** the platform *informs* civic judgment; it does not render it. It reports what the record says, with citations — it is not an arbiter of political truth, a replacement for journalism, or a voting-recommendation engine.
+**Boundary of the claim:** the platform _informs_ civic judgment; it does not render it. It reports what the record says, with citations — it is not an arbiter of political truth, a replacement for journalism, or a voting-recommendation engine.
 
 ### 6.2 Value proposition
 
 - **For citizens:** a single place to find, understand, and trust what Congress is doing.
 - **For journalists and researchers:** fact-checking and legislative research that would take hours of manual cross-referencing, returned in seconds with citations.
-- **For government and eGovPH:** a flagship transparency service that makes existing open data *useful*, increasing the return on the data agencies already publish.
+- **For government and eGovPH:** a flagship transparency service that makes existing open data _useful_, increasing the return on the data agencies already publish.
 
 ### 6.3 Cost-benefit
 
 The economics are favorable because the expensive inputs are already free or already owned:
 
-| Cost driver | Nature | Notes |
-|---|---|---|
-| Transcription | Near-zero | Public YouTube captions; no ASR licensing |
-| Government data access | Zero | Open, no-auth APIs (BetterGov, Juris.ph); authenticated eGov Compass via partner key |
-| Agent + embedding inference | Dominant, variable | Runs on Vercel AI Gateway; defaults are deliberately cheap (`gemini-2.5-flash-lite` chat, `text-embedding-3-small` embeddings). Scales with sessions and claims |
-| eGov AI credits | Metered, conditional | Only consumed once the planned refinement layer (AI Assistant/Translator/OCR) is wired; a finite credit balance to monitor |
-| Hosting / infrastructure | Modest | SQLite + Qdrant + Redis (self-hosted via Docker); transcripts and cached records |
+| Cost driver                 | Nature               | Notes                                                                                                                                                           |
+| --------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Transcription               | Near-zero            | Public YouTube captions; no ASR licensing                                                                                                                       |
+| Government data access      | Zero                 | Open, no-auth APIs (BetterGov, Juris.ph); authenticated eGov Compass via partner key                                                                            |
+| Agent + embedding inference | Dominant, variable   | Runs on Vercel AI Gateway; defaults are deliberately cheap (`gemini-2.5-flash-lite` chat, `text-embedding-3-small` embeddings). Scales with sessions and claims |
+| eGov AI credits             | Metered, conditional | Only consumed once the planned refinement layer (AI Assistant/Translator/OCR) is wired; a finite credit balance to monitor                                      |
+| Hosting / infrastructure    | Modest               | SQLite + Qdrant + Redis (self-hosted via Docker); transcripts and cached records                                                                                |
 
-The **dominant marginal cost is AI inference** — the agent's reasoning/fact-check calls and embeddings, which run on Vercel AI Gateway with intentionally low-cost default models. It is bounded per session (a session yields a finite set of check-worthy claims) and **falls with caching**: legislative records and embeddings, once computed, are reused across sessions and views. When the eGov AI refinement layer is added, its credits are a separate finite balance (§5.3) — so repaired/translated transcripts are cached to spend credits once per session, and `getTokenCredits` monitoring becomes a first-class concern. Against this sits a large public benefit: the manual alternative (a staffer or reporter watching a full hearing and cross-checking each claim against multiple portals) costs hours of expert time per session, and most citizens cannot perform it at all. The platform converts a task that is effectively impossible at citizen scale into a routine, low-marginal-cost service. *(Figures above describe cost structure, not a priced budget; exact costs depend on volume and model choice.)*
+The **dominant marginal cost is AI inference** — the agent's reasoning/fact-check calls and embeddings, which run on Vercel AI Gateway with intentionally low-cost default models. It is bounded per session (a session yields a finite set of check-worthy claims) and **falls with caching**: legislative records and embeddings, once computed, are reused across sessions and views. When the eGov AI refinement layer is added, its credits are a separate finite balance (§5.3) — so repaired/translated transcripts are cached to spend credits once per session, and `getTokenCredits` monitoring becomes a first-class concern. Against this sits a large public benefit: the manual alternative (a staffer or reporter watching a full hearing and cross-checking each claim against multiple portals) costs hours of expert time per session, and most citizens cannot perform it at all. The platform converts a task that is effectively impossible at citizen scale into a routine, low-marginal-cost service. _(Figures above describe cost structure, not a priced budget; exact costs depend on volume and model choice.)_
 
 ---
 
@@ -244,13 +246,13 @@ The architecture scales along several independent axes without redesign:
 
 ## 8. Risks and limitations
 
-- **Filipino / Taglish ASR quality (the load-bearing risk).** The transcription foundation is YouTube auto-captions, which for Filipino are visibly degraded — a real risk to claim extraction, since a garbled claim cannot be reliably checked. Filipino remains under-resourced for language technology ([arXiv:2502.14911](https://arxiv.org/abs/2502.14911)). *Mitigation (in scope):* the refinement middleware (built on eGovPH AI Assistant) repairs the transcript as text and flags low-confidence spans; extraction is conservative. *Future work (out of scope):* a stronger acoustic Filipino/Taglish speech model (e.g. a Whisper-class or Taglish-tuned ASR) on the source audio — the only lever that fixes the root cause rather than the symptom.
+- **Filipino / Taglish ASR quality (the load-bearing risk).** The transcription foundation is YouTube auto-captions, which for Filipino are visibly degraded — a real risk to claim extraction, since a garbled claim cannot be reliably checked. Filipino remains under-resourced for language technology ([arXiv:2502.14911](https://arxiv.org/abs/2502.14911)). _Mitigation (in scope):_ the refinement middleware (built on eGovPH AI Assistant) repairs the transcript as text and flags low-confidence spans; extraction is conservative. _Future work (out of scope):_ a stronger acoustic Filipino/Taglish speech model (e.g. a Whisper-class or Taglish-tuned ASR) on the source audio — the only lever that fixes the root cause rather than the symptom.
 - **Undocumented / unstable endpoints.** The YouTube transcript endpoint (`get_panel`) and the public DBM COMPASS backend are undocumented internal endpoints with no stability contract. Usable today; isolated behind adapters and monitored for breakage.
-- **eGov AI credit quota.** eGov AI is credit-metered (§5.3); heavy transcript-repair/translation traffic can exhaust the balance. *Mitigation:* cache repaired/translated transcripts (spend once per session), monitor via `getTokenCredits`, and degrade gracefully to raw captions when credits are low.
+- **eGov AI credit quota.** eGov AI is credit-metered (§5.3); heavy transcript-repair/translation traffic can exhaust the balance. _Mitigation:_ cache repaired/translated transcripts (spend once per session), monitor via `getTokenCredits`, and degrade gracefully to raw captions when credits are low.
 - **Hackathon/staging endpoints.** The eGov SDK currently targets hackathon/staging hosts (`hackathon-*.e.gov.ph`, `*.oueg.info`); production deployment requires promoting to production endpoints and credentials.
 - **Data coverage and provenance.** COMPASS currently exposes FY2026 only; prior-year budget claims need other sources. BetterGov data is community-encoded with uneven metadata completeness, and Juris.ph summaries are AI-generated — so high-stakes verdicts defer to canonical full text and the provenance disclaimer is surfaced rather than hidden.
 - **eGovPH dependency (available, constrained).** eGovPH AI text services (AI Assistant, Translator) are available to Omsimos via partner access but bound by the data-sharing agreement, with credentials server-side; eGovPH provides no speech-to-text, so it must never be presented as the transcription engine, and its Filipino/Taglish quality is unverified pending the partner docs. A refinement-middleware outage degrades readability/translation but does not stop fact-checking, which can fall back to raw captions.
-- **Legal and ethical.** (a) Automated scrutiny of public officials is sensitive: verdicts are framed as "matches / does not match the authoritative record, see citation," never accusations, and the *unverified* state is kept prominent. (b) Licensing: LawPhil/Juris content is CC BY-NC 4.0 (attribution, non-commercial); BetterGov data is CC0 — terms are respected. (c) Attribution integrity: speaker attribution from noisy ASR can err, so it is shown only when the transcript supports it. (d) Neutrality: fidelity to the cited record over editorializing is the primary safeguard against bias in claim and source selection.
+- **Legal and ethical.** (a) Automated scrutiny of public officials is sensitive: verdicts are framed as "matches / does not match the authoritative record, see citation," never accusations, and the _unverified_ state is kept prominent. (b) Licensing: LawPhil/Juris content is CC BY-NC 4.0 (attribution, non-commercial); BetterGov data is CC0 — terms are respected. (c) Attribution integrity: speaker attribution from noisy ASR can err, so it is shown only when the transcript supports it. (d) Neutrality: fidelity to the cited record over editorializing is the primary safeguard against bias in claim and source selection.
 
 ---
 
@@ -267,4 +269,4 @@ Primary sources verified 2026-07-21; "live" entries were confirmed by direct req
 - Senate YouTube: https://www.youtube.com/@senateofthephilippines/streams
 - eGov AI developers: https://egov-ai.e.gov.ph/developers — eGov Marketplace: https://platforms.e.gov.ph/
 - Batayan: A Filipino NLP benchmark for evaluating LLMs — arXiv:2502.14911 — https://arxiv.org/abs/2502.14911
-- Transcription POC (in-repo): `packages/transcript-scraper/` · eGov SDK (in-repo): `packages/egov/` · architecture: [product](./architecture.md) · [eGov API reference](../../../docs/architecture.md)
+- Transcription POC (in-repo): `packages/transcript-scraper/` · eGov SDK: [`omsimos/egov.js`](https://github.com/omsimos/egov.js) · architecture: [product](./architecture.md) · [eGov API reference](../../../docs/architecture.md)

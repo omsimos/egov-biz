@@ -46,7 +46,8 @@ Business addresses are stored separately as PII. Status responses expose only `{
 
 ```ts
 import { createDatabaseFromEnv } from "@repo/db";
-import { createEgovPayClient } from "@repo/egov/eGovPay";
+import { createClient } from "egov.js";
+import { createEgovPayClient } from "@repo/dx";
 import {
   createBnrsService,
   createDrizzleBnrsRepository,
@@ -59,7 +60,7 @@ const repository = createDrizzleBnrsRepository(database);
 const paymentProvider = createEgovPayBnrsPaymentProvider(
   createEgovPayClient({
     apiKey: process.env.EGOVPAY_API_KEY!,
-    baseUrl: process.env.EGOVPAY_BASE_URL!,
+    client: createClient({ baseUrl: process.env.EGOVPAY_BASE_URL! }),
     settlementTemplateUuid: process.env.EGOVPAY_SETTLEMENT_TEMPLATE_UUID!,
   }),
 );
@@ -276,7 +277,8 @@ Use an LGU-owned repository and an independently configured eGovPay client. The 
 
 ```ts
 import { createDatabaseFromEnv } from "@repo/db";
-import { createEgovPayClient } from "@repo/egov/eGovPay";
+import { createClient } from "egov.js";
+import { createEgovPayClient } from "@repo/dx";
 import {
   createDrizzleLguRepository,
   createEgovPayLguPaymentProvider,
@@ -288,7 +290,7 @@ const repository = createDrizzleLguRepository(database);
 const paymentProvider = createEgovPayLguPaymentProvider(
   createEgovPayClient({
     apiKey: process.env.LGU_EGOVPAY_API_KEY!,
-    baseUrl: process.env.LGU_EGOVPAY_BASE_URL!,
+    client: createClient({ baseUrl: process.env.LGU_EGOVPAY_BASE_URL! }),
     settlementTemplateUuid: process.env.LGU_EGOVPAY_SETTLEMENT_TEMPLATE_UUID!,
   }),
 );

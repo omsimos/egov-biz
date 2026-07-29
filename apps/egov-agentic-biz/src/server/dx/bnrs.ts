@@ -1,3 +1,4 @@
+import { createEgovPayClient } from "@repo/dx";
 import {
   createBnrsService,
   createDrizzleBnrsRepository,
@@ -5,8 +6,7 @@ import {
   type BnrsPaymentProvider,
   type BnrsService,
 } from "@repo/dx/bnrs";
-import { eGovPayApi } from "@repo/egov/eGovPay";
-import type { EgovSsoCitizenProfile } from "@repo/egov/eGovSso";
+import { createClient, type EgovSsoCitizenProfile } from "egov.js";
 import { getDxDatabase } from "@/server/dx/database";
 
 const globalCache = globalThis as typeof globalThis & {
@@ -26,8 +26,17 @@ function createLazyPaymentProvider(
   function getProvider() {
     if (provider) return provider;
     const baseUrl = environment.EGOVPAY_BASE_URL?.trim();
-    if (!baseUrl) throw new Error("EGOVPAY_BASE_URL is required for BNRS payment operations.");
-    provider = createEgovPayBnrsPaymentProvider(eGovPayApi.fromEnv({ baseUrl, env: environment }));
+    const apiKey = environment.EGOVPAY_API_KEY?.trim();
+    const settlementTemplateUuid = environment.EGOVPAY_SETTLEMENT_TEMPLATE_UUID?.trim();
+    if (!baseUrl || !apiKey || !settlementTemplateUuid)
+      throw new Error("eGovPay configuration is required for BNRS payment operations.");
+    provider = createEgovPayBnrsPaymentProvider(
+      createEgovPayClient({
+        apiKey,
+        client: createClient({ baseUrl }),
+        settlementTemplateUuid,
+      }),
+    );
     return provider;
   }
 

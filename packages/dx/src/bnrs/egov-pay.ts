@@ -1,4 +1,4 @@
-import type { EgovPayClient } from "@repo/egov/eGovPay/types";
+import type { EgovPayClient } from "../egov-pay.js";
 
 import type {
   BnrsPaymentProvider,

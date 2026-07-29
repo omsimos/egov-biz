@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { EgovSsoCitizenProfile } from "@repo/egov/eGovSso";
+import type { EgovSsoCitizenProfile } from "egov.js";
 import { mapEgovCitizenProfile } from "@/lib/auth/profile";
 
 const profile: EgovSsoCitizenProfile = {

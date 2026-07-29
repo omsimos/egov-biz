@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import type { EgovSsoCitizenProfile } from "@repo/egov/eGovSso";
+import type { EgovSsoCitizenProfile } from "egov.js";
 import type { StoredAuthSession } from "@/server/auth-sessions";
 
 const storedSessions = new Map<string, StoredAuthSession>();
@@ -25,6 +25,7 @@ const {
   AUTH_COOKIE_NAME,
   birFormArtifactOwnerId,
   createSession,
+  DEFAULT_SESSION_TTL_SECONDS,
   deleteSession,
   readSession,
   sessionCookieOptions,
@@ -48,6 +49,24 @@ afterEach(async () => {
 });
 
 describe("authenticated session", () => {
+  test("uses a seven-day default session TTL", async () => {
+    const previousTtl = process.env.EGOVSSO_SESSION_TTL_SECONDS;
+    delete process.env.EGOVSSO_SESSION_TTL_SECONDS;
+    try {
+      const { maxAge, sessionId } = await createSession({
+        email: "persistent@example.test",
+        first_name: "Persistent",
+        last_name: "Citizen",
+      } as EgovSsoCitizenProfile);
+      createdSessionIds.push(sessionId);
+
+      expect(maxAge).toBe(DEFAULT_SESSION_TTL_SECONDS);
+    } finally {
+      if (previousTtl === undefined) delete process.env.EGOVSSO_SESSION_TTL_SECONDS;
+      else process.env.EGOVSSO_SESSION_TTL_SECONDS = previousTtl;
+    }
+  });
+
   test("restores the session from persistent storage after the process cache is cleared", async () => {
     const rawProfile = {
       email: "juan@example.test",

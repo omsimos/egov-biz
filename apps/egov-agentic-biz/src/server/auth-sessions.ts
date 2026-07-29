@@ -1,5 +1,5 @@
 import { eq, lte } from "drizzle-orm";
-import type { EgovSsoCitizenProfile } from "@repo/egov/eGovSso";
+import type { EgovSsoCitizenProfile } from "egov.js";
 import { getDatabase, schema } from "@/server/db";
 
 export type StoredAuthSession = {

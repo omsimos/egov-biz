@@ -1,4 +1,4 @@
-import type { EgovSsoCitizenProfile } from "@repo/egov/eGovSso";
+import type { EgovSsoCitizenProfile } from "egov.js";
 import type {
   Bir1901Data,
   Bir1905Data,

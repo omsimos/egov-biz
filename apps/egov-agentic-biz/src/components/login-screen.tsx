@@ -292,14 +292,18 @@ export function LoginScreen({
           </p>
           <h1 className="text-xl leading-[1.15] -tracking-[.4px] text-foreground">
             {step === "email"
-              ? `Welcome back${lastAccount ? `, ${lastAccount.firstName}` : ""}`
+              ? lastAccount
+                ? `Sign in again, ${lastAccount.firstName}`
+                : "Sign in to eGovPH"
               : step === "otp"
                 ? "Check your email"
                 : "Enter your MPIN"}
           </h1>
           <p className="mt-2.5 text-sm font-medium text-muted-foreground">
             {step === "email"
-              ? "Use the email linked to your eGovPH account"
+              ? lastAccount
+                ? "This device remembers your previous account, but you are currently signed out."
+                : "Use the email linked to your eGovPH account"
               : step === "otp"
                 ? `We sent a 6-digit OTP to ${maskEmail(email)}`
                 : "Use your 6-digit eGovPH passcode to finish signing in"}

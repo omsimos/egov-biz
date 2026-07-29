@@ -1,4 +1,4 @@
-import { createEMessageClientFromEnv } from "../packages/egov/src/eMessage/index.ts";
+import { createClient, eMessage } from "egov.js";
 
 function printUsage(): void {
   console.log('Usage: bun scripts/send-emessage.ts <E.164 number> "<message>"');
@@ -30,7 +30,18 @@ if (!baseUrl) {
   throw new Error("Missing required eGov environment variable: EMESSAGE_BASE_URL");
 }
 
-const client = createEMessageClientFromEnv({ baseUrl });
-const response = await client.sendSms({ message, number });
+const accessToken = process.env.EMESSAGE_ACCESS_TOKEN?.trim();
+
+if (!accessToken) {
+  throw new Error("Missing required eGov environment variable: EMESSAGE_ACCESS_TOKEN");
+}
+
+const client = createClient({ baseUrl });
+const response = await eMessage.sendSms({
+  auth: accessToken,
+  body: { message, number },
+  client,
+  throwOnError: true,
+});
 
 console.log(JSON.stringify({ message, number, response }, null, 2));
