@@ -136,10 +136,12 @@
       "dependencies": {
         "@repo/db": "workspace:*",
         "@repo/egov": "workspace:*",
+        "@repo/utils": "workspace:*",
         "drizzle-orm": "0.45.2",
       },
       "devDependencies": {
         "@total-typescript/tsconfig": "1.0.4",
+        "@types/node": "^20",
         "typescript": "7.0.2",
       },
     },
@@ -162,6 +164,8 @@
       "version": "0.0.0",
       "dependencies": {
         "@aws-sdk/client-s3": "^3.1097.0",
+        "pdf-lib": "^1.17.1",
+        "zod": "^4.4.3",
       },
       "devDependencies": {
         "@total-typescript/tsconfig": "1.0.4",

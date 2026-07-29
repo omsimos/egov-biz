@@ -143,18 +143,67 @@ Run the generated migration through the `@repo/db` migration command before usin
 - Live DTI/BNRS API calls, agent tools, and application routes are outside this package.
 - Certificate PDF generation and document storage are deferred; the structured JSON certificate is implemented.
 
-# DX BIR demo helper
+# DX BIR forms
 
-`@repo/dx/bir` currently exposes `assignDemoRdo` for the simplified BIR demo. The
-helper randomly chooses a simulated assignment containing only the three-digit
-code, a code-only label such as `RDO 047`, and `simulated: true`. The caller
-should retain that result for the duration of its demo flow.
+`@repo/dx/bir` fills BIR Form 1901 or 1905, saves the generated PDF through the
+shared private file-storage module, and reads it back for the authenticated
+owner. It does not store the structured form data separately. Storage uses
+Cloudflare R2 when its environment variables are configured and local artifact
+storage otherwise.
 
-This is intentionally not an address-based BIR jurisdiction lookup. No city or
-office name is returned, and the assignment must not be used for a real filing.
-The current demo deliberately does not collect the Tax Type Questionnaire. That
-questionnaire remains required for an actual NewBizReg filing and must not be
-treated as optional.
+```text
+trusted eGov actor + validated form data
+  -> render the selected PDF template
+  -> save under bir/<SHA-256 owner hash>/<artifact UUID>.pdf
+  -> return non-PII artifact metadata
+  -> retrieve later with the same trusted actor and artifact UUID
+```
+
+Create the actor only from the authenticated SSO profile. Do not accept the
+eGov user ID from browser or agent input.
+
+```ts
+import { resolve } from "node:path";
+import { createBirFormService } from "@repo/dx/bir";
+import { createFileStorage } from "@repo/utils/files";
+
+const bir = createBirFormService({
+  storage: createFileStorage(),
+  templatePaths: {
+    "1901": resolve(process.cwd(), "public/forms/bir-form-1901.pdf"),
+    "1905": resolve(process.cwd(), "public/forms/bir-form-1905.pdf"),
+  },
+});
+
+const actor = { egovUserId: session.rawProfile.uniqid };
+const artifact = await bir.fillOutAndSaveForm({
+  actor,
+  form: {
+    type: "1901",
+    data: {
+      taxpayerInformation: {
+        rdoCode: "043",
+        taxpayerName: { firstName: "Juan", lastName: "Dela Cruz" },
+      },
+    },
+  },
+});
+
+const saved = await bir.getSavedForm({ actor, artifactId: artifact.artifactId });
+```
+
+Both form types use the copied generators in `@repo/utils/bir-form`. Template
+paths are required configuration because the utility package does not own the
+PDF assets. Form input is validated before rendering, and a render failure is
+never saved. Retrieval derives the private storage key from the trusted actor,
+so another actor receives `FORM_NOT_FOUND` for the same artifact UUID.
+
+The package still exposes `assignDemoRdo` for the simplified BIR demo. It
+randomly chooses a simulated code-only assignment such as `RDO 047`; the caller
+retains it and may put that code into the form data. This is not an address-based
+jurisdiction lookup and must not be used for a real filing. The demo also does
+not collect the Tax Type Questionnaire, which remains required for actual
+NewBizReg filing.
 
 # DX LGU business permits
 

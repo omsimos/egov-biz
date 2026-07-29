@@ -1,5 +1,30 @@
 # Utilities
 
+## BIR form generation
+
+`@repo/utils/bir-form` contains independent copies of the BIR Form 1901 and
+1905 PDF generators, their input schemas, and their rendering helpers. The
+original copies under `apps/egov-agentic-biz` remain in place; the two copies
+are intentionally allowed to drift.
+
+Both generators require an explicit PDF template path when rendering. The
+package does not bundle the PDF templates, so the runtime that owns the
+templates supplies their paths.
+
+```ts
+import { generateBir1901Pdf } from "@repo/utils/bir-form";
+
+const generated = await generateBir1901Pdf(
+  {
+    taxpayerInformation: {
+      rdoCode: "043",
+      taxpayerName: { firstName: "Juan", lastName: "Dela Cruz" },
+    },
+  },
+  templatePath,
+);
+```
+
 ## File storage
 
 `@repo/utils/files` provides one private artifact-storage API with Cloudflare R2

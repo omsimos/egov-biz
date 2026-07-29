@@ -4,7 +4,8 @@
     "rootDir": "src",
     "outDir": "dist",
     "noEmitOnError": true,
-    "exactOptionalPropertyTypes": true
+    "exactOptionalPropertyTypes": true,
+    "types": ["node"]
   },
   "include": ["src/**/*.ts"],
   "exclude": ["dist", "node_modules"]
