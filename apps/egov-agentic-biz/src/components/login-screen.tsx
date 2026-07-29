@@ -80,7 +80,15 @@ async function exchangeForSession(exchangeCode: string) {
   }
 }
 
-export function LoginScreen({ initialError }: { initialError?: string }) {
+export function LoginScreen({
+  initialError,
+  onBack,
+}: {
+  initialError?: string;
+  // Returns to the landing composition. Absent below 760px and in the /preview
+  // sandbox, where this screen is the whole page and there is nothing behind it.
+  onBack?: () => void;
+}) {
   const [apiUrl, setApiUrl] = useState("");
   const [clientId, setClientId] = useState("");
   const [email, setEmail] = useState("");
@@ -243,6 +251,27 @@ export function LoginScreen({ initialError }: { initialError?: string }) {
   return (
     <div className="screen text-foreground">
       <StatusBar />
+      {/* A sibling of <main>, not a child of it. Inside, it was positioned against
+          main's padding box and so needed a negative `left` to reach the design's
+          14px inset — which main's own `overflow-x: hidden` then clipped by 8px.
+          It also scrolled away with the form, and this is frame chrome: it belongs
+          to the phone, not to the content. Positioned against .screen instead, so
+          the inset is the design's plain 14px and it stays put. */}
+      {onBack ? (
+        <button
+          aria-label="Back to eGOVbusiness"
+          className={cn(
+            "absolute top-[52px] left-[14px] z-10 grid size-[38px] place-items-center rounded-full bg-muted text-foreground",
+            "transition-[background-color,scale] duration-150 ease-[var(--ease-out)] hover:bg-gray-200 active:scale-[var(--press-sm)] motion-reduce:transition-none",
+            FOCUS_RING,
+          )}
+          data-cuelume-toggle="page"
+          onClick={onBack}
+          type="button"
+        >
+          <ArrowLeftIcon className="size-[17px]" weight="bold" />
+        </button>
+      ) : null}
       <main
         className="relative flex h-[calc(100%-36px)] min-h-[604px] flex-col overflow-x-hidden overflow-y-auto px-[22px] pt-[25px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:flex-none"
         id="app-content"

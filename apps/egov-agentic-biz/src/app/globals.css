@@ -249,6 +249,91 @@ body {
   place-items: center;
   background: radial-gradient(circle at 72% 18%, #e9f0ff 0, #f5f7fb 35%, #edf1f8 100%);
 }
+
+/* ============================================================
+   Landing composition, from the Landing design. Marketing copy beside a live
+   phone; pressing Get started collapses the copy and the phone settles in the
+   centre of the viewport, where the login screen takes over from the Home
+   preview.
+
+   Deliberately NOT .prototype-stage above — that is the /preview sandbox's
+   two-column grid and has to keep its own geometry.
+
+   Below 760px none of this chrome renders (see LandingShell): the phone is the
+   whole page, as it already was. The design's own answer at that width is to
+   scale the phone to 40% of the viewport beside the copy, which on a real
+   handset is a ~164px-wide app.
+   ============================================================ */
+.landing-stage {
+  min-height: 100svh;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+}
+/* Two ambient washes, clipped by the stage: blue behind the phone's top-right,
+   amber under the copy's baseline. Pseudo-elements rather than two more divs —
+   they carry no content and must never be hit-tested. */
+.landing-blobs {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+.landing-blobs::before,
+.landing-blobs::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+}
+.landing-blobs::before {
+  top: -260px;
+  right: -180px;
+  width: 820px;
+  height: 820px;
+  background: radial-gradient(circle at 50% 50%, rgba(7, 85, 233, 0.09), rgba(7, 85, 233, 0) 68%);
+}
+.landing-blobs::after {
+  bottom: -320px;
+  left: -220px;
+  width: 700px;
+  height: 700px;
+  background: radial-gradient(circle at 50% 50%, rgba(245, 164, 0, 0.1), rgba(245, 164, 0, 0) 68%);
+}
+.landing-main {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Layout only. The slide itself is motion's — see LANDING in lib/motion.ts — so
+   there is deliberately no `transition` here: two owners for one transform is
+   how you get a property animating against itself.
+
+   The copy keeps its box while it slides, which is what the phone's own offset is
+   derived from: with both centred in this flex row, moving the phone to the
+   middle of the viewport is a translate of exactly half the copy's outer width. */
+.landing-copy {
+  flex: 1 1 460px;
+  min-width: 0;
+  max-width: min(600px, calc(100% - 430px));
+  padding-right: clamp(28px, 4vw, 72px);
+  overflow: hidden;
+}
+
+/* The two halves inside the phone, stacked in one box so they can cross.
+   .phone-shell is already `position: relative; overflow: hidden`, which is what
+   clips the slide — each half travels its own full width, so nothing is ever
+   visible outside the frame. */
+.landing-preview,
+.landing-login {
+  position: absolute;
+  inset: 0;
+}
 .preview-switch {
   position: fixed;
   top: 10px;
@@ -567,6 +652,41 @@ body {
 }
 
 @media (min-width: 760px) {
+  /* Same one-viewport, no-page-scrollbar rule as .prototype-stage below, for the
+     same reason: this is a device mock, and a scrollbar beside a phone frame
+     reads as a broken layout rather than as more content. */
+  .landing-stage {
+    height: 100svh;
+    overflow: hidden;
+  }
+  .landing-main {
+    padding: 8px clamp(18px, 3vw, 56px) 40px;
+    overflow: hidden;
+  }
+  /* 100%, not a viewport calculation minus this stage's chrome. That constant has
+     to know the header's exact height, and the header is as tall as its tallest
+     child — the Get started button at ~46px, not the 30px logo — so a hand-figured
+     122px under-reserved by 16, and `align-items: center` then centred an
+     over-tall phone in .landing-main and pushed its top 7px up under the header.
+     A percentage resolves against .landing-main's own content box, which is
+     whatever the header actually left behind. Scoped to .landing-stage because the
+     /preview sandbox sizes its phone against the viewport instead. */
+  .landing-stage .phone-shell {
+    height: min(844px, 100%);
+  }
+  /* Short-laptop rescue. The login screen is the tallest of them and the only one
+     with art pinned to its floor, so it is the one that runs out of room first: at
+     a 844px-tall viewport it needs a 742px phone, and the design's 8px/40px
+     padding leaves 730. Spending the main's decorative padding buys the 12px back
+     and the cityscape lands on screen instead of just under the fold, where it
+     reads as a clipped illustration rather than as more to scroll. Above this
+     height the design's own values stand. */
+  @media (max-height: 880px) {
+    .landing-main {
+      padding-top: 0;
+      padding-bottom: 8px;
+    }
+  }
   .prototype-stage {
     grid-template-columns: minmax(300px, 440px) 410px;
     gap: clamp(35px, 7vw, 110px);
