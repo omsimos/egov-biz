@@ -26,7 +26,7 @@ egov-scripts/
 └── .env.sample             # All service base URLs + credential slots
 ```
 
-The sibling **`egov.js` SDK** gives typed, tested access to the eGovPH partner services; the
+The **`egov.js` SDK** gives typed, tested access to the eGovPH partner services; the
 **transcript-scraper** turns a YouTube video into timestamped text. These are
 product-agnostic building blocks — the same SDK can back a hearing fact-checker, a citizen
 services bot, a budget explorer, or any other idea that consumes eGov APIs.
@@ -47,9 +47,9 @@ A video URL yields **timestamped** segments with a language code and an auto-gen
 ## 3. Package: `egov.js` — the eGovPH SDK
 
 A typed, generated SDK maintained in the separate
-[`omsimos/egov.js`](https://github.com/omsimos/egov.js) repository and linked into this
-workspace as `egov.js`. Its OpenAPI 3.1 document is the source of truth for **9 eGovPH
-services**.
+[`omsimos/egov.js`](https://github.com/omsimos/egov.js) repository and installed from
+npm as [`egov.js`](https://www.npmjs.com/package/egov.js). Its OpenAPI 3.1 document is
+the source of truth for **9 eGovPH services**.
 
 - `createClient({ baseUrl })` creates a provider-scoped generated Fetch client.
 - Named service classes such as `egovSso`, `egovPay`, `egovAi`, and `compass` group

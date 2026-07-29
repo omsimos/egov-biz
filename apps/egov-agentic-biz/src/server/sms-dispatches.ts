@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
-import { EgovApiError } from "@repo/egov/core";
 import { and, eq, lt, sql } from "drizzle-orm";
+import { EMessageApiError } from "@/lib/emessage";
 import { getDatabase, schema, type Database } from "@/server/db";
 
 export type SmsDispatchTool = "send_sms_message" | "simulate_tax_payment_reminder";
@@ -213,7 +213,7 @@ export async function dispatchSmsOnce<Output>(
   try {
     output = await send();
   } catch (error) {
-    if (error instanceof EgovApiError && error.status >= 400 && error.status < 500) {
+    if (error instanceof EMessageApiError && error.status >= 400 && error.status < 500) {
       await repository.fail(key);
       throw error;
     }

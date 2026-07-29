@@ -1,6 +1,41 @@
-import { createEMessageClientFromEnv, type EMessageClient } from "@repo/egov/eMessage";
+import {
+  createClient as createEgovClient,
+  eMessage,
+  type EMessageSmsRequest,
+  type EMessageSmsResponse,
+} from "egov.js";
 import { z } from "zod";
 import type { TaxObligation } from "@/lib/registered-business";
+
+export type { EMessageSmsRequest, EMessageSmsResponse };
+
+type EMessageCallOptions = {
+  signal?: AbortSignal;
+};
+
+export type EMessageClient = {
+  sendSms(request: EMessageSmsRequest, options?: EMessageCallOptions): Promise<EMessageSmsResponse>;
+};
+
+export class EMessageApiError extends Error {
+  readonly body: unknown;
+  readonly status: number;
+
+  constructor(options: {
+    body: unknown;
+    method: string;
+    status: number;
+    statusText: string;
+    url: string;
+  }) {
+    super(
+      `${options.method} ${options.url} failed with ${options.status} ${options.statusText}`.trim(),
+    );
+    this.name = "EMessageApiError";
+    this.body = options.body;
+    this.status = options.status;
+  }
+}
 
 const smsNumberSchema = z
   .string()
@@ -67,7 +102,33 @@ type SmsDependencies = {
 function createClient(env: NodeJS.ProcessEnv): SmsSender {
   const baseUrl = env.EMESSAGE_BASE_URL?.trim();
   if (!baseUrl) throw new Error("Missing required eGov environment variable: EMESSAGE_BASE_URL");
-  return createEMessageClientFromEnv({ baseUrl, env });
+  const accessToken = env.EMESSAGE_ACCESS_TOKEN?.trim();
+  if (!accessToken)
+    throw new Error("Missing required eGov environment variable: EMESSAGE_ACCESS_TOKEN");
+
+  const client = createEgovClient({ baseUrl });
+  client.interceptors.error.use((body, response, request) => {
+    if (!response || !request) return body;
+    return new EMessageApiError({
+      body,
+      method: request.method,
+      status: response.status,
+      statusText: response.statusText,
+      url: request.url,
+    });
+  });
+
+  return {
+    sendSms(request, options) {
+      return eMessage.sendSms({
+        auth: accessToken,
+        body: request,
+        client,
+        ...(options?.signal ? { signal: options.signal } : {}),
+        throwOnError: true,
+      });
+    },
+  };
 }
 
 export function normalizeSmsNumber(value: string): string {

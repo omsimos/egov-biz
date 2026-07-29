@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { EgovApiError } from "@repo/egov/core";
+import { EMessageApiError } from "@/lib/emessage";
 import {
   dispatchSmsOnce,
   type SmsDispatchKey,
@@ -47,8 +47,14 @@ describe("SMS dispatch idempotency", () => {
     let sends = 0;
     const send = async () => ({ status: "accepted" as const, sends: ++sends });
 
-    expect(await dispatchSmsOnce(key, send, repository)).toEqual({ status: "accepted", sends: 1 });
-    expect(await dispatchSmsOnce(key, send, repository)).toEqual({ status: "accepted", sends: 1 });
+    expect(await dispatchSmsOnce(key, send, repository)).toEqual({
+      status: "accepted",
+      sends: 1,
+    });
+    expect(await dispatchSmsOnce(key, send, repository)).toEqual({
+      status: "accepted",
+      sends: 1,
+    });
     expect(sends).toBe(1);
   });
 
@@ -68,9 +74,8 @@ describe("SMS dispatch idempotency", () => {
         key,
         async () => {
           sends++;
-          throw new EgovApiError({
+          throw new EMessageApiError({
             body: null,
-            headers: new Headers(),
             method: "POST",
             status: 422,
             statusText: "Unprocessable Entity",
@@ -132,7 +137,10 @@ describe("SMS dispatch idempotency", () => {
     let sends = 0;
     const send = async () => ({ status: "accepted" as const, sends: ++sends });
 
-    expect(await dispatchSmsOnce(key, send, repository)).toEqual({ status: "accepted", sends: 1 });
+    expect(await dispatchSmsOnce(key, send, repository)).toEqual({
+      status: "accepted",
+      sends: 1,
+    });
     await expect(dispatchSmsOnce(key, send, repository)).rejects.toThrow(
       "may already have been accepted",
     );
