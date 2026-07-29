@@ -15,6 +15,13 @@
       "when": 1785312433449,
       "tag": "0001_spooky_captain_midlands",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785315914875,
+      "tag": "0002_short_starfox",
+      "breakpoints": true
     }
   ]
 }

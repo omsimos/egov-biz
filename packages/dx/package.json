@@ -15,6 +15,10 @@
     "./bnrs": {
       "types": "./dist/bnrs/index.d.ts",
       "import": "./dist/bnrs/index.js"
+    },
+    "./lgu": {
+      "types": "./dist/lgu/index.d.ts",
+      "import": "./dist/lgu/index.js"
     }
   },
   "scripts": {

@@ -119,3 +119,132 @@ Run the generated migration through the `@repo/db` migration command before usin
 - A fuller descriptor catalog and any database seeder will be added separately.
 - Live DTI/BNRS API calls, agent tools, and application routes are outside this package.
 - Certificate PDF generation and document storage are deferred; the structured JSON certificate is implemented.
+
+# DX LGU business permits
+
+`@repo/dx/lgu` is a separate, local mock of a straightforward sole-proprietor LGU business-permit flow. It accepts a structured business-name certificate credential from its caller, collects a free-text city or municipality, charges one fixed demo fee, and immediately issues both a business permit and barangay clearance after authoritative payment confirmation.
+
+## Agency isolation and handoff
+
+The LGU module does not import, call, query, or share persistence with the BNRS module. Neither DX has access to the other DX's service, repository, database tables, or domain types. The caller is responsible for retrieving a completed certificate from the appropriate source and passing only these structurally compatible details to LGU:
+
+```ts
+type LguBusinessRegistrationCredentialInput = {
+  certificateNumber: string;
+  issuingAgency: "DTI-BNRS";
+  businessName: string;
+  ownerName: string;
+  descriptor: string;
+  territorialScope: "CITY_MUNICIPALITY" | "REGIONAL" | "NATIONAL";
+  issuedAt: string;
+  validUntil: string;
+  status: "REGISTERED";
+};
+```
+
+LGU validates required fields, the supported issuer and status, date consistency, expiry, and the normalized owner-name match. This is an input contract for the demo, not proof of certificate authenticity: LGU has no BNRS lookup or cryptographic verification. Do not give LGU a BNRS repository or service instance.
+
+Agent tools, routes, and orchestration are deliberately outside this package.
+
+## Identity and applicant data
+
+Create the actor only from the authenticated SSO profile's trusted `rawProfile.uniqid`:
+
+```ts
+const actor = { egovUserId: session.rawProfile.uniqid };
+const applicant = mapEgovSsoProfileToLguApplicantInformation(session);
+```
+
+The actor ID is authorization context and is stored separately from applicant data. The mapper returns the normalized full owner name and, when SSO supplies it, the complete normalized TIN. The TIN is optional and is intentionally returned unmasked in this demo. Never accept `egovUserId` from a browser, certificate, or agent payload.
+
+## Setup and usage
+
+Use an LGU-owned repository and an independently configured eGovPay client. The SDK can be the same library used elsewhere, but credentials, settlement template, provider instance, and environment configuration belong to LGU:
+
+```ts
+import { createDatabase } from "@repo/db";
+import { createEgovPayClient } from "@repo/egov/eGovPay";
+import {
+  createDrizzleLguRepository,
+  createEgovPayLguPaymentProvider,
+  createLguService,
+} from "@repo/dx/lgu";
+
+const database = createDatabase(process.env.DATABASE_URL!);
+const repository = createDrizzleLguRepository(database);
+const paymentProvider = createEgovPayLguPaymentProvider(
+  createEgovPayClient({
+    apiKey: process.env.LGU_EGOVPAY_API_KEY!,
+    baseUrl: process.env.LGU_EGOVPAY_BASE_URL!,
+    settlementTemplateUuid: process.env.LGU_EGOVPAY_SETTLEMENT_TEMPLATE_UUID!,
+  }),
+);
+const lgu = createLguService({ repository, paymentProvider });
+
+const application = await lgu.startOrResumeApplication({
+  actor,
+  applicant,
+  certificate,
+  city: "Makati City",
+});
+const checkout = await lgu.createPayment({
+  actor,
+  applicationId: application.applicationId,
+  callbackUrl,
+  redirectUrl,
+});
+```
+
+Use `syncPaymentStatus({ transactionUuid })` from callback and return handling. Callback payloads do not decide the result: LGU reads the provider transaction and verifies its UUID, transaction ID, amount, and currency. Repeated checkout creation reuses the pending transaction. A failed, expired, or voided payment returns the application to `PAYMENT_READY`; a pending payment is provider-voided before abandonment. If payment won an abandonment race, the application completes instead.
+
+Payment sync is deliberately not actor-scoped, so its result contains only application ID, lifecycle state, non-PII payment summary, and a `documentsIssued` boolean. It never returns city, applicant data, TIN, certificate details, or issued documents. After a return or callback, use actor-scoped `getStatus` or `getIssuedDocuments` to show the result to the authenticated owner.
+
+If provider creation is interrupted, checkout retry and abandonment both reuse the stored callback/redirect URLs and the same logical transaction ID. Abandonment first recovers the provider transaction, then voids and authoritatively verifies it; LGU never abandons a possibly payable attempt only in local state.
+
+The public service also provides `getStatus`, `getPaymentQuote`, `abandonApplication`, `listIssuedDocuments`, and actor-scoped `getIssuedDocuments`. Both issued documents are returned together.
+
+## Lifecycle, city identity, and fee
+
+```text
+PAYMENT_READY -> PAYMENT_PENDING -> COMPLETED
+       |                 |
+       +-----> ABANDONED +-- failed / expired / voided -> PAYMENT_READY
+```
+
+The city or municipality is intentionally free text. LGU applies Unicode normalization, trims it, and collapses whitespace; application identity compares the result case-insensitively. The demo accepts any city for any supported certificate territorial scope and does not use a city catalog, infer a barangay, correct spelling, or enforce territorial compatibility.
+
+One non-abandoned application is allowed for each eGov user, certificate number, and normalized city. The same certificate can therefore produce permits in different cities. A matching retry resumes the immutable snapshot; different applicant or certificate details conflict. An unpaid application may be abandoned and replaced. Multiple branches for the same certificate in the same city are deferred.
+
+The fee is a fixed PHP 2,500 for every city and is exposed as one line item that includes the barangay clearance. This demo has no city fee table, effective dates, fee versioning, or future fee-change behavior.
+
+## Issued JSON documents
+
+Verified payment immediately approves the application and atomically issues exactly one stable pair:
+
+- Business permit number `LGU-BP-YYYY-XXXXXXXX`, permit type `NEW_BUSINESS`, `ACTIVE` status, issuing city, BNRS certificate number, business and owner details, optional full TIN, activity, certificate territorial scope, issue/validity dates, and PHP 2,500 total paid.
+- Barangay clearance number `LGU-BC-YYYY-XXXXXXXX`, type `BARANGAY_BUSINESS_CLEARANCE`, `APPROVED` status, the same business/owner/activity data, issue/validity dates, and `includedInBusinessPermitFee: true`.
+
+Both documents expire at `23:59:59.999Z` on December 31 of their issue year. Payment callbacks and retries preserve the first numbers and timestamps. There is no barangay-name field because only the city is collected; the clearance is still displayed and fetched beside the business permit.
+
+## LGU persistence
+
+The generated Drizzle migration adds three LGU-owned tables:
+
+- `lgu_applications` stores lifecycle, the accepted credential snapshot, city identity, and dedicated permit/clearance issuance columns.
+- `lgu_applicant_information` stores the separate one-to-one owner name and optional TIN.
+- `lgu_payments` stores every LGU hosted-payment attempt and provider reference.
+
+No JSON document blob or separate barangay-clearance table is used. Run the `@repo/db` migration command before using the module.
+
+## LGU deferred and out of scope
+
+- Certificate authenticity checks and direct BNRS access
+- Territorial-scope-to-city compatibility rules and authoritative city/barangay catalogs
+- Multiple same-city branches
+- Terms, undertakings, and additional form stages
+- TIN verification
+- Capitalization, employees, tenancy, cedula, and ancillary permits
+- Full business address
+- Review, inspections, and processing delays
+- Renewals, amendments, cancellation, revocation, and post-release workflows
+- PDF generation, document storage, UI/routes, and agent integration
