@@ -26,6 +26,7 @@ import {
   PencilSimpleIcon,
   ShieldCheck,
   SparkleIcon,
+  Storefront,
   StopCircle,
   Plus,
   CaretDown,
@@ -54,7 +55,9 @@ import { cn } from "@/lib/utils";
 import { POPOVER_IN, POPOVER_OUT, SCRIM_IN, SCRIM_OUT, SHEET_IN, SHEET_OUT } from "@/lib/motion";
 import type { BirFormArtifact } from "@/lib/bir-form/artifact";
 import {
+  isOptionalRegistrationStep,
   latestRegistrationPlan,
+  planProgress,
   uniqueMessagesById,
   type BusinessChatMessage,
   type BusinessConversation,
@@ -74,6 +77,7 @@ type ReadyAskUserPart = AskUserPart & {
   input: { questions?: IntakeQuestion[]; question?: IntakeQuestion };
 };
 type PendingQuestion = { part: ReadyAskUserPart; questions: IntakeQuestion[] };
+type IntakeOption = NonNullable<IntakeQuestion["options"]>[number];
 export type PaymentRequest = {
   serviceType: PaymentServiceType;
   serviceLabel: string;
@@ -81,6 +85,23 @@ export type PaymentRequest = {
   feeLabel: string;
   serviceReference?: string;
 };
+
+function displayedIntakeOption(questionId: string, option: IntakeOption): IntakeOption {
+  if (questionId !== "profile-address") return option;
+  if (option.id === "use-profile-address")
+    return {
+      ...option,
+      label: "Use my registered eGov address",
+      description: "Prefill the verified address from my profile",
+    };
+  if (option.id === "use-different-address")
+    return {
+      ...option,
+      label: "Use a different address",
+      description: "I will enter the business address",
+    };
+  return option;
+}
 
 function birFormArtifactLabel(artifact: BirFormArtifact) {
   const formType =
@@ -105,6 +126,38 @@ function DetailRows({ rows }: { rows: [string, string][] }) {
         </div>
       ))}
     </div>
+  );
+}
+
+function BusinessFinalizedCard({
+  businessId,
+  businessName,
+  registrationNumber,
+  onOpenBusiness,
+}: {
+  businessId: string;
+  businessName: string;
+  registrationNumber: string;
+  onOpenBusiness: (businessId: string) => void;
+}) {
+  return (
+    <button
+      className="business-finalized-card"
+      data-cuelume-toggle="page"
+      onClick={() => onOpenBusiness(businessId)}
+      type="button"
+    >
+      <span>
+        <Storefront weight="duotone" />
+      </span>
+      <div>
+        <small>All set up</small>
+        <strong>{businessName}</strong>
+        <p>{registrationNumber}</p>
+        <p>Open records and tax calendar</p>
+      </div>
+      <ArrowRight weight="bold" />
+    </button>
   );
 }
 
@@ -226,11 +279,16 @@ function PlanDock({
   useEffect(() => {
     if (collapseKey) setExpanded(false);
   }, [collapseKey]);
-  const completed = plan.steps.filter((step) => step.status === "completed").length;
+  const required = plan.steps.filter((step) => !isOptionalRegistrationStep(step));
+  const completed = required.filter(
+    (step) => step.status === "completed" || step.status === "skipped",
+  ).length;
   const allResolved =
-    plan.steps.length > 0 &&
-    plan.steps.every((step) => step.status === "completed" || step.status === "skipped");
+    required.length > 0 &&
+    required.every((step) => step.status === "completed" || step.status === "skipped");
   const current =
+    required.find((step) => step.status === "in_progress") ??
+    required.find((step) => step.status === "pending") ??
     plan.steps.find((step) => step.status === "in_progress") ??
     plan.steps.find((step) => step.status === "pending") ??
     plan.steps.at(-1);
@@ -283,9 +341,9 @@ function PlanDock({
         </span>
         <span
           className="rounded-sm bg-muted px-[7px] py-1 text-2xs font-extrabold tabular-nums text-muted-foreground"
-          aria-label={`${completed} of ${plan.steps.length} tasks completed`}
+          aria-label={`${completed} of ${required.length} required tasks resolved`}
         >
-          {completed}/{plan.steps.length}
+          {completed}/{required.length}
         </span>
         <CaretDownIcon
           className={cn(
@@ -364,6 +422,9 @@ function PlanDock({
                   </span>
                   <span>
                     {step.label}
+                    {isOptionalRegistrationStep(step) && (
+                      <small className="italic text-gray-500"> (optional)</small>
+                    )}
                     {step.status === "skipped" && (
                       <small className="italic text-gray-500"> (skipped)</small>
                     )}
@@ -433,9 +494,10 @@ function QuestionComposer({
         return {
           questionId: question.id,
           value,
-          labels: items.map(
-            (item) => question.options?.find((option) => option.id === item)?.label ?? item,
-          ),
+          labels: items.map((item) => {
+            const option = question.options?.find((option) => option.id === item);
+            return option ? displayedIntakeOption(question.id, option).label : item;
+          }),
         };
       }),
     );
@@ -476,17 +538,20 @@ function QuestionComposer({
         const value = values[question.id];
         const selected = Array.isArray(value) ? value : value ? [value] : [];
         const enteredText = typeof value === "string" ? value.trim() : "";
+        const savedOptions = (question.options ?? []).map((option) =>
+          displayedIntakeOption(question.id, option),
+        );
         const options =
           question.type === "single" && question.allowOther !== false
             ? [
-                ...(question.options ?? []),
+                ...savedOptions,
                 {
                   id: "__other__",
                   label: "Other — type your answer",
                   description: "Enter a different answer",
                 },
               ]
-            : (question.options ?? []);
+            : savedOptions;
         // p-3 with a 13px label puts the row at ~46px, over the 44pt tap-target
         // floor it used to sit under. border-2 and the 900 label are what make
         // a selected row read as chosen at a glance — the fill alone doesn't.
@@ -820,44 +885,80 @@ export function DtiFormCard({
 
 function BirFormArtifactCard({
   artifact,
+  dstPaid,
+  enableRegistrationPayment,
+  onPay,
   onPreview,
 }: {
   artifact: BirFormArtifact;
+  dstPaid: boolean;
+  enableRegistrationPayment: boolean;
+  onPay: (request: PaymentRequest) => void;
   onPreview: () => void;
 }) {
   const formLabel = birFormArtifactLabel(artifact);
+  const needsDstPayment = enableRegistrationPayment && artifact.formType === "1901";
   return (
-    <button
-      className="pdf-artifact-card"
-      data-cuelume-toggle="page"
-      type="button"
-      onClick={onPreview}
-    >
-      <span className="pdf-artifact-icon">
-        <FilePdf weight="fill" />
-      </span>
-      <span className="pdf-artifact-copy">
-        <small>PDF artifact</small>
-        <strong>{formLabel}</strong>
-        <span>
-          {artifact.pageCount} pages · {Math.max(1, Math.round(artifact.size / 1024))} KB
+    <article className={cn("bir-form-artifact", needsDstPayment && "with-payment")}>
+      <button
+        className="pdf-artifact-card"
+        data-cuelume-toggle="page"
+        type="button"
+        onClick={onPreview}
+      >
+        <span className="pdf-artifact-icon">
+          <FilePdf weight="fill" />
         </span>
-      </span>
-      <span className="pdf-artifact-action">
-        Preview <ArrowRight weight="bold" />
-      </span>
-    </button>
+        <span className="pdf-artifact-copy">
+          <small>PDF artifact</small>
+          <strong>{formLabel}</strong>
+          <span>
+            {artifact.pageCount} pages · {Math.max(1, Math.round(artifact.size / 1024))} KB
+          </span>
+        </span>
+        <span className="pdf-artifact-action">
+          Preview <ArrowRight weight="bold" />
+        </span>
+      </button>
+      {needsDstPayment && (
+        <footer className="local-permit-payment">
+          <div>
+            <small>Final registration payment · Documentary Stamp Tax</small>
+            <strong>₱30.00</strong>
+          </div>
+          <button
+            type="button"
+            disabled={dstPaid}
+            onClick={() =>
+              onPay({
+                serviceType: "bir-documentary-stamp-tax",
+                serviceLabel: "BIR Documentary Stamp Tax",
+                proposedName: formLabel,
+                feeLabel: "₱30.00",
+                serviceReference: artifact.artifactId,
+              })
+            }
+          >
+            {dstPaid ? "Paid" : "Pay with eGovPay"} <ArrowRight weight="bold" />
+          </button>
+        </footer>
+      )}
+    </article>
   );
 }
 
 function ToolPart({
   part,
+  enableBirPayment,
   paidServices,
+  onOpenBusiness,
   onSubmitPay,
   onPreviewPdf,
 }: {
   part: BusinessChatMessage["parts"][number];
+  enableBirPayment: boolean;
   paidServices: Set<PaymentServiceType>;
+  onOpenBusiness: (businessId: string) => void;
   onSubmitPay: (request: PaymentRequest) => void;
   onPreviewPdf: (artifact: BirFormArtifact) => void;
 }) {
@@ -934,6 +1035,9 @@ function ToolPart({
       return (
         <BirFormArtifactCard
           artifact={part.output.artifact}
+          dstPaid={paidServices.has("bir-documentary-stamp-tax")}
+          enableRegistrationPayment={enableBirPayment}
+          onPay={onSubmitPay}
           onPreview={() => onPreviewPdf(part.output.artifact)}
         />
       );
@@ -1027,6 +1131,17 @@ function ToolPart({
         />
         <footer>{part.output.nextAction}</footer>
       </article>
+    );
+  }
+  if (part.type === "tool-finalizeBusinessRegistration") {
+    if (part.state !== "output-available") return null;
+    return (
+      <BusinessFinalizedCard
+        businessId={part.output.businessId}
+        businessName={part.output.businessName}
+        onOpenBusiness={onOpenBusiness}
+        registrationNumber={part.output.registrationNumber}
+      />
     );
   }
   if (part.type === "tool-webSearch") return <SearchTool part={part} />;
@@ -1232,6 +1347,7 @@ export function BusinessChatScreen({
   paymentService,
   onBack,
   onNewConversation,
+  onOpenBusiness,
   onSelectConversation,
   onDeleteConversation,
 }: {
@@ -1243,6 +1359,7 @@ export function BusinessChatScreen({
   paymentService?: PaymentServiceType | null;
   onBack: () => void;
   onNewConversation: () => void;
+  onOpenBusiness: (businessId: string) => void;
   onSelectConversation: (id: string) => void;
   onDeleteConversation: (conversation: ConversationSummary) => void;
 }) {
@@ -1260,6 +1377,7 @@ export function BusinessChatScreen({
   const [answeringToolCallId, setAnsweringToolCallId] = useState<string | null>(null);
   const answeredToolCalls = useRef(new Set<string>());
   const continuedPayment = useRef<string | null>(null);
+  const recoveredBusinessRecord = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const seeded = useRef(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -1314,12 +1432,19 @@ export function BusinessChatScreen({
     [localPaymentStatuses],
   );
   const latestPlan = latestRegistrationPlan(visibleMessages);
+  const latestProgress = latestPlan ? planProgress(latestPlan.plan) : null;
+  const hasFinalizedBusinessCard = visibleMessages.some((message) =>
+    message.parts.some(
+      (part) =>
+        part.type === "tool-finalizeBusinessRegistration" && part.state === "output-available",
+    ),
+  );
   const completedPlanSteps =
     latestPlan?.plan.steps.filter((step) => step.status === "completed").length ?? 0;
   const previousStatus = useRef(status);
   const previousCompletedPlanSteps = useRef(completedPlanSteps);
   const hadError = useRef(Boolean(error));
-  const pending: PendingQuestion | null = (() => {
+  const pendingQuestion: PendingQuestion | null = (() => {
     for (const message of [...visibleMessages].reverse()) {
       for (const part of [...message.parts].reverse()) {
         if (part.type === "tool-askUser" && part.state === "input-available") {
@@ -1334,6 +1459,12 @@ export function BusinessChatScreen({
     }
     return null;
   })();
+  const legacyBirConsentPending =
+    pendingQuestion?.questions.length === 1 &&
+    ["bir-form-consent", "self-employed-bir-form-consent"].includes(
+      pendingQuestion.questions[0]?.id ?? "",
+    );
+  const pending = legacyBirConsentPending ? null : pendingQuestion;
 
   useEffect(() => {
     // Reconnect and initial seeding are mutually exclusive. A persisted active
@@ -1386,7 +1517,7 @@ export function BusinessChatScreen({
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const text = input.trim();
-    if (!text || busy || pending) return;
+    if (!text || busy || pending || legacyBirConsentPending) return;
     setInput("");
     void sendMessage({ text });
   };
@@ -1406,6 +1537,37 @@ export function BusinessChatScreen({
       setAnsweringToolCallId(null);
     }
   };
+  useEffect(() => {
+    if (
+      !legacyBirConsentPending ||
+      !pendingQuestion ||
+      busy ||
+      answeredToolCalls.current.has(pendingQuestion.part.toolCallId)
+    )
+      return;
+
+    const toolCallId = pendingQuestion.part.toolCallId;
+    const questionId = pendingQuestion.questions[0]?.id;
+    if (!questionId) return;
+    answeredToolCalls.current.add(toolCallId);
+    setAnsweringToolCallId(toolCallId);
+    void (async () => {
+      try {
+        await addToolOutput({
+          tool: "askUser",
+          toolCallId,
+          output: {
+            answers: [{ questionId, value: "yes", labels: ["Generate immediately"] }],
+          },
+        });
+        await sendMessage();
+      } catch {
+        answeredToolCalls.current.delete(toolCallId);
+      } finally {
+        setAnsweringToolCallId(null);
+      }
+    })();
+  }, [addToolOutput, busy, legacyBirConsentPending, pendingQuestion, sendMessage]);
   const continueAfterPayment = async (serviceType: PaymentServiceType = "dti-business-name") => {
     if (serviceType === "dti-business-name") setLocalPaymentStatus("paid");
     setLocalPaymentStatuses((current) => ({ ...current, [serviceType]: "paid" }));
@@ -1426,13 +1588,55 @@ export function BusinessChatScreen({
     }
   };
 
+  const automaticPaymentService =
+    paymentService ??
+    (!latestProgress?.done && paidServices.has("bir-documentary-stamp-tax")
+      ? "bir-documentary-stamp-tax"
+      : null);
+
   useEffect(() => {
-    if (!paymentService || !/paid|success|complete/i.test(paymentStatus ?? "")) return;
-    const continuationKey = `${conversation.id}:${paymentService}`;
+    if (!automaticPaymentService) return;
+    if (
+      automaticPaymentService === paymentService &&
+      !/paid|success|complete/i.test(paymentStatus ?? "")
+    )
+      return;
+    const continuationKey = `${conversation.id}:${automaticPaymentService}`;
     if (continuedPayment.current === continuationKey) return;
     continuedPayment.current = continuationKey;
-    void continueAfterPayment(paymentService);
-  }, [conversation.id, paymentService, paymentStatus]);
+    void continueAfterPayment(automaticPaymentService);
+  }, [automaticPaymentService, conversation.id, paymentService, paymentStatus]);
+  useEffect(() => {
+    if (
+      management ||
+      !latestProgress?.done ||
+      hasFinalizedBusinessCard ||
+      business ||
+      conversation.businessId ||
+      busy ||
+      recoveredBusinessRecord.current
+    )
+      return;
+    recoveredBusinessRecord.current = true;
+    void sendMessage(
+      {
+        role: "user",
+        parts: [{ type: "data-registrationCompleted", data: { status: "complete" } }],
+      },
+      { body: { event: "registration-completed" } },
+    ).catch(() => {
+      recoveredBusinessRecord.current = false;
+      setContinuationError("Registration is complete, but its business record could not load.");
+    });
+  }, [
+    business,
+    busy,
+    conversation.businessId,
+    hasFinalizedBusinessCard,
+    latestProgress?.done,
+    management,
+    sendMessage,
+  ]);
 
   return (
     <div className="screen agent-chat-screen">
@@ -1604,7 +1808,9 @@ export function BusinessChatScreen({
                     <ToolPart
                       key={`${message.id}-${index}`}
                       part={part}
+                      enableBirPayment={Boolean(latestPlan)}
                       paidServices={paidServices}
+                      onOpenBusiness={onOpenBusiness}
                       onSubmitPay={setPaymentRequest}
                       onPreviewPdf={setPdfArtifact}
                     />
@@ -1614,6 +1820,14 @@ export function BusinessChatScreen({
             </article>
           );
         })}
+        {!management && latestProgress?.done && business && !hasFinalizedBusinessCard && (
+          <BusinessFinalizedCard
+            businessId={business.id}
+            businessName={business.name}
+            onOpenBusiness={onOpenBusiness}
+            registrationNumber={business.registrationNumber}
+          />
+        )}
         {busy && (
           <div className="chat-working" role="status" aria-live="polite">
             <AgentDot />
@@ -1627,11 +1841,13 @@ export function BusinessChatScreen({
         {(error || continuationError) && (
           <div className="chat-error">
             {continuationError || "I couldn’t continue. Please try again."}
-            {paid && (
+            {(paid || automaticPaymentService) && (
               <button
                 type="button"
                 data-cuelume-toggle="loading"
-                onClick={() => void continueAfterPayment(paymentService ?? "dti-business-name")}
+                onClick={() =>
+                  void continueAfterPayment(automaticPaymentService ?? "dti-business-name")
+                }
                 disabled={busy}
               >
                 Continue to next step

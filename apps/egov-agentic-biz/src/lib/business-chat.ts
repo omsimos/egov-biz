@@ -41,7 +41,10 @@ export type DtiBusinessNameForm = {
   missingFields: string[];
 };
 
-export type PaymentServiceType = "dti-business-name" | "lgu-business-permit";
+export type PaymentServiceType =
+  | "dti-business-name"
+  | "lgu-business-permit"
+  | "bir-documentary-stamp-tax";
 
 export type AskUserAnswer = { questionId: string; value: string | string[]; labels: string[] };
 export type AskUserInput = { questions: IntakeQuestion[]; question?: IntakeQuestion };
@@ -88,6 +91,7 @@ export type AgentPlanStep = {
   id: string;
   label: string;
   status: "pending" | "in_progress" | "completed" | "skipped";
+  optional?: boolean;
 };
 export type RegistrationPlan = { title: string; steps: AgentPlanStep[] };
 export type UpdatePlanInput = RegistrationPlan & { note?: string };
@@ -110,6 +114,12 @@ export type UserInfoOutput = {
 export type GenerateBirFormOutput = {
   artifact: BirFormArtifact;
   source: "BIR tool input merged with authenticated eGov SSO profile";
+};
+export type FinalizeBusinessRegistrationOutput = {
+  businessId: string;
+  businessName: string;
+  registrationNumber: string;
+  status: "Active";
 };
 
 export type BusinessChatTools = {
@@ -135,12 +145,17 @@ export type BusinessChatTools = {
     input: Record<string, never>;
     output: IssueLguBusinessPermitOutput;
   };
+  finalizeBusinessRegistration: {
+    input: Record<string, never>;
+    output: FinalizeBusinessRegistrationOutput;
+  };
   updatePlan: { input: UpdatePlanInput; output: UpdatePlanOutput };
 };
 
 export type BusinessChatData = {
   plan: { plan: BusinessPlan };
   paymentCompleted: { status: "paid"; serviceType: PaymentServiceType };
+  registrationCompleted: { status: "complete" };
 };
 
 export type BusinessChatMessage = UIMessage<unknown, BusinessChatData, BusinessChatTools>;
@@ -165,10 +180,14 @@ export function uniqueMessagesById<T extends { id: string }>(messages: readonly 
   return unique;
 }
 
-// How far a saved plan actually got. `completed` counts only steps marked
-// completed, matching the plan dock's own n/total chip; `done` also accepts
-// skipped steps, because a plan whose remaining work was deliberately skipped
-// is finished, not abandoned. Null when a conversation has no plan yet.
+const OPTIONAL_REGISTRATION_STEP_IDS = new Set(["tax-compliance", "sector-permits", "employer"]);
+
+export function isOptionalRegistrationStep(step: Pick<AgentPlanStep, "id" | "optional">) {
+  return step.optional === true || OPTIONAL_REGISTRATION_STEP_IDS.has(step.id);
+}
+
+// Progress covers required registration checkpoints only. Optional follow-up
+// work stays visible in the plan without preventing its completion state.
 export type PlanProgress = { completed: number; total: number; done: boolean };
 
 export type ConversationPurpose = "registration" | "management";
@@ -221,13 +240,13 @@ export function latestRegistrationPlan(messages: Pick<BusinessChatMessage, "part
 }
 
 export function planProgress(plan: RegistrationPlan): PlanProgress {
-  const completed = plan.steps.filter((step) => step.status === "completed").length;
-  const resolved = plan.steps.filter(
+  const required = plan.steps.filter((step) => !isOptionalRegistrationStep(step));
+  const resolved = required.filter(
     (step) => step.status === "completed" || step.status === "skipped",
   ).length;
   return {
-    completed,
-    done: plan.steps.length > 0 && resolved === plan.steps.length,
-    total: plan.steps.length,
+    completed: resolved,
+    done: required.length > 0 && resolved === required.length,
+    total: required.length,
   };
 }

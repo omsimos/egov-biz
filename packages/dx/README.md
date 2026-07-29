@@ -205,6 +205,25 @@ jurisdiction lookup and must not be used for a real filing. The demo also does
 not collect the Tax Type Questionnaire, which remains required for actual
 NewBizReg filing.
 
+`createBirDemoTaxCalendar` returns four upcoming simulated reminders for a
+`Self-employed`, `Sole proprietor`, or `Company` record. The reminder titles and
+individual or corporate income-tax form families vary by legal business type,
+and the result is sorted by due date. Pass `asOf` to make tests or snapshots
+deterministic:
+
+```ts
+const calendar = createBirDemoTaxCalendar({
+  businessType: "Self-employed",
+  asOf: new Date("2026-07-30T00:00:00.000Z"),
+});
+```
+
+Every entry carries `simulated: true` and a confirmation note. The calendar is
+not a tax-type determination: business type alone does not establish VAT or
+percentage-tax status, withholding obligations, tax elections, fiscal year, or
+official filing deadlines. The generator is pure and does not read, update, or
+store business records; callers decide whether to persist its result.
+
 # DX LGU business permits
 
 `@repo/dx/lgu` is a separate, local mock of a straightforward sole-proprietor LGU business-permit flow. It accepts a structured business-name certificate credential containing the BNRS business address, derives the issuing city from that address, charges one fixed demo fee, and immediately issues both a business permit and barangay clearance after authoritative payment confirmation.

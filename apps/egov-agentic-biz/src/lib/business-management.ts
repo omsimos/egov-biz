@@ -51,7 +51,7 @@ export function businessManagementContext(business: RegisteredBusiness) {
 
 function taxCalendarAnswer(business: RegisteredBusiness) {
   if (!business.taxObligations.length)
-    return `There are no authoritative tax reminders saved for **${business.name}**. The DX BIR module currently stores generated forms, not taxpayer registration, tax types, or filing deadlines; confirm those directly with BIR.`;
+    return `There are no authoritative tax reminders saved for **${business.name}**. Its DX BIR registration record and generated forms are available, but no recurring tax types or filing deadlines have been assigned yet; confirm those directly with BIR.`;
   const entries = business.taxObligations
     .slice(0, 4)
     .map(

@@ -1,5 +1,6 @@
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import type { UserInfoOutput } from "@/lib/business-chat";
+import type { BusinessPlan } from "@/lib/questions";
 
 export function resolveBusinessFormAddress(
   providedAddress: string,
@@ -16,6 +17,16 @@ export function profileAddressPreference(value: string | string[] | undefined) {
   if (selected.includes("use-profile-address")) return "profile" as const;
   if (selected.includes("use-different-address")) return "different" as const;
   return null;
+}
+
+export function shouldCollectStructuredBusinessAddress(
+  preference: ReturnType<typeof profileAddressPreference>,
+  registrationType: BusinessPlan["registrationType"],
+  hasCompleteResidentialAddress: boolean,
+) {
+  if (!preference) return false;
+  if (preference === "different") return true;
+  return registrationType !== "Self-employed" && !hasCompleteResidentialAddress;
 }
 
 export function extractExplicitBusinessAddress(prompt: string) {

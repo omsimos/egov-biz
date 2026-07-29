@@ -1,5 +1,6 @@
 import { BnrsError } from "@repo/dx/bnrs";
 import { LguError } from "@repo/dx/lgu";
+import { BirDstPaymentError, syncBirDstPaymentByUuid } from "@/server/bir-dst-payment";
 import {
   findConversationByBnrsPayment,
   findConversationByLguPayment,
@@ -19,6 +20,14 @@ export async function POST(request: Request) {
     );
     if (!transactionUuid)
       return Response.json({ error: "Missing transaction reference" }, { status: 400 });
+
+    const birPayment = await syncBirDstPaymentByUuid(transactionUuid);
+    if (birPayment)
+      return Response.json({
+        received: true,
+        paymentStatus: birPayment.status,
+        serviceType: "bir-documentary-stamp-tax",
+      });
 
     const [bnrsLink, lguLink] = await Promise.all([
       findConversationByBnrsPayment(transactionUuid),
@@ -51,7 +60,8 @@ export async function POST(request: Request) {
   } catch (error) {
     if (
       (error instanceof BnrsError && error.code === "PAYMENT_NOT_FOUND") ||
-      (error instanceof LguError && error.code === "PAYMENT_NOT_FOUND")
+      (error instanceof LguError && error.code === "PAYMENT_NOT_FOUND") ||
+      (error instanceof BirDstPaymentError && error.code === "PAYMENT_NOT_FOUND")
     )
       return Response.json({ error: "Unknown transaction reference" }, { status: 404 });
     console.error(

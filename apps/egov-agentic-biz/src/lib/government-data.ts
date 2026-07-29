@@ -94,6 +94,7 @@ function toRdo([code, name]: readonly [string, string], exact: boolean): RdoSele
 
 export function extractAnsweredLocation(answers: { questionId: string; labels: string[] }[]) {
   const locationAnswer =
+    answers.find((answer) => answer.questionId === "business-city-municipality") ??
     answers.find((answer) => answer.questionId === "business-address") ??
     answers.find(
       (answer) =>

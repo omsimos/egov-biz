@@ -1,4 +1,4 @@
-import type { RegistrationPlan } from "@/lib/business-chat";
+import { isOptionalRegistrationStep, type RegistrationPlan } from "@/lib/business-chat";
 
 export const initialRegistrationPlan: RegistrationPlan = {
   title: "End-to-end business registration",
@@ -28,21 +28,28 @@ export const initialRegistrationPlan: RegistrationPlan = {
       label: "Apply for the city or municipal business permit",
       status: "pending",
     },
-    { id: "bir", label: "Register with BIR and the correct RDO", status: "pending" },
+    {
+      id: "bir",
+      label: "Generate BIR Form 1901 and pay the documentary stamp tax",
+      status: "pending",
+    },
     {
       id: "tax-compliance",
       label: "Set up books, invoices, and recurring tax filings",
       status: "pending",
+      optional: true,
     },
     {
       id: "sector-permits",
       label: "Complete food, fire, sanitary, or sector permits",
       status: "pending",
+      optional: true,
     },
     {
       id: "employer",
       label: "Register with SSS, PhilHealth, and Pag-IBIG if hiring",
       status: "pending",
+      optional: true,
     },
     {
       id: "launch-renewals",
@@ -72,20 +79,20 @@ export function normalizeRegistrationPlan(plan: RegistrationPlan): RegistrationP
   };
 }
 
-export function completeRegistrationPlan(
-  plan: RegistrationPlan,
-  applicability: { employer: boolean; sectorPermits: boolean },
-): RegistrationPlan {
+export function completeRegistrationPlan(plan: RegistrationPlan): RegistrationPlan {
   return {
     ...plan,
-    steps: plan.steps.map((step) => ({
-      ...step,
-      status:
-        step.status === "skipped" ||
-        (step.id === "employer" && !applicability.employer) ||
-        (step.id === "sector-permits" && !applicability.sectorPermits)
-          ? ("skipped" as const)
-          : ("completed" as const),
-    })),
+    steps: plan.steps.map((step) => {
+      if (isOptionalRegistrationStep(step))
+        return {
+          ...step,
+          optional: true,
+          status: step.status === "completed" ? ("completed" as const) : ("pending" as const),
+        };
+      return {
+        ...step,
+        status: step.status === "skipped" ? ("skipped" as const) : ("completed" as const),
+      };
+    }),
   };
 }
