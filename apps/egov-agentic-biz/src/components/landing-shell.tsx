@@ -11,6 +11,7 @@ import {
 import { motion } from "motion/react";
 import type { Ref } from "react";
 import { BrandLogo } from "@/components/brand-logo";
+import { OmsimosMark } from "@/components/omsimos-mark";
 import { LANDING } from "@/lib/motion";
 import { cn, FOCUS_RING } from "@/lib/utils";
 
@@ -32,7 +33,21 @@ export function LandingHeader({ onStart }: { onStart: () => void }) {
     // Above .landing-blobs (z-0, positioned) but below .landing-main (z-2), so
     // nothing here can paint over the phone at narrow widths.
     <header className="relative z-1 hidden flex-none items-center justify-between gap-8 px-[clamp(20px,4vw,56px)] py-[22px] min-[760px]:flex">
-      <BrandLogo height={30} priority />
+      {/* eGOVbusiness by Omsimos, one lockup. The attribution is deliberately a
+          tier down — 13px against a 42px mark, behind a hairline — so the
+          product is still what you read first. It appears from 900px up: the
+          header is a single row of five things, and below that width the
+          attribution is what pushes the nav into the buttons. */}
+      <div className="flex items-center gap-3">
+        <BrandLogo height={42} priority />
+        <span className="hidden items-center gap-[7px] border-l-[1.5px] border-gray-200 pl-3 min-[900px]:flex">
+          <span className="text-[13px] font-bold text-gray-500">by</span>
+          <span className="flex items-center gap-[6px] text-[15px] font-extrabold -tracking-[.2px] text-gray-900">
+            Omsimos
+            <OmsimosMark size={17} />
+          </span>
+        </span>
+      </div>
       <nav aria-label="About eGOVbusiness" className="flex items-center gap-[34px]">
         {navItems.map((item) => (
           <span className="text-base font-bold text-gray-800" key={item}>
