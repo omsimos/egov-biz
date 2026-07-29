@@ -1,5 +1,5 @@
 import type { CitizenProfile } from "@/lib/citizen-profile";
-import { maskTin } from "@/lib/tin";
+import { maskTin, resolveSsoTin } from "@/lib/tin";
 
 function stringValue(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -52,7 +52,7 @@ export function mapEgovCitizenProfile(profile: unknown): CitizenProfile {
     birthDate: stringValue(rawProfile.birth_date),
     gender: stringValue(rawProfile.gender),
     nationality: stringValue(rawProfile.nationality),
-    tinMasked: maskTin(rawProfile.tin_id),
+    tinMasked: maskTin(resolveSsoTin(rawProfile)),
     rdo: "",
     avatarUrl: stringValue(rawProfile.photo) ? "/api/auth/avatar" : null,
   };

@@ -969,6 +969,7 @@ async function emitBir1901Generation(
   rawProfile: EgovSsoCitizenProfile,
   conversationId: string,
   plan: RegistrationPlan,
+  businessType: BusinessPlan["registrationType"],
 ) {
   const toolCallId = crypto.randomUUID();
   writer.write({
@@ -985,6 +986,7 @@ async function emitBir1901Generation(
         rawProfile,
         { type: "1901", data: {} },
         conversationId,
+        businessType,
       ),
       source: "BIR tool input merged with authenticated eGov SSO profile" as const,
     };
@@ -1424,6 +1426,7 @@ function agentTools(
   catalog: BnrsCatalog,
   conversationId: string,
   termsAccepted: boolean,
+  businessType: BusinessPlan["registrationType"],
 ) {
   let userInfoReady = hasUserInfo;
   return {
@@ -1449,7 +1452,13 @@ function agentTools(
       execute: async (input) => {
         if (!userInfoReady) throw new Error("Call user_info before generate_bir_form");
         return {
-          artifact: await createBirFormArtifact(request, rawProfile, input, conversationId),
+          artifact: await createBirFormArtifact(
+            request,
+            rawProfile,
+            input,
+            conversationId,
+            businessType,
+          ),
           source: "BIR tool input merged with authenticated eGov SSO profile" as const,
         };
       },
@@ -1907,6 +1916,7 @@ export async function POST(request: Request) {
     bnrsCatalog,
     conversation.id,
     termsAccepted,
+    makePlan(prompt, profile, answers).registrationType,
   );
   const location = initialLocation;
 
@@ -2090,6 +2100,7 @@ export async function POST(request: Request) {
           session.rawProfile,
           conversation.id,
           planForBirPayment(issuedPlan, "Sole proprietor"),
+          "Sole proprietor",
         );
       });
     }
@@ -2160,6 +2171,7 @@ export async function POST(request: Request) {
         session.rawProfile,
         conversation.id,
         birPaymentPlan,
+        route.registrationType,
       );
     });
 
@@ -2318,6 +2330,7 @@ export async function POST(request: Request) {
         session.rawProfile,
         conversation.id,
         planForBirPayment(preparedPlan, "Self-employed"),
+        "Self-employed",
       );
     });
 

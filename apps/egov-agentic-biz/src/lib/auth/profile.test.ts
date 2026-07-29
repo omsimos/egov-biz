@@ -47,7 +47,7 @@ describe("mapEgovCitizenProfile", () => {
     expect(result.city).toBe("Quezon City");
     expect(result.address).toBe("1 Example Street, San Isidro, Quezon City, Metro Manila, 1100");
     expect(result.avatarUrl).toBe("/api/auth/avatar");
-    expect(result.tinMasked).toBe("");
+    expect(result.tinMasked).toBe("000-999-***-000");
     expect(result.rdo).toBe("");
   });
 
@@ -55,6 +55,16 @@ describe("mapEgovCitizenProfile", () => {
     const result = mapEgovCitizenProfile({ ...profile, tin_id: "123-456-789-00000" });
 
     expect(result.tinMasked).toBe("123-456-***-000");
+  });
+
+  test("uses the email-mapped dummy TIN when SSO has no TIN", () => {
+    const result = mapEgovCitizenProfile({
+      ...profile,
+      email: " JOSIE03@YOPMAIL.COM ",
+      tin_id: null,
+    });
+
+    expect(result.tinMasked).toBe("000-004-***-000");
   });
 
   test("normalizes missing and malformed profile values", () => {

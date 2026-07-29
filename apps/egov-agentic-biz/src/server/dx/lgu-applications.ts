@@ -1,6 +1,7 @@
 import type { EgovSsoCitizenProfile } from "egov.js";
 import type { BnrsCertificate } from "@repo/dx/bnrs";
 import { LguError, mapEgovSsoProfileToLguApplicantInformation, type LguActor } from "@repo/dx/lgu";
+import { resolveSsoTin } from "@/lib/tin";
 import {
   findConversationByLguApplication,
   getLguConversationLink,
@@ -23,7 +24,10 @@ export async function prepareLguApplication(input: {
 
   const status = await lgu.startOrResumeApplication({
     actor: input.actor,
-    applicant: mapEgovSsoProfileToLguApplicantInformation(input.ownerProfile),
+    applicant: mapEgovSsoProfileToLguApplicantInformation({
+      ...input.ownerProfile,
+      tin_id: resolveSsoTin(input.ownerProfile),
+    }),
     certificate: input.certificate,
   });
   const existingConversation = await findConversationByLguApplication(status.applicationId);

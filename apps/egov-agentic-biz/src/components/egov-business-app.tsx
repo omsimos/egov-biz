@@ -98,6 +98,25 @@ const PREVIEW_PROFILE: CitizenProfile = {
 
 const noop = () => {};
 
+function RegistrationField({
+  children,
+  label,
+  mono = false,
+}: {
+  children: ReactNode;
+  label: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="grid grid-cols-[118px_minmax(0,1fr)] items-baseline gap-3.5 border-b border-[var(--row-divider)] py-[13px] last:border-b-0">
+      <dt className="text-sm text-gray-600">{label}</dt>
+      <dd className={cn("m-0 text-copy leading-[1.55] font-bold break-words", mono && "font-mono")}>
+        {children}
+      </dd>
+    </div>
+  );
+}
+
 // Chip label first, prompt second: the chip is what fits on one line of a
 // non-wrapping row, and the prompt is the sentence it writes into the field.
 const suggestions = [
@@ -149,6 +168,7 @@ export function BusinessDetailScreen({
   // The soonest obligation is the only one that states a day count, so it is
   // also the only one that needs finding — the API returns them in due order.
   const nextObligation = business?.taxObligations[0];
+  const bir2303 = business?.files.find((file) => file.id === "bir-form-2303");
 
   return (
     <div className="screen screen-stack screen-ground">
@@ -208,16 +228,15 @@ export function BusinessDetailScreen({
           onValueChange={(value) => setTab(value as RecordTab)}
           value={tab}
         >
-          {/* Four equal pills that do not scroll. Sticky tabs inside the
-              scroller meant the row the citizen was aiming at moved while the
-              panel behind it settled. */}
+          {/* Keep every label intact on narrow screens. The row scrolls
+              independently of the panel and settles on a whole tab. */}
           <TabsList
             aria-label="Business record sections"
-            className="flex shrink-0 gap-1 rounded-none border-b border-[var(--line-soft)] bg-white p-0 px-4 pb-2.5"
+            className="flex shrink-0 snap-x snap-mandatory gap-1 overflow-x-auto overscroll-x-contain scroll-px-4 scroll-smooth rounded-none border-b border-[var(--line-soft)] bg-white p-0 px-4 pb-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {RECORD_TABS.map(([value, label]) => (
               <TabsTrigger
-                className="flex-1 rounded-[10px] px-1 py-[9px] text-center text-sm font-extrabold data-active:bg-secondary data-active:text-primary data-active:shadow-none"
+                className="flex-none snap-start whitespace-nowrap rounded-[10px] px-4 py-[9px] text-center text-sm font-extrabold data-active:bg-secondary data-active:text-primary data-active:shadow-none"
                 data-cuelume-toggle="toggle"
                 key={value}
                 value={value}
@@ -299,32 +318,40 @@ export function BusinessDetailScreen({
               <section className="rounded-[18px] border border-border bg-white p-4">
                 <h2 className="mb-0.5 text-md font-extrabold -tracking-[.4px]">Registration</h2>
                 <dl className="m-0 flex flex-col">
-                  {(
-                    [
-                      ["Business name", business.name, false],
-                      ["Registration no.", business.registrationNumber, true],
-                      ["Owner", business.ownerName, false],
-                      ["BIR district", business.rdo || "Needs confirmation", false],
-                      ["Line of business", business.businessActivity, false],
-                      ["Address", business.businessAddress, false],
-                      ["Registered", formatBusinessDate(business.finalizedAt), false],
-                    ] as const
-                  ).map(([label, value, mono]) => (
-                    <div
-                      className="grid grid-cols-[118px_minmax(0,1fr)] items-baseline gap-3.5 border-b border-[var(--row-divider)] py-[13px] last:border-b-0"
-                      key={label}
-                    >
-                      <dt className="text-sm text-gray-600">{label}</dt>
-                      <dd
+                  <RegistrationField label="Business name">{business.name}</RegistrationField>
+                  <RegistrationField label="Registration no." mono>
+                    {business.registrationNumber}
+                  </RegistrationField>
+                  {bir2303 && (
+                    <RegistrationField label="BIR Form 2303">
+                      <a
+                        aria-label={`Open ${bir2303.title}`}
                         className={cn(
-                          "m-0 text-copy leading-[1.55] font-bold break-words",
-                          mono && "font-mono",
+                          "inline-flex min-h-9 items-center justify-center gap-1.5 rounded-[10px] border border-primary-border-strong bg-white px-3 text-sm font-extrabold text-primary",
+                          "transition-colors duration-150 hover:bg-secondary",
+                          FOCUS_RING,
                         )}
+                        data-cuelume-toggle="page"
+                        href={`/api/businesses/${encodeURIComponent(business.id)}/files/${encodeURIComponent(bir2303.id)}`}
+                        rel="noreferrer"
+                        target="_blank"
                       >
-                        {value}
-                      </dd>
-                    </div>
-                  ))}
+                        Open
+                        <ArrowUpRightIcon className="size-3.5" weight="bold" />
+                      </a>
+                    </RegistrationField>
+                  )}
+                  <RegistrationField label="Owner">{business.ownerName}</RegistrationField>
+                  <RegistrationField label="BIR district">
+                    {business.rdo || "Needs confirmation"}
+                  </RegistrationField>
+                  <RegistrationField label="Line of business">
+                    {business.businessActivity}
+                  </RegistrationField>
+                  <RegistrationField label="Address">{business.businessAddress}</RegistrationField>
+                  <RegistrationField label="Registered">
+                    {formatBusinessDate(business.finalizedAt)}
+                  </RegistrationField>
                 </dl>
                 <DemoRecordsNote className="mt-3" />
               </section>

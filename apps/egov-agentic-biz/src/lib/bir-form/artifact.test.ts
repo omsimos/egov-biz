@@ -1,7 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { mergeBir1901Data, mergeBir1905Data } from "@/lib/bir-form/artifact";
+import {
+  bir1901TaxpayerTypeForBusinessType,
+  currentBirRegistrationDate,
+  mergeBir1901Data,
+  mergeBir1901DataForBusinessType,
+  mergeBir1905Data,
+} from "@/lib/bir-form/artifact";
 
 describe("mergeBir1901Data", () => {
+  test("uses the current Philippine date for Form 1901 registration", () => {
+    expect(currentBirRegistrationDate(new Date("2026-07-29T16:30:00.000Z"))).toBe("2026-07-30");
+  });
+
   test("lets supplied form data override profile defaults without losing sibling values", () => {
     const merged = mergeBir1901Data(
       {
@@ -39,6 +49,35 @@ describe("mergeBir1901Data", () => {
           preferredTypes: ["landline", "mobile"],
         },
       },
+    });
+  });
+
+  test("maps app business types to their Form 1901 taxpayer types", () => {
+    expect(bir1901TaxpayerTypeForBusinessType("Sole proprietor")).toBe(
+      "singleProprietorshipResidentCitizen",
+    );
+    expect(bir1901TaxpayerTypeForBusinessType("Self-employed")).toBe("professionalGeneral");
+    expect(bir1901TaxpayerTypeForBusinessType("Company")).toBeUndefined();
+  });
+
+  test("uses the known business type for Form 1901", () => {
+    const data = mergeBir1901DataForBusinessType(
+      {
+        taxpayerInformation: {
+          taxpayerName: { firstName: "Josie" },
+        },
+      },
+      {
+        taxpayerInformation: {
+          taxpayerType: "professionalLicensed",
+        },
+      },
+      "Self-employed",
+    );
+
+    expect(data.taxpayerInformation).toMatchObject({
+      taxpayerName: { firstName: "Josie" },
+      taxpayerType: "professionalGeneral",
     });
   });
 });

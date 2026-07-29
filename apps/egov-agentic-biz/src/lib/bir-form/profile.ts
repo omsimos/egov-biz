@@ -1,6 +1,6 @@
 import type { EgovSsoCitizenProfile } from "egov.js";
 import type { Bir1901Data, Bir1905Data } from "@repo/dx/bir";
-import { normalizeTin } from "@/lib/tin";
+import { resolveSsoTin } from "@/lib/tin";
 
 const syntheticSignature =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQQAAABGCAYAAAAq7+rZAAADFklEQVR42u3dS24iMRCAYYNml0tkkRvlnNwoI3EJ1swKaYQI/Sq/v1/KJiIkMeXfLnd19el+vycASCmlsyEAQAgACAEAIQAgBACEAIAQABACAEIAQAgACAEAIQAgBACEAIAQABACgMb4YwgwEh+f34sdf27Xy8lI2SGADDa9jhCAwWVACu856amIEUXwKi149Vrpw6RCEAxzy0AcEMKmbaGgGF8GpDCxEPbkiCWC4vnvEoh1dnukMJEQ3sngdr2clmQRHRhr5SQgy0qVnCcQwlbzL8mj5A5FYJafxKQwsBD2bgMjpRB1OYsUyk1eUkjjVSoeyQkfr3v1Ho/vLb3XkQq5334vKagbsENo4JLi2skdXSbroCv2asLe3zPzmA8phIgP9OiKFHXQNXOAlpIBKQwkhNz531Yx5JBRD8EZfThbWgakMIAQakycUit4L1KIrveoJQIHjMntzy2f/j+fUbR2yHgkpaqx60Ka625HQdNOevD46vFzVYewMmVoLbeaJddrbQsbfQ9BqxNz1rOEXUKoPVCzfVitSGG2KyAzSuHcW7GIAhW3jyuMakAIW6rsMFZeqzbCGUKzATLzdeIa/7udQRtjXmqh2F2HUCNQVJKVHQM7g7Jj3sIdsudetrFkUD9dm3Xc//+/c4z5x+f3/ej7RrzH4UPF5wDJFaDOKVzuHFXEa2s61tZ3HP3bztGrhslbdpXOtWKRQV4pvFvRlyZ+dPFX9krFnAYVnHmlQOj506W9Ioj6mexCWNsDnwxc8pxdxLlu3oraNYTe7Zi7UYng1F+w1yKt2ndxVkkZIncKgrNs6mC886QBS2cFaYZ+CEd3CoKz7ERWb9BPR61uG6REdkAWnPmkYLz766jVbcekiGckCM58UjDe5aTQy7hmb6G2NugEJ/li8TP+uV0vX933VGz1OYszdinu6YDryMRJ4x4kfw3RZNWTmJs97Ppr4qBK1+Wec61RVx0TB1mFYLs27rMSkLRht+ooO4YdAoDkuQwACAEACAEAIQAgBACEAIAQABACAEIAQAgACAEAIQAgBABF+Adh2vV68Zl3IQAAAABJRU5ErkJggg==";
@@ -181,7 +181,7 @@ export function mapEgovProfileToBir1901(profile: unknown): Bir1901Data {
   const signatureSource = [rawProfile.signature, nationalId.signature]
     .map(stringValue)
     .find(Boolean);
-  const tin = normalizeTin(rawProfile.tin_id) || undefined;
+  const tin = resolveSsoTin(rawProfile);
   const gender = /^male$/i.test(stringValue(rawProfile.gender))
     ? ("male" as const)
     : /^female$/i.test(stringValue(rawProfile.gender))
@@ -264,7 +264,7 @@ export function mapEgovProfileToBir1905(profile: unknown): Bir1905Data {
 
   return {
     taxpayerInformation: {
-      tin: normalizeTin(rawProfile.tin_id) || undefined,
+      tin: resolveSsoTin(rawProfile),
       contactNumber: optionalString(rawProfile.mobile) || optionalString(rawProfile.landline),
       registeredName: registeredName || undefined,
     },

@@ -62,20 +62,20 @@ describe("mapEgovProfileToBir1901", () => {
     expect(bir1901DataSchema.safeParse(result).success).toBe(true);
   });
 
-  test("does not guess a TIN from an unrecognized opaque value", () => {
+  test("uses the fallback TIN for an unrecognized opaque value", () => {
     const profile: EgovSsoCitizenProfile = {
       ...completeEgovSsoTestProfile,
       tin_id: { opaque_identifier: "123-456-789-00000" },
     };
 
-    expect(mapEgovProfileToBir1901(profile).taxpayerInformation?.tin).toBeUndefined();
+    expect(mapEgovProfileToBir1901(profile).taxpayerInformation?.tin).toBe("000999999000");
   });
 
   test("normalizes an entirely absent profile without throwing", () => {
     const result = mapEgovProfileToBir1901(undefined);
     expect(bir1901DataSchema.safeParse(result).success).toBe(true);
     expect(result.taxpayerInformation?.taxpayerName?.firstName).toBeUndefined();
-    expect(result.paymentOrder?.taxpayerTin).toBeUndefined();
+    expect(result.paymentOrder?.taxpayerTin).toBe("000999999000");
   });
 
   test("keeps valid values while ignoring missing, null, and malformed fields", () => {
