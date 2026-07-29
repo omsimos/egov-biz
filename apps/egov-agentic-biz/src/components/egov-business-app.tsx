@@ -954,7 +954,9 @@ export function EgaphBusinessApp({
     error: selectedBusinessError,
     loading: selectedBusinessLoading,
   } = useApi<RegisteredBusinessDetail>(
-    selectedBusinessId ? `/api/businesses/${encodeURIComponent(selectedBusinessId)}` : "",
+    selectedBusinessId
+      ? `/api/businesses/${encodeURIComponent(selectedBusinessId)}?revision=${businessRevision}`
+      : "",
     status === "authenticated" && Boolean(selectedBusinessId),
   );
   const refreshConversations = useCallback(async () => {

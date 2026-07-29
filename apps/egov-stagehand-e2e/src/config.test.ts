@@ -3,14 +3,13 @@ import { describe, test } from "node:test";
 import { readFlowConfig } from "./config.js";
 
 const baseline = {
-  E2E_ALLOW_EGOVPAY: "1",
   E2E_BASE_URL: "http://localhost:3000",
   EGOVPAY_API_KEY: "test_example",
   OPENAI_API_KEY: "example",
 };
 
 describe("Stagehand whole-flow configuration", () => {
-  test("creates a stable unique business name for an acknowledged local run", () => {
+  test("creates a stable unique business name for a local run", () => {
     const config = readFlowConfig(baseline, new Date("2026-07-29T12:34:56.000Z"));
     assert.equal(config.businessName, "Stagehand Coffee Club 260729123456");
     assert.equal(config.headless, true);
@@ -23,11 +22,9 @@ describe("Stagehand whole-flow configuration", () => {
     assert.equal(config.modelApiKey, "gateway-example");
   });
 
-  test("requires an explicit staging-payment acknowledgement", () => {
-    assert.throws(
-      () => readFlowConfig({ ...baseline, E2E_ALLOW_EGOVPAY: "false" }),
-      /E2E_ALLOW_EGOVPAY=1/,
-    );
+  test("allows the staging-payment scenario without an opt-in flag", () => {
+    const config = readFlowConfig(baseline);
+    assert.equal(config.baseUrl.origin, "http://localhost:3000");
   });
 
   test("rejects non-test eGovPay credentials", () => {
@@ -41,7 +38,6 @@ describe("Stagehand whole-flow configuration", () => {
     const config = readFlowConfig(
       {
         ...baseline,
-        E2E_ALLOW_EGOVPAY: "false",
         EGOVPAY_API_KEY: "live_example",
       },
       new Date("2026-07-29T12:34:56.000Z"),
@@ -51,7 +47,6 @@ describe("Stagehand whole-flow configuration", () => {
       },
     );
 
-    assert.equal(config.allowEgovPay, false);
     assert.equal(config.businessName, "Stagehand Roadster Rentals 260729123456");
   });
 

@@ -7,6 +7,12 @@ import { z } from "zod";
 import { readFlowConfig } from "./config.js";
 
 const config = readFlowConfig();
+const dominantBusinessName = config.businessName;
+const registeredBusinessName = `${dominantBusinessName} COFFEE SHOP`;
+const registeredBusinessNamePattern = new RegExp(
+  registeredBusinessName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+  "i",
+);
 const sourceDirectory = path.dirname(fileURLToPath(import.meta.url));
 const artifactDirectory = path.resolve(sourceDirectory, "..", "artifacts", config.runId);
 const steps: { name: string; status: "passed" | "failed"; url: string }[] = [];
@@ -79,21 +85,33 @@ async function act(name: string, instruction: string, variables?: Variables) {
 async function clickControl(name: string, selector: string) {
   lastStep = name;
   console.log(`→ ${name}`);
-  const page = await activePage();
-  const control = page.locator(selector);
+  const deadline = Date.now() + 30_000;
+  let count = 0;
+  while (Date.now() < deadline) {
+    const page = await activePage();
+    count = await page.locator(selector).count();
+    if (count > 1)
+      assert.fail(
+        `Expected one enabled control for ${name}, but found ${count} using selector ${JSON.stringify(selector)}.`,
+      );
+    if (count === 1) {
+      const clicked = await page.evaluate((target) => {
+        const element = document.querySelector(target);
+        if (!(element instanceof HTMLElement)) return false;
+        element.click();
+        return true;
+      }, selector);
+      assert.equal(clicked, true, `${name} should click its resolved browser element.`);
+      await page.waitForTimeout(500);
+      return;
+    }
+    await sleep(250);
+  }
   assert.equal(
-    await control.count(),
+    count,
     1,
-    `Expected one enabled control for ${name}, using selector ${JSON.stringify(selector)}.`,
+    `Timed out waiting for one enabled control for ${name}, using selector ${JSON.stringify(selector)}.`,
   );
-  const clicked = await page.evaluate((target) => {
-    const element = document.querySelector(target);
-    if (!(element instanceof HTMLElement)) return false;
-    element.click();
-    return true;
-  }, selector);
-  assert.equal(clicked, true, `${name} should click its resolved browser element.`);
-  await page.waitForTimeout(500);
 }
 
 async function clickLabeledOption(name: string, label: string) {
@@ -108,6 +126,26 @@ async function clickLabeledOption(name: string, label: string) {
   }
   assert.equal(matches.length, 1, `Expected one visible option labelled ${JSON.stringify(label)}.`);
   await options.nth(matches[0]!).click();
+  await page.waitForTimeout(500);
+}
+
+async function clickButtonContaining(name: string, expected: string) {
+  lastStep = name;
+  console.log(`→ ${name}`);
+  const page = await activePage();
+  const buttons = page.locator("button");
+  const matches: number[] = [];
+  for (let index = 0; index < (await buttons.count()); index += 1) {
+    const text = normalizeText(await buttons.nth(index).innerText());
+    if (text.toLocaleLowerCase("en-PH").includes(expected.toLocaleLowerCase("en-PH")))
+      matches.push(index);
+  }
+  assert.equal(
+    matches.length,
+    1,
+    `Expected one visible button containing ${JSON.stringify(expected)}.`,
+  );
+  await buttons.nth(matches[0]!).click();
   await page.waitForTimeout(500);
 }
 
@@ -205,16 +243,28 @@ async function completePayment(input: {
     const state = await bodyText(checkout);
     if (!/\bINITIAL\b/i.test(state) || !/Loading/i.test(state)) throw error;
     await checkout.goto(checkout.url(), { waitUntil: "load", timeoutMs: 30_000 });
-    await waitForText(`${service} reloaded checkout`, "Cash Payments", 30_000);
-    await act(
-      `reselect Cash Payments for ${service}`,
-      `The ${service} staging checkout was still INITIAL after a gateway loading timeout. Select “Cash Payments” again after this single reload.`,
+    const reloaded = await waitFor(
+      `${service} reloaded checkout`,
+      ({ text }) => /Mark as Paid|Cash Payments|Pay Now/i.test(text),
+      30_000,
     );
-    await act(
-      `retry ${service} payment once`,
-      `The ${service} staging transaction is still explicitly INITIAL. Click the enabled “Pay Now” button once to retry the test checkout.`,
-    );
-    await waitForText(`${service} staging confirmation after retry`, /Mark as Paid/i, 90_000);
+    if (!/Mark as Paid/i.test(reloaded.text)) {
+      await act(
+        `reselect Cash Payments for ${service}`,
+        `The ${service} staging checkout was still INITIAL after a gateway loading timeout. Select “Cash Payments” again after this single reload.`,
+      );
+      const selected = await waitFor(
+        `${service} payment method after reload`,
+        ({ text }) => /Mark as Paid|Pay Now/i.test(text),
+        30_000,
+      );
+      if (!/Mark as Paid/i.test(selected.text))
+        await act(
+          `retry ${service} payment once`,
+          `The ${service} staging transaction is still explicitly INITIAL. Click the enabled “Pay Now” button once to retry the test checkout.`,
+        );
+      await waitForText(`${service} staging confirmation after retry`, /Mark as Paid/i, 90_000);
+    }
   }
   await act(
     `mark ${service} paid`,
@@ -278,6 +328,15 @@ async function run() {
   await waitForText("authenticated home", "Hi, Josh", 60_000);
   await pass("dev session authenticated");
 
+  await page.reload({ waitUntil: "load", timeoutMs: 30_000 });
+  await waitForText("authenticated home after reload", "Hi, Josh", 60_000);
+  const authenticatedHome = await bodyText(page);
+  assert(
+    !/Sign in again|Sign in to eGovPH/i.test(authenticatedHome),
+    "Reloading must restore the authenticated session instead of showing remembered-account login.",
+  );
+  await pass("authenticated session survives reload");
+
   await act(
     "open Business",
     "On the eGovPH home screen, click the interactive Business service tile.",
@@ -303,60 +362,86 @@ async function run() {
   await waitForText("staffing checkpoint", "Will you hire anyone?");
   await clickLabeledOption("declare employees", "Yes");
   await clickControl("continue after employees", "form button[type='submit']:not(:disabled)");
-  await waitForText("address checkpoint", "Which address should this business use?");
+  await waitForText("address checkpoint", "Which address should this registration use?");
   await clickLabeledOption("use profile address", "Use my registered eGov address");
   await clickControl("continue after address", "form button[type='submit']:not(:disabled)");
-  await waitForText("business-name checkpoint", "What business name do you want to register?");
+  await waitForText("BNRS terms checkpoint", "Do you accept the BNRS terms and conditions?");
+  await clickLabeledOption("accept BNRS terms", "I accept");
+  await clickControl("continue after BNRS terms", "form button[type='submit']:not(:disabled)");
+  await waitForText("dominant-name checkpoint", "What distinctive name do you want to register?");
   await typeField(
-    "enter proposed business name",
-    "input[placeholder='Proposed trade name']",
-    config.businessName,
+    "enter dominant business name",
+    "input[placeholder='For example, Molar Bear']",
+    dominantBusinessName,
   );
-  await clickControl("submit proposed business name", "form button[type='submit']:not(:disabled)");
+  await clickControl("submit intake batch", "form button[type='submit']:not(:disabled)");
+  await waitForText(
+    "BNRS descriptor checkpoint",
+    "Which BNRS descriptor best matches the business?",
+  );
+  await clickLabeledOption("choose coffee-shop descriptor", "COFFEE SHOP");
+  await clickControl("continue after descriptor", "form button[type='submit']:not(:disabled)");
+  await waitForText("territorial-scope checkpoint", "Where should the business name be protected?");
+  await clickLabeledOption("choose city scope", "City / municipality");
+  await clickControl("submit BNRS identity", "form button[type='submit']:not(:disabled)");
   await waitForText("DTI application draft", "Submit and pay", 240_000);
-  await expectBody(config.businessName, "The DTI draft should use the proposed business name.");
+  await expectBody(
+    registeredBusinessName,
+    "The DTI draft should combine the dominant name and BNRS descriptor.",
+  );
   await pass("registration intake completed");
 
   await completePayment({
     amount: /(?:₱|PHP)?\s*530(?:\.00)?/,
     card: "Submit and pay",
-    next: /Barangay clearance fee|Barangay Business Clearance/i,
+    next: /Business permit \+ barangay clearance|Combined LGU fee/i,
     service: "DTI business-name registration",
   });
   await completePayment({
-    amount: /(?:₱|PHP)?\s*500(?:\.00)?/,
-    card: "Barangay clearance fee",
-    next: /Assessed LGU fees|LGU assessment is complete/i,
-    service: "barangay business clearance",
+    amount: /(?:₱|PHP)?\s*2,?500(?:\.00)?/,
+    card: "Combined LGU fee",
+    next: /BIR Form 1901|Final registration payment/i,
+    service: "DX LGU business permit",
   });
   await completePayment({
-    amount: /(?:₱|PHP)?\s*2,?500(?:\.00)?/,
-    card: "Assessed LGU fees",
-    next: /Registration plan complete|All set up|Open records and tax calendar/i,
-    service: "EBPLS business permit",
+    amount: /(?:₱|PHP)?\s*30(?:\.00)?/,
+    card: "Final registration payment",
+    next: /Registration plan complete|Open records and tax calendar|Certificate of Registration/i,
+    service: "BIR Documentary Stamp Tax",
   });
 
-  await waitForText("completed registration plan", "10/10", 240_000);
-  await expectBody(config.businessName, "The finalization card should name the created business.");
+  await waitForText("completed registration plan", "7/7", 240_000);
+  await expectBody(
+    registeredBusinessNamePattern,
+    "The finalization card should name the created business.",
+  );
   await act(
     "open finalized business record",
     "Click the completed business card for %businessName% that says “Open records and tax calendar”.",
-    { businessName: config.businessName },
+    { businessName: registeredBusinessName },
   );
-  await waitForText("business record overview", "Recent chats", 90_000);
-  await expectBody(config.businessName, "The business record should show the created business.");
+  await waitForText("finalized business record", "View CoR (2303)", 90_000);
+  await expectBody(
+    registeredBusinessNamePattern,
+    "The business record should show the created business.",
+  );
   await pass("business record opened");
 
   await act("open Records tab", "In the Business record, click the “Records” tab.");
-  await waitForText("records summary", "13 records");
+  await waitForText("records summary", "4 records");
   await expectBody(
-    /Fire safety inspection certificate/i,
-    "The records should include fire safety.",
+    /Taxpayer Registration/i,
+    "The records should include the finalized BIR taxpayer registration.",
   );
   await pass("records tab verified");
 
   await act("open Files tab", "In the Business record, click the “Files” tab.");
-  await waitForText("files empty state", "No files saved yet");
+  await waitForText("files summary", "2 files");
+  await expectBody(/BIR Form 1901/i, "The files should include the generated BIR Form 1901.");
+  await expectBody(
+    /BIR Certificate of Registration \(Form 2303\)/i,
+    "The files should include the generated BIR Certificate of Registration.",
+  );
   await pass("files tab verified");
 
   await act("open Tax calendar tab", "In the Business record, click the “Tax calendar” tab.");
@@ -405,7 +490,10 @@ async function run() {
   );
   await clickControl("send fire-safety question", "[aria-label='Send']:not(:disabled)");
   await waitForText("fire-safety answer", /Bureau of Fire Protection|BFP/i, 180_000);
-  await expectBody(/Issued/i, "The management answer should report the saved fire-safety status.");
+  await expectBody(
+    /(?:don.t (?:see|have)|no)[^.\n]{0,96}fire[- ]?safety/i,
+    "The management answer should not invent an unsaved fire-safety certificate.",
+  );
   await pass("first management chat answered business questions");
 
   await act("back to record from first chat", "Click the chat header’s “Go back” button.");
@@ -436,7 +524,7 @@ async function run() {
   await clickControl("send files question", "[aria-label='Send']:not(:disabled)");
   await waitForText(
     "files answer",
-    /(?:no|don.t have any)[^\n.]{0,96}files|files:\s*\[\]/i,
+    /These files are saved|BIR Certificate of Registration|BIR Form 1901/i,
     180_000,
   );
   await pass("second management chat answered files question");
@@ -456,14 +544,15 @@ async function run() {
 
   await act("return to business list", "Click the Business record header’s “Go back” button.");
   await waitForText("business list", "Your businesses");
-  await expectBody(config.businessName, "The new business should appear in the business list.");
+  await expectBody(
+    registeredBusinessNamePattern,
+    "The new business should appear in the business list.",
+  );
   await clickControl("return to eGovPH home", "[aria-label='Go back']");
   await waitForText("eGovPH home after flow", "Hi, Josh");
   await act("reopen Business from home", "Click the interactive Business service tile.");
-  await waitForText("business list after home navigation", config.businessName);
-  await act("reopen created business", "Open the business card named %businessName%.", {
-    businessName: config.businessName,
-  });
+  await waitForText("business list after home navigation", registeredBusinessNamePattern);
+  await clickButtonContaining("reopen created business", registeredBusinessName);
   await waitForText("reopened business record", "Recent chats");
   const persistedChats = await stagehand.extract(
     "In the Recent chats section only, count existing conversation rows. Exclude the plus/new-chat button.",
@@ -479,7 +568,7 @@ async function run() {
   const metrics = await stagehand.metrics;
   return {
     artifactDirectory,
-    businessName: config.businessName,
+    businessName: registeredBusinessName,
     finishedAt: new Date().toISOString(),
     metrics,
     runId: config.runId,
@@ -508,7 +597,7 @@ try {
     path.join(artifactDirectory, "report.json"),
     `${JSON.stringify(
       {
-        businessName: config.businessName,
+        businessName: registeredBusinessName,
         error: message,
         finishedAt: new Date().toISOString(),
         runId: config.runId,
