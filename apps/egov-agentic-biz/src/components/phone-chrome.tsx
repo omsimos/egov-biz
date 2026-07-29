@@ -27,6 +27,11 @@ export function StatusBar() {
   }, []);
   return (
     <div className="status-bar" aria-hidden="true">
+      {/* The phone's Dynamic Island. Hardware, not app UI, so it belongs to the
+          frame and appears on every screen. Nothing has to coordinate with the
+          payment island: that one shares this origin and is larger on both
+          axes, so it covers this exactly rather than sitting beside it. */}
+      <span className="dynamic-island" />
       <span className="status-left">
         {time ?? "9:41"}
         <BellSlashIcon weight="fill" />

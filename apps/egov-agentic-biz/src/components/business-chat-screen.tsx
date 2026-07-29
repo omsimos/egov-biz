@@ -1490,9 +1490,10 @@ const PAID_SERVICE_LABELS: Record<PaymentServiceType, string> = {
  * animating one element's width and height between them was a rendering bug in
  * the prototype it comes from.
  *
- * No resting pill. The handoff draws one because it is describing a device
- * notch; this app's phone chrome has no notch, so a permanent black lozenge in
- * the middle of the status bar would be a decoration claiming to be hardware.
+ * The resting state is the frame's own .dynamic-island in phone-chrome.tsx, not
+ * a third state here — it is there on every screen, payment or not. This panel
+ * shares its origin and is larger on both axes, so it covers it rather than
+ * needing it hidden.
  */
 function PaymentIsland({
   amount,

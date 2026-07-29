@@ -411,6 +411,20 @@ body {
 .agent-chat-screen .status-bar {
   background: rgba(255, 255, 255, 0.96);
 }
+/* Centred in the frame, so it never collides with the clock (which ends around
+   60px) or the icons (which start around 300px) at 390px wide. 3px taller than
+   the bar on purpose: the cutout overlaps the content below it, the same way the
+   hardware does. */
+.dynamic-island {
+  position: absolute;
+  top: 9px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 112px;
+  height: 30px;
+  border-radius: 999px;
+  background: var(--overlay-ink);
+}
 .status-left {
   display: flex;
   align-items: center;
