@@ -22,20 +22,6 @@
       "when": 1785338524604,
       "tag": "0002_shocking_patriot",
       "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "6",
-      "when": 1785340463873,
-      "tag": "0003_cynical_mathemanic",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "6",
-      "when": 1785341098007,
-      "tag": "0004_watery_snowbird",
-      "breakpoints": true
     }
   ]
 }
