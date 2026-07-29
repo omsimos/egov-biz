@@ -16,5 +16,5 @@ export async function exchangeEgovSsoCode(exchangeCode: string) {
   const authentication = await client.authenticate(token.access_token, {
     signal: AbortSignal.timeout(12_000),
   });
-  return createSession(authentication.data);
+  return await createSession(authentication.data);
 }

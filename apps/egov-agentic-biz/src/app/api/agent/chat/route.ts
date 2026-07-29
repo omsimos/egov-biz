@@ -33,7 +33,7 @@ import {
 } from "@/lib/business-chat";
 import { readSession } from "@/lib/auth/session";
 import { createBirFormArtifact } from "@/lib/bir-form/artifact";
-import { isExplicitBirFormRequest } from "@/lib/bir-form/request";
+import { generateBirFormInputSchema } from "@/lib/bir-form/schema";
 import {
   completeRegistrationPlan,
   initialRegistrationPlan,
@@ -379,7 +379,7 @@ function mockReference(prefix: string) {
 }
 
 function mockBarangayClearance(
-  payment: NonNullable<ReturnType<typeof getLatestPaymentForConversation>>,
+  payment: NonNullable<Awaited<ReturnType<typeof getLatestPaymentForConversation>>>,
   form: DtiBusinessNameForm | null,
   profile: CitizenProfile | null,
 ): BarangayClearance {
@@ -488,11 +488,11 @@ function planAfterPayment(plan: RegistrationPlan | null): RegistrationPlan {
 function resumableConsumer(conversationId: string) {
   return async ({ stream }: { stream: ReadableStream<string> }) => {
     const streamId = crypto.randomUUID();
-    setActiveStream(conversationId, streamId);
+    await setActiveStream(conversationId, streamId);
     try {
       await getResumableContext().createNewResumableStream(streamId, () => stream);
     } catch (error) {
-      setActiveStream(conversationId, null);
+      await setActiveStream(conversationId, null);
       console.error("Business chat resumable stream failed", error);
     }
   };
@@ -506,9 +506,9 @@ function manualResponse(
   const stream = createUIMessageStream<BusinessChatMessage>({
     originalMessages: messages,
     execute: ({ writer }) => execute(writer),
-    onEnd: ({ messages: completeMessages }) => {
-      saveMessages(conversationId, completeMessages);
-      setActiveStream(conversationId, null);
+    onEnd: async ({ messages: completeMessages }) => {
+      await saveMessages(conversationId, completeMessages);
+      await setActiveStream(conversationId, null);
     },
   });
   return createUIMessageStreamResponse({
@@ -928,13 +928,13 @@ function agentTools(
     }),
     generate_bir_form: tool({
       description:
-        "Generate a prefilled BIR Form 1901 PDF artifact from the authenticated eGov SSO profile. Invoke only when the citizen explicitly asks to generate, create, prepare, fill, or prefill the BIR form. Never invoke proactively or for questions about the form. user_info must complete first.",
-      inputSchema: z.object({}),
-      execute: async () => {
+        "Generate a BIR PDF artifact. Select the supported form with type and provide any known form-specific fields under data; omitted values may be prefilled from the authenticated eGov SSO profile. Invoke only when the citizen explicitly asks to generate, create, prepare, fill, or prefill the BIR form. Never invoke proactively or for questions about the form. user_info must complete first.",
+      inputSchema: generateBirFormInputSchema,
+      execute: async (input) => {
         if (!userInfoReady) throw new Error("Call user_info before generate_bir_form");
         return {
-          artifact: await createBirFormArtifact(request, rawProfile),
-          source: "Authenticated eGov SSO profile" as const,
+          artifact: await createBirFormArtifact(request, rawProfile, input),
+          source: "BIR tool input merged with authenticated eGov SSO profile" as const,
         };
       },
       toModelOutput: ({ output }) => ({
@@ -1017,16 +1017,16 @@ function agentTools(
 }
 
 export async function POST(request: Request) {
-  const session = readSession(request);
+  const session = await readSession(request);
   if (!session) return Response.json({ error: "Authentication required" }, { status: 401 });
 
   const parsed = requestSchema.safeParse(await request.json());
   if (!parsed.success) return Response.json({ error: "Invalid chat request" }, { status: 400 });
-  const conversation = getConversation(parsed.data.id);
+  const conversation = await getConversation(parsed.data.id);
   if (!conversation) return Response.json({ error: "Chat session not found" }, { status: 404 });
   const messages = uniqueMessagesById(parsed.data.messages as BusinessChatMessage[]);
-  saveMessages(conversation.id, messages);
-  setActiveStream(conversation.id, null);
+  await saveMessages(conversation.id, messages);
+  await setActiveStream(conversation.id, null);
   const profile = session.profile;
   const userInfoOutput: UserInfoOutput = {
     availableFields: availableUserInfoFields(profile),
@@ -1043,8 +1043,7 @@ export async function POST(request: Request) {
   const birFormConsentValue = birFormConsent
     ? normalizedAnswerText(birFormConsent.value).toLowerCase()
     : null;
-  const shouldGenerateBirForm =
-    isExplicitBirFormRequest(latestPrompt) || birFormConsentValue === "yes";
+  const shouldGenerateBirForm = birFormConsentValue === "yes";
   const initialLocation = resolveBusinessLocation(prompt, profile?.city ?? "Philippines", answers);
   const preference = addressPreference(answers);
   const confirmedBusinessAddress =
@@ -1079,7 +1078,7 @@ export async function POST(request: Request) {
 
   if (parsed.data.event === "payment-completed") {
     const paymentService: PaymentServiceType = parsed.data.paymentService ?? "dti-business-name";
-    const payment = getLatestPaymentForService(conversation.id, paymentService);
+    const payment = await getLatestPaymentForService(conversation.id, paymentService);
     if (!payment || !isPaidStatus(payment.status))
       return Response.json({ error: "Payment has not been marked paid." }, { status: 409 });
     if (paymentService === "barangay-clearance") {
@@ -1190,7 +1189,7 @@ export async function POST(request: Request) {
         employer: employerRequired,
         sectorPermits: sectorRequired,
       });
-      const business = upsertRegisteredBusiness(
+      const business = await upsertRegisteredBusiness(
         profile.id,
         buildFinalBusiness({
           conversationId: conversation.id,
@@ -1343,13 +1342,16 @@ export async function POST(request: Request) {
         type: "tool-input-available",
         toolCallId,
         toolName: "generate_bir_form",
-        input: {},
+        input: { type: "1901", data: {} },
       });
 
       try {
         const output = {
-          artifact: await createBirFormArtifact(request, session.rawProfile),
-          source: "Authenticated eGov SSO profile" as const,
+          artifact: await createBirFormArtifact(request, session.rawProfile, {
+            type: "1901",
+            data: {},
+          }),
+          source: "BIR tool input merged with authenticated eGov SSO profile" as const,
         };
 
         const plan = makePlan(prompt, profile, answers);
@@ -1375,7 +1377,7 @@ export async function POST(request: Request) {
                     : ("pending" as const),
             })),
           });
-          const business = upsertRegisteredBusiness(
+          const business = await upsertRegisteredBusiness(
             profile.id,
             buildFinalSelfEmployedBusiness({
               conversationId: conversation.id,
@@ -1877,7 +1879,7 @@ Use updatePlan whenever registration progress changes. Keep the comprehensive 8â
 
 The user_info tool reports which authenticated eGov SSO fields are available for server-side form prefilling; it never returns their values to the model. It is ${hasUserInfo ? "already loaded in this conversation" : "not loaded yet"}. Call it before a government form tool when it has not already completed.
 
-generate_bir_form creates a prefilled BIR Form 1901 PDF artifact. Invoke it only when the citizen's latest message explicitly asks to generate, create, prepare, fill, or prefill that BIR form. Never invoke it proactively, for informational questions, or merely because BIR registration is part of the plan. Call user_info in an earlier tool step first when needed. The tool takes no citizen data as input and applies authenticated profile values server-side.
+generate_bir_form creates a BIR PDF artifact from a discriminated input. Use type "1901" with Form 1901 data or type "1905" with Form 1905 data; every data field is optional and omitted identity values may be prefilled from the authenticated profile. Invoke it only when the citizen's latest message explicitly asks to generate, create, prepare, fill, or prefill that BIR form. Never invoke it proactively, for informational questions, or merely because BIR registration is part of the plan. Call user_info in an earlier tool step first when needed.
 
 The resolved business city is ${location.city}. Explicit locations override the profile. Reuse every fact the citizen has already stated and never ask for it again. Do not force registration steps when the latest request is unrelated or exploratory; answer that request directly and only return to the saved plan when the citizen asks. The resolved route is ${JSON.stringify(businessPlan)}.
 
@@ -1885,14 +1887,14 @@ For a sole proprietor, call user_info before creating or updating a DTI Business
 
 Use webSearch only when new current evidence is useful. Cite only returned official links. Never expose private reasoning. Do not claim submission or payment occurred. After every completed checkpoint, explicitly state the next concrete step.`,
     messages: await convertToModelMessages(messages, { tools, ignoreIncompleteToolCalls: true }),
-    timeout: { totalMs: 35_000, toolMs: 10_000 },
+    timeout: { totalMs: 110_000, toolMs: 90_000 },
   });
   return result.toUIMessageStreamResponse({
     originalMessages: messages,
     sendReasoning: false,
-    onEnd: ({ messages: completeMessages }) => {
-      saveMessages(conversation.id, completeMessages);
-      setActiveStream(conversation.id, null);
+    onEnd: async ({ messages: completeMessages }) => {
+      await saveMessages(conversation.id, completeMessages);
+      await setActiveStream(conversation.id, null);
     },
     consumeSseStream: resumableConsumer(conversation.id),
   });

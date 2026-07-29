@@ -60,7 +60,7 @@ const services: Record<PaymentServiceType, { amount: number; prefix: string; lab
 };
 
 export async function POST(request: Request) {
-  const session = readSession(request);
+  const session = await readSession(request);
   if (!session) return Response.json({ error: "Authentication required." }, { status: 401 });
 
   const parsed = requestSchema.safeParse(await request.json());
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
       { error: "Check the application details and try again." },
       { status: 400 },
     );
-  if (!getConversation(parsed.data.conversationId))
+  if (!(await getConversation(parsed.data.conversationId)))
     return Response.json({ error: "Chat session not found." }, { status: 404 });
 
   if (
@@ -79,7 +79,10 @@ export async function POST(request: Request) {
   )
     return Response.json({ error: "eGovPay is not available right now." }, { status: 503 });
 
-  const existing = getLatestPaymentForService(parsed.data.conversationId, parsed.data.serviceType);
+  const existing = await getLatestPaymentForService(
+    parsed.data.conversationId,
+    parsed.data.serviceType,
+  );
   if (existing && isPaidStatus(existing.status))
     return Response.json(
       { error: "This fee has already been paid.", payment: existing },
@@ -119,7 +122,7 @@ export async function POST(request: Request) {
       { signal: AbortSignal.timeout(12_000) },
     );
     const checkoutUrl = hostedCheckoutUrl(payment.data.url, baseUrl);
-    const storedPayment = createPayment({
+    const storedPayment = await createPayment({
       conversationId: parsed.data.conversationId,
       transactionUuid: payment.data.uuid,
       transactionId,

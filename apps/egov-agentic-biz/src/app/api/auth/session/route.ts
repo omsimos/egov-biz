@@ -4,7 +4,7 @@ import { AUTH_COOKIE_NAME, readSession, sessionCookieOptions } from "@/lib/auth/
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const session = readSession(request);
+  const session = await readSession(request);
   const response = NextResponse.json(
     session
       ? { authenticated: true, profile: session.profile }

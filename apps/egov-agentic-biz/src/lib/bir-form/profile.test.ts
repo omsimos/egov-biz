@@ -1,41 +1,65 @@
 import { describe, expect, test } from "bun:test";
 import type { EgovSsoCitizenProfile } from "@repo/egov/eGovSso";
-import { completeEgovSsoTestProfile, mapEgovProfileToBir1901 } from "@/lib/bir-form/profile";
+import {
+  completeEgovSsoTestProfile,
+  mapEgovProfileToBir1901,
+  mapEgovProfileToBir1905,
+} from "@/lib/bir-form/profile";
+import { bir1901DataSchema, bir1905DataSchema } from "@/lib/bir-form/schema";
 
 describe("mapEgovProfileToBir1901", () => {
   test("maps every authoritative BIR 1901 field in the complete SSO fixture", () => {
     const result = mapEgovProfileToBir1901(completeEgovSsoTestProfile);
 
     expect(result).toMatchObject({
-      addressLine2: "Unit 4B",
-      barangay: "Barangay San Isidro",
-      birthDate: "1990-01-23",
-      birthPlace: "Manila, Metro Manila, Philippines",
-      city: "Quezon City",
-      civilStatus: "Married",
-      email: "juan.complete@example.test",
-      fatherName: "Roberto Dela Cruz",
-      firstName: "Juan",
-      foreignAddress: "100 Example Avenue, Sample City, 00000, Example Country",
-      fullName: "Juan Santos Dela Cruz Jr.",
-      gender: "Male",
-      lastName: "Dela Cruz",
-      middleName: "Santos",
-      mobile: "+639170000000",
-      motherMaidenName: "Elena Garcia Reyes",
-      nationalIdPcn: "0000-0000-0000-0001",
-      nationality: "Filipino",
-      passportExpiryDate: "2033-06-14",
-      passportIssuedDate: "2023-06-15",
-      passportNumber: "P0000001",
-      passportPlaceIssued: "Paranaque City, PH",
-      postal: "1100",
-      province: "Metro Manila",
-      street: "123 Mabini Street",
-      suffix: "Jr.",
-      tin: "12345678900000",
+      registration: {
+        philsysCardNumber: "0000-0000-0000-0001",
+      },
+      taxpayerInformation: {
+        tin: "12345678900000",
+        taxpayerName: {
+          firstName: "Juan",
+          middleName: "Santos",
+          lastName: "Dela Cruz",
+          suffix: "Jr.",
+        },
+        gender: "male",
+        civilStatus: "married",
+        birthOrOrganizationDate: "1990-01-23",
+        placeOfBirth: "Manila, Metro Manila, Philippines",
+        motherMaidenName: "Elena Garcia Reyes",
+        fatherName: "Roberto Dela Cruz",
+        citizenship: "Filipino",
+        localResidenceAddress: {
+          unitRoomFloorBuildingNo: "Unit 4B",
+          lotBlockPhaseHouseNo: "123",
+          streetName: "Mabini Street",
+          barangay: "Barangay San Isidro",
+          municipalityCity: "Quezon City",
+          province: "Metro Manila",
+          zipCode: "1100",
+        },
+        foreignAddress: "100 Example Avenue, Sample City, 00000, Example Country",
+        identification: {
+          type: "Passport",
+          idNumber: "P0000001",
+          effectivityDate: "2023-06-15",
+          expiryDate: "2033-06-14",
+          placeCountryOfIssue: "Paranaque City, PH",
+        },
+        contact: {
+          preferredTypes: ["mobile"],
+          mobile: "+639170000000",
+          email: "juan.complete@example.test",
+        },
+      },
+      paymentOrder: {
+        taxpayerTin: "12345678900000",
+        taxpayerName: "Juan Santos Dela Cruz Jr.",
+      },
     });
-    expect(result.signatureSource).toStartWith("data:image/png;base64,");
+    expect(result.declaration?.signatureSource).toStartWith("data:image/png;base64,");
+    expect(bir1901DataSchema.safeParse(result).success).toBe(true);
   });
 
   test("does not guess a TIN from an unrecognized opaque value", () => {
@@ -44,41 +68,14 @@ describe("mapEgovProfileToBir1901", () => {
       tin_id: { opaque_identifier: "123-456-789-00000" },
     };
 
-    expect(mapEgovProfileToBir1901(profile).tin).toBe("");
+    expect(mapEgovProfileToBir1901(profile).taxpayerInformation?.tin).toBeUndefined();
   });
 
   test("normalizes an entirely absent profile without throwing", () => {
-    expect(mapEgovProfileToBir1901(undefined)).toEqual({
-      address: "",
-      addressLine2: "",
-      barangay: "",
-      birthDate: "",
-      birthPlace: "",
-      city: "",
-      civilStatus: "",
-      email: "",
-      fatherName: "",
-      firstName: "",
-      foreignAddress: "",
-      fullName: "",
-      gender: "",
-      lastName: "",
-      middleName: "",
-      mobile: "",
-      motherMaidenName: "",
-      nationalIdPcn: "",
-      nationality: "",
-      passportExpiryDate: "",
-      passportIssuedDate: "",
-      passportNumber: "",
-      passportPlaceIssued: "",
-      postal: "",
-      province: "",
-      signatureSource: "",
-      street: "",
-      suffix: "",
-      tin: "",
-    });
+    const result = mapEgovProfileToBir1901(undefined);
+    expect(bir1901DataSchema.safeParse(result).success).toBe(true);
+    expect(result.taxpayerInformation?.taxpayerName?.firstName).toBeUndefined();
+    expect(result.paymentOrder?.taxpayerTin).toBeUndefined();
   });
 
   test("keeps valid values while ignoring missing, null, and malformed fields", () => {
@@ -103,18 +100,77 @@ describe("mapEgovProfileToBir1901", () => {
     });
 
     expect(result).toMatchObject({
-      address: "1 Example Street, San Isidro, Quezon City",
-      barangay: "San Isidro",
-      city: "Quezon City",
-      email: "",
-      fatherName: "Roberto",
-      firstName: "Josie",
-      fullName: "Josie",
-      nationalIdPcn: "",
-      passportNumber: "P1234567",
-      signatureSource: "",
-      street: "1 Example Street",
-      tin: "123456789",
+      taxpayerInformation: {
+        tin: "123456789",
+        taxpayerName: {
+          firstName: "Josie",
+        },
+        fatherName: "Roberto",
+        localResidenceAddress: {
+          lotBlockPhaseHouseNo: "1",
+          streetName: "Example Street",
+          barangay: "San Isidro",
+          municipalityCity: "Quezon City",
+        },
+        identification: {
+          type: "Passport",
+          idNumber: "P1234567",
+        },
+      },
+      paymentOrder: {
+        taxpayerName: "Josie",
+        taxpayerTin: "123456789",
+      },
     });
+    expect(result.registration?.philsysCardNumber).toBeUndefined();
+    expect(result.declaration?.signatureSource).toBeUndefined();
+  });
+
+  test("uses the combined profile address when no structured street is available", () => {
+    const result = mapEgovProfileToBir1901({
+      address: "Fallback Residence Address",
+      first_name: "Juan",
+    });
+
+    expect(result.taxpayerInformation?.localResidenceAddress?.streetName).toBe(
+      "Fallback Residence Address",
+    );
+  });
+
+  test("does not pass a remote profile signature URL to the PDF generator", () => {
+    const result = mapEgovProfileToBir1901({
+      first_name: "Juan",
+      signature_url: "https://assets.example.test/user-signature.png",
+    });
+
+    expect(result.declaration?.signatureSource).toBeUndefined();
+  });
+});
+
+describe("mapEgovProfileToBir1905", () => {
+  test("maps the authoritative Form 1905 identity fields", () => {
+    const result = mapEgovProfileToBir1905(completeEgovSsoTestProfile);
+
+    expect(result).toMatchObject({
+      taxpayerInformation: {
+        tin: "12345678900000",
+        contactNumber: "+639170000000",
+        registeredName: "Dela Cruz, Juan, Santos, Jr.",
+      },
+      declaration: {
+        printedName: "Dela Cruz, Juan, Santos, Jr.",
+      },
+    });
+    expect(result.declaration?.signatureSource).toStartWith("data:image/png;base64,");
+    expect(bir1905DataSchema.safeParse(result).success).toBe(true);
+  });
+
+  test("does not pass a remote profile signature URL to the PDF generator", () => {
+    const result = mapEgovProfileToBir1905({
+      first_name: "Juan",
+      signature_url: "https://assets.example.test/user-signature.png",
+    });
+
+    expect(result.declaration?.signatureSource).toBeUndefined();
   });
 });

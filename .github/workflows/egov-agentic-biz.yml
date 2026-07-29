@@ -1,0 +1,124 @@
+name: egov-agentic-biz
+
+# Pull requests cover every branch, and main only runs on push. A branch with an
+# open PR would otherwise build twice for the same commit.
+on:
+  pull_request:
+    paths:
+      - "apps/egov-agentic-biz/**"
+      - "packages/egov/**"
+      - "package.json"
+      - "bun.lock"
+      - "turbo.json"
+      - ".github/workflows/egov-agentic-biz.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/egov-agentic-biz/**"
+      - "packages/egov/**"
+      - "package.json"
+      - "bun.lock"
+      - "turbo.json"
+      - ".github/workflows/egov-agentic-biz.yml"
+  # Lets a failed migration be retried without an empty commit.
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Superseded pull request runs are disposable. A migration on main is not, so
+  # those runs are left alone to finish.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    working-directory: apps/egov-agentic-biz
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # Keep in step with "packageManager" in the root package.json and the
+          # base image in apps/egov-agentic-biz/Dockerfile.
+          bun-version: 1.3.14
+
+      - name: Cache Bun install
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install
+        run: bun install --frozen-lockfile
+        working-directory: .
+
+      # Build runs first, and the order matters on a clean checkout:
+      #   - @repo/egov publishes its types from dist/, and turbo.json has
+      #     check-types depending on the no-op "transit" task rather than
+      #     ^build, so nothing else compiles it.
+      #   - next build generates next-env.d.ts, which is gitignored and is what
+      #     types the image imports in src/components.
+      # Type checking before this step fails on both counts.
+      #
+      # --filter pulls in the app's workspace dependencies and nothing else, so
+      # unrelated packages do not gate this app.
+      #
+      # Deliberately no secrets: Turso, Redis and R2 are all read lazily at
+      # request time, so a production build needs no credentials. If this step
+      # ever starts needing them, something began connecting at build time.
+      - name: Build
+        run: bunx turbo run build --filter=egov-agentic-biz
+        working-directory: .
+
+      - name: Types
+        run: bunx turbo run check-types --filter=egov-agentic-biz
+        working-directory: .
+
+      - name: Lint
+        run: bunx turbo run lint --filter=egov-agentic-biz
+        working-directory: .
+
+      - name: Test
+        run: bunx turbo run test --filter=egov-agentic-biz
+        working-directory: .
+
+  migrate:
+    name: Migrate Turso
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Scope the credentials to an environment so they are not readable from
+    # workflows triggered by forks.
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Cache Bun install
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install
+        run: bun install --frozen-lockfile
+        working-directory: .
+
+      # drizzle-kit tracks applied migrations in __drizzle_migrations, so this is
+      # idempotent and safe to run on every push to main.
+      - name: Apply pending migrations
+        run: bunx drizzle-kit migrate
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}

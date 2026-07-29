@@ -9,10 +9,10 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ id: string; fileId: string }> },
 ) {
-  const session = readSession(request);
+  const session = await readSession(request);
   if (!session) return Response.json({ error: "Authentication required." }, { status: 401 });
   const { id, fileId } = await context.params;
-  const business = getRegisteredBusiness(session.profile.id, id);
+  const business = await getRegisteredBusiness(session.profile.id, id);
   const file = business?.files.find((item) => item.id === fileId);
   if (!business || !file)
     return Response.json({ error: "Business file not found." }, { status: 404 });

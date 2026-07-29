@@ -1,3 +1,5 @@
+# Local development only. Deployed environments point REDIS_URL at Upstash
+# instead, and the database lives in Turso rather than in a container.
 services:
   redis:
     image: redis:7-alpine

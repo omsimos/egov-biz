@@ -7,14 +7,9 @@ FROM oven/bun:1.3.14-slim AS dependencies
 
 WORKDIR /repo
 
-# better-sqlite3 compiles from source on platforms without a prebuilt binary.
-# These packages remain in the build stages and are not copied into the runner.
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends g++ make python3 \
-  && rm -rf /var/lib/apt/lists/*
-
 # Copy manifests first so dependency installation remains cached when source
-# files change. Bun needs every workspace manifest to honor the frozen lockfile.
+# files change. Bun needs every workspace manifest to honor the frozen lockfile,
+# so a new package under apps/ or packages/ has to be added here too.
 COPY package.json bun.lock ./
 COPY apps/egov-agentic-biz/package.json apps/egov-agentic-biz/package.json
 COPY apps/egov-ai-sample/package.json apps/egov-ai-sample/package.json
@@ -23,6 +18,8 @@ COPY apps/egov-sso-sample/package.json apps/egov-sso-sample/package.json
 COPY apps/rag-hor/package.json apps/rag-hor/package.json
 COPY apps/rag-hor/packages/transcript-scraper/package.json \
   apps/rag-hor/packages/transcript-scraper/package.json
+COPY packages/db/package.json packages/db/package.json
+COPY packages/dx/package.json packages/dx/package.json
 COPY packages/egov/package.json packages/egov/package.json
 COPY packages/transcript-scraper/package.json packages/transcript-scraper/package.json
 
@@ -43,12 +40,11 @@ FROM node:24-trixie-slim AS runner
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     HOSTNAME=0.0.0.0 \
-    PORT=3000 \
-    DATABASE_PATH=/app/data/egov-agentic-biz.sqlite
+    PORT=3000
 
 WORKDIR /app/apps/egov-agentic-biz
 
-RUN mkdir -p /app/data && chown -R node:node /app
+RUN chown -R node:node /app
 
 # Next.js does not copy public or static assets into standalone output.
 COPY --from=builder --chown=node:node \
@@ -58,9 +54,15 @@ COPY --from=builder --chown=node:node \
 COPY --from=builder --chown=node:node \
   /repo/apps/egov-agentic-biz/public ./public
 
+# Migrations ship with the image so `drizzle-kit migrate` can be run against the
+# remote database as a release step.
+COPY --from=builder --chown=node:node \
+  /repo/apps/egov-agentic-biz/drizzle ./drizzle
+
 USER node
 
 EXPOSE 3000
-VOLUME ["/app/data"]
 
+# State lives in Turso and R2 now, so the container itself is stateless and
+# needs no mounted volume.
 CMD ["node", "server.js"]

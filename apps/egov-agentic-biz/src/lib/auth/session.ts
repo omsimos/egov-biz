@@ -10,16 +10,9 @@ import {
 
 export const AUTH_COOKIE_NAME = "egov_agentic_biz_session";
 
-export type SessionArtifact = {
-  bytes: Uint8Array;
-  createdAt: number;
-  filename: string;
-  mediaType: "application/pdf";
-};
-
 export type AuthenticatedSession = {
-  artifacts: Map<string, SessionArtifact>;
   expiresAt: number;
+  id: string;
   profile: CitizenProfile;
   rawProfile: EgovSsoCitizenProfile;
 };
@@ -61,40 +54,45 @@ function cookieValue(request: Request, name: string): string | undefined {
   return undefined;
 }
 
-function pruneExpiredSessions() {
+async function pruneExpiredSessions() {
   const now = Date.now();
   for (const [sessionId, session] of sessions()) {
     if (session.expiresAt <= now) sessions().delete(sessionId);
   }
-  pruneStoredAuthSessions(now);
+  await pruneStoredAuthSessions(now);
 }
 
-export function createSession(rawProfile: EgovSsoCitizenProfile) {
-  pruneExpiredSessions();
+export async function createSession(rawProfile: EgovSsoCitizenProfile) {
+  await pruneExpiredSessions();
   const sessionId = crypto.randomUUID();
   const maxAge = sessionTtlSeconds();
   const session: AuthenticatedSession = {
-    artifacts: new Map(),
     expiresAt: Date.now() + maxAge * 1_000,
+    id: sessionId,
     profile: mapEgovCitizenProfile(rawProfile),
     rawProfile,
   };
-  storeAuthSession(sessionId, rawProfile, session.expiresAt);
+  await storeAuthSession(sessionId, rawProfile, session.expiresAt);
   sessions().set(sessionId, session);
   return { maxAge, session, sessionId };
 }
 
-export function readSession(request: Request): AuthenticatedSession | undefined {
+/**
+ * The in-process map is only a read cache. Serverless instances each start cold
+ * and hold their own copy, so a miss falls through to the shared database
+ * instead of logging the citizen out.
+ */
+export async function readSession(request: Request): Promise<AuthenticatedSession | undefined> {
   const sessionId = cookieValue(request, AUTH_COOKIE_NAME);
   if (!sessionId) return undefined;
 
   let session = sessions().get(sessionId);
   if (!session) {
-    const storedSession = readStoredAuthSession(sessionId);
+    const storedSession = await readStoredAuthSession(sessionId);
     if (!storedSession) return undefined;
     session = {
-      artifacts: new Map(),
       expiresAt: storedSession.expiresAt,
+      id: sessionId,
       profile: mapEgovCitizenProfile(storedSession.rawProfile),
       rawProfile: storedSession.rawProfile,
     };
@@ -102,41 +100,23 @@ export function readSession(request: Request): AuthenticatedSession | undefined 
   }
   if (session.expiresAt <= Date.now()) {
     sessions().delete(sessionId);
-    deleteStoredAuthSession(sessionId);
+    await deleteStoredAuthSession(sessionId);
     return undefined;
   }
 
   return session;
 }
 
-export function deleteSession(request: Request) {
+export async function deleteSession(request: Request) {
   const sessionId = cookieValue(request, AUTH_COOKIE_NAME);
   if (sessionId) {
     sessions().delete(sessionId);
-    deleteStoredAuthSession(sessionId);
+    await deleteStoredAuthSession(sessionId);
   }
 }
 
-export function storeSessionArtifact(
-  request: Request,
-  artifact: Omit<SessionArtifact, "createdAt">,
-) {
-  const session = readSession(request);
-  if (!session) return undefined;
-
-  while (session.artifacts.size >= 5) {
-    const oldest = session.artifacts.keys().next().value;
-    if (typeof oldest !== "string") break;
-    session.artifacts.delete(oldest);
-  }
-
-  const artifactId = crypto.randomUUID();
-  session.artifacts.set(artifactId, { ...artifact, createdAt: Date.now() });
-  return artifactId;
-}
-
-export function readSessionArtifact(request: Request, artifactId: string) {
-  return readSession(request)?.artifacts.get(artifactId);
+export function birFormArtifactOwnerId(session: AuthenticatedSession) {
+  return session.profile.id ? `citizen:${session.profile.id}` : `session:${session.id}`;
 }
 
 export function sessionCookieOptions(request: Request, maxAge: number) {
