@@ -1,10 +1,7 @@
 import { resolve } from "node:path";
 import { bir1901TemplatePath, writeBir1901Pdf } from "@/lib/bir-form/generator";
-import {
-  completeEgovSsoTestProfile,
-  mapEgovProfileToBir1901,
-  type Bir1901ProfileInput,
-} from "@/lib/bir-form/profile";
+import { completeEgovSsoTestProfile, mapEgovProfileToBir1901 } from "@/lib/bir-form/profile";
+import type { Bir1901Data } from "@/lib/bir-form/schema";
 
 const appDirectory = resolve(import.meta.dir, "..");
 const repositoryDirectory = resolve(appDirectory, "../..");
@@ -19,36 +16,32 @@ function argumentValue(name: string, fallback: string) {
   return index >= 0 && process.argv[index + 1] ? process.argv[index + 1]! : fallback;
 }
 
-const simpleFixture: Bir1901ProfileInput = {
-  address: "1 Example Street, Sample Barangay, Quezon City, Metro Manila, 1100",
-  addressLine2: "",
-  barangay: "Sample Barangay",
-  birthDate: "1990-01-23",
-  birthPlace: "",
-  city: "Quezon City",
-  civilStatus: "",
-  email: "juan@example.test",
-  fatherName: "",
-  firstName: "Juan",
-  foreignAddress: "",
-  fullName: "Juan Santos Dela Cruz",
-  gender: "Male",
-  lastName: "Dela Cruz",
-  middleName: "Santos",
-  mobile: "+639000000000",
-  motherMaidenName: "",
-  nationalIdPcn: "",
-  nationality: "Filipino",
-  passportExpiryDate: "",
-  passportIssuedDate: "",
-  passportNumber: "",
-  passportPlaceIssued: "",
-  postal: "1100",
-  province: "Metro Manila",
-  signatureSource: "",
-  street: "1 Example Street",
-  suffix: "",
-  tin: "",
+const simpleFixture: Bir1901Data = {
+  taxpayerInformation: {
+    taxpayerName: {
+      firstName: "Juan",
+      middleName: "Santos",
+      lastName: "Dela Cruz",
+    },
+    birthOrOrganizationDate: "1990-01-23",
+    citizenship: "Filipino",
+    localResidenceAddress: {
+      lotBlockPhaseHouseNo: "1",
+      streetName: "Example Street",
+      barangay: "Sample Barangay",
+      municipalityCity: "Quezon City",
+      province: "Metro Manila",
+      zipCode: "1100",
+    },
+    contact: {
+      preferredTypes: ["mobile"],
+      mobile: "+639000000000",
+      email: "juan@example.test",
+    },
+  },
+  paymentOrder: {
+    taxpayerName: "Juan Santos Dela Cruz",
+  },
 };
 
 const complete = process.argv.includes("--complete-fixture");
