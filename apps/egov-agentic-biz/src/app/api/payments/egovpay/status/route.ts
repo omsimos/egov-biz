@@ -1,43 +1,79 @@
-import { eGovPayApi } from "@repo/egov/eGovPay";
+import { BnrsError } from "@repo/dx/bnrs";
+import { LguError } from "@repo/dx/lgu";
 import { z } from "zod";
-import { egovPayBaseUrl } from "@/lib/payment-urls";
-import { getPaymentByTransactionId, isPaidStatus, updatePaymentStatus } from "@/server/payments";
+import { readSession } from "@/lib/auth/session";
+import { getConversation, markPaymentCheckpointComplete } from "@/server/conversations";
+import { BirDstPaymentError, syncBirDstPaymentForConversation } from "@/server/bir-dst-payment";
+import { bnrsActorFromProfile } from "@/server/dx/bnrs";
+import { syncBnrsPaymentForConversation } from "@/server/dx/bnrs-applications";
+import { syncLguPaymentForConversation } from "@/server/dx/lgu-applications";
 
 export const dynamic = "force-dynamic";
 
-const querySchema = z.object({ transactionId: z.string().trim().min(1).max(150) });
+const querySchema = z.object({
+  conversationId: z.string().uuid(),
+  serviceType: z
+    .enum(["dti-business-name", "lgu-business-permit", "bir-documentary-stamp-tax"])
+    .default("dti-business-name"),
+});
 
 export async function GET(request: Request) {
+  const session = await readSession(request);
+  if (!session) return Response.json({ error: "Authentication required." }, { status: 401 });
+  const actor = bnrsActorFromProfile(session.rawProfile);
+  const searchParams = new URL(request.url).searchParams;
   const parsed = querySchema.safeParse({
-    transactionId: new URL(request.url).searchParams.get("transactionId"),
+    conversationId: searchParams.get("conversationId"),
+    serviceType: searchParams.get("serviceType") ?? undefined,
   });
   if (!parsed.success)
     return Response.json({ error: "Missing payment reference" }, { status: 400 });
-  const payment = await getPaymentByTransactionId(parsed.data.transactionId);
-  if (!payment) return Response.json({ error: "Payment not found" }, { status: 404 });
-  if (isPaidStatus(payment.status)) return Response.json({ payment });
+  if (!(await getConversation(actor.egovUserId, parsed.data.conversationId)))
+    return Response.json({ error: "Payment not found" }, { status: 404 });
 
-  if (
-    process.env.EGOVPAY_BASE_URL?.trim() &&
-    process.env.EGOVPAY_API_KEY?.trim() &&
-    process.env.EGOVPAY_SETTLEMENT_TEMPLATE_UUID?.trim()
-  ) {
-    try {
-      const transaction = await eGovPayApi
-        .fromEnv({ baseUrl: egovPayBaseUrl() })
-        .getTransaction(payment.transactionUuid, { signal: AbortSignal.timeout(12_000) });
-      const current = await updatePaymentStatus(
-        payment.transactionUuid,
-        transaction.data.payment_status,
-        transaction.data.paid_at,
-      );
-      return Response.json({ payment: current });
-    } catch (error) {
-      console.warn(
-        "Payment return verification is temporarily unavailable",
-        error instanceof Error ? error.message : "Unknown error",
-      );
+  try {
+    if (parsed.data.serviceType === "bir-documentary-stamp-tax") {
+      const payment = await syncBirDstPaymentForConversation(parsed.data.conversationId);
+      return Response.json({
+        payment: {
+          serviceType: parsed.data.serviceType,
+          status: payment.status.toLowerCase(),
+        },
+      });
     }
+    if (parsed.data.serviceType === "lgu-business-permit") {
+      const result = await syncLguPaymentForConversation({
+        actor,
+        conversationId: parsed.data.conversationId,
+      });
+      return Response.json({
+        payment: {
+          serviceType: parsed.data.serviceType,
+          status: result.status.payment?.status.toLowerCase() ?? "pending",
+        },
+      });
+    }
+
+    const result = await syncBnrsPaymentForConversation({
+      actor,
+      conversationId: parsed.data.conversationId,
+    });
+    if (result.registration)
+      await markPaymentCheckpointComplete(actor.egovUserId, parsed.data.conversationId);
+    return Response.json({
+      payment: {
+        serviceType: parsed.data.serviceType,
+        status: result.status.payment?.status.toLowerCase() ?? "pending",
+      },
+      registration: result.registration,
+    });
+  } catch (error) {
+    if (
+      error instanceof BnrsError ||
+      error instanceof LguError ||
+      error instanceof BirDstPaymentError
+    )
+      return Response.json({ error: error.message, code: error.code }, { status: 409 });
+    throw error;
   }
-  return Response.json({ payment });
 }

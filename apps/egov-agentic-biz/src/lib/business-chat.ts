@@ -1,6 +1,6 @@
 import type { UIMessage } from "ai";
+import type { GenerateBirFormInput } from "@repo/dx/bir";
 import type { BirFormArtifact } from "@/lib/bir-form/artifact";
-import type { GenerateBirFormInput } from "@/lib/bir-form/schema";
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import type {
   SendSmsMessageInput,
@@ -9,25 +9,42 @@ import type {
   SimulateTaxPaymentReminderOutput,
 } from "@/lib/emessage";
 import type { BusinessPlan, IntakeQuestion } from "@/lib/questions";
-import type { BusinessRecord, TaxObligation } from "@/lib/registered-business";
 
 export type DtiBusinessNameForm = {
   applicationType: "New registration";
   status: "Draft" | "Ready to submit" | "Submitted";
+  /** Optional only so persisted pre-DX conversation messages remain renderable. */
+  dominantName?: string;
+  descriptorId?: string;
+  descriptorLabel?: string;
   proposedName: string;
   businessActivity: string;
   territorialScope: "Barangay" | "City / municipality" | "Regional" | "National";
+  territorialScopeId?: "CITY_MUNICIPALITY" | "REGIONAL" | "NATIONAL";
   ownerName: string;
   businessAddress: string;
+  businessAddressDetails?: {
+    source: "EGOV_RESIDENTIAL" | "USER_PROVIDED";
+    addressLine1: string;
+    addressLine2?: string;
+    barangay: string;
+    cityMunicipality: string;
+    province: string;
+    region: string;
+    postalCode: string;
+  };
   city: string;
   feeLabel: string;
+  termsAndConditions?: string;
+  businessNameRequirements?: readonly string[];
+  termsAccepted?: boolean;
   missingFields: string[];
 };
 
 export type PaymentServiceType =
   | "dti-business-name"
-  | "barangay-clearance"
-  | "ebpls-business-permit";
+  | "lgu-business-permit"
+  | "bir-documentary-stamp-tax";
 
 export type AskUserAnswer = { questionId: string; value: string | string[]; labels: string[] };
 export type AskUserInput = { questions: IntakeQuestion[]; question?: IntakeQuestion };
@@ -38,54 +55,28 @@ export type AskUserOutput = {
 };
 export type WebSearchInput = { query: string; numResults?: number };
 export type WebSearchOutput = { results: { title: string; url: string }[] };
-export type EditDtiInput = { form: DtiBusinessNameForm; note: string };
-export type EditDtiOutput = { form: DtiBusinessNameForm };
-export type BarangayClearanceApplication = {
+export type EditDtiInput = {
+  applicationId?: string;
+  form?: DtiBusinessNameForm;
+  note: string;
+};
+export type EditDtiOutput = {
+  applicationId: string;
+  form?: DtiBusinessNameForm;
+};
+export type LguPermitSummary = {
+  applicationId: string;
+  state: "PAYMENT_READY" | "PAYMENT_PENDING" | "COMPLETED";
   businessName: string;
-  ownerName: string;
-  businessActivity: string;
-  businessAddress: string;
-  barangay: string;
   city: string;
-  registrationDocument: string;
-  supportingDocuments: string[];
-};
-export type BarangayClearance = BarangayClearanceApplication & {
-  status: "Payment required" | "Approved";
-  referenceNumber: string;
-  submittedAt: string;
-  approvedAt: string | null;
-  validUntil: string | null;
   feeLabel: string;
-  usedFor: string[];
-};
-export type SubmitBarangayClearanceInput = { application: BarangayClearanceApplication };
-export type SubmitBarangayClearanceOutput = { clearance: BarangayClearance };
-export type EbplsBusinessPermitApplication = {
-  system: "EBPLS";
-  permitType: "New business permit";
-  businessName: string;
-  ownerName: string;
-  businessActivity: string;
-  businessAddress: string;
-  barangay: string;
-  city: string;
-  barangayClearanceReference: string;
-  registrationDocument: string;
-  attachments: string[];
-};
-export type EbplsBusinessPermitReceipt = EbplsBusinessPermitApplication & {
-  status: "Payment required" | "Permit issued";
-  referenceNumber: string;
-  submittedAt: string;
-  issuedAt: string | null;
+  paymentStatus: "PENDING" | "PAID" | null;
+  businessPermitNumber: string | null;
+  barangayClearanceNumber: string | null;
   validUntil: string | null;
-  feeLabel: string;
-  nextAction: string;
 };
-export type SubmitEbplsBusinessPermitInput = { application: EbplsBusinessPermitApplication };
-export type SubmitEbplsBusinessPermitOutput = { receipt: EbplsBusinessPermitReceipt };
-export type SetupBooksAndInvoicesOutput = { records: BusinessRecord[] };
+export type PrepareLguBusinessPermitOutput = { permit: LguPermitSummary };
+export type IssueLguBusinessPermitOutput = { permit: LguPermitSummary };
 export type PrepareSelfEmployedRegistrationOutput = {
   registrationType: "Self-employed";
   taxpayerName: string;
@@ -95,23 +86,12 @@ export type PrepareSelfEmployedRegistrationOutput = {
   addressSource: "Business address" | "Authenticated profile";
   status: "Ready for BIR form preparation";
   nextAction: string;
-  demo: true;
-};
-export type SetupTaxComplianceOutput = {
-  records: BusinessRecord[];
-  obligations: TaxObligation[];
-};
-export type CompleteSectorPermitsOutput = { records: BusinessRecord[] };
-export type RegisterEmployerAgenciesOutput = { records: BusinessRecord[] };
-export type FinalizeBusinessRegistrationOutput = {
-  businessId: string;
-  businessName: string;
-  status: "Active";
 };
 export type AgentPlanStep = {
   id: string;
   label: string;
   status: "pending" | "in_progress" | "completed" | "skipped";
+  optional?: boolean;
 };
 export type RegistrationPlan = { title: string; steps: AgentPlanStep[] };
 export type UpdatePlanInput = RegistrationPlan & { note?: string };
@@ -135,6 +115,13 @@ export type GenerateBirFormOutput = {
   artifact: BirFormArtifact;
   source: "BIR tool input merged with authenticated eGov SSO profile";
 };
+export type FinalizeBusinessRegistrationOutput = {
+  businessId: string;
+  businessName: string;
+  certificateOfRegistrationFileId: string;
+  registrationNumber: string;
+  status: "Active";
+};
 
 export type BusinessChatTools = {
   user_info: { input: Record<string, never>; output: UserInfoOutput };
@@ -147,30 +134,17 @@ export type BusinessChatTools = {
   askUser: { input: AskUserInput; output: AskUserOutput };
   webSearch: { input: WebSearchInput; output: WebSearchOutput };
   editDtiBusinessNameForm: { input: EditDtiInput; output: EditDtiOutput };
-  submitBarangayClearance: {
-    input: SubmitBarangayClearanceInput;
-    output: SubmitBarangayClearanceOutput;
-  };
   prepareSelfEmployedRegistration: {
     input: Record<string, never>;
     output: PrepareSelfEmployedRegistrationOutput;
   };
-  submitEbplsBusinessPermit: {
-    input: SubmitEbplsBusinessPermitInput;
-    output: SubmitEbplsBusinessPermitOutput;
-  };
-  setupBooksAndInvoices: {
+  prepareLguBusinessPermit: {
     input: Record<string, never>;
-    output: SetupBooksAndInvoicesOutput;
+    output: PrepareLguBusinessPermitOutput;
   };
-  setupTaxCompliance: { input: Record<string, never>; output: SetupTaxComplianceOutput };
-  completeSectorPermits: {
+  issueLguBusinessPermit: {
     input: Record<string, never>;
-    output: CompleteSectorPermitsOutput;
-  };
-  registerEmployerAgencies: {
-    input: Record<string, never>;
-    output: RegisterEmployerAgenciesOutput;
+    output: IssueLguBusinessPermitOutput;
   };
   finalizeBusinessRegistration: {
     input: Record<string, never>;
@@ -182,6 +156,7 @@ export type BusinessChatTools = {
 export type BusinessChatData = {
   plan: { plan: BusinessPlan };
   paymentCompleted: { status: "paid"; serviceType: PaymentServiceType };
+  registrationCompleted: { status: "complete" };
 };
 
 export type BusinessChatMessage = UIMessage<unknown, BusinessChatData, BusinessChatTools>;
@@ -206,10 +181,14 @@ export function uniqueMessagesById<T extends { id: string }>(messages: readonly 
   return unique;
 }
 
-// How far a saved plan actually got. `completed` counts only steps marked
-// completed, matching the plan dock's own n/total chip; `done` also accepts
-// skipped steps, because a plan whose remaining work was deliberately skipped
-// is finished, not abandoned. Null when a conversation has no plan yet.
+const OPTIONAL_REGISTRATION_STEP_IDS = new Set(["tax-compliance", "sector-permits", "employer"]);
+
+export function isOptionalRegistrationStep(step: Pick<AgentPlanStep, "id" | "optional">) {
+  return step.optional === true || OPTIONAL_REGISTRATION_STEP_IDS.has(step.id);
+}
+
+// Progress covers required registration checkpoints only. Optional follow-up
+// work stays visible in the plan without preventing its completion state.
 export type PlanProgress = { completed: number; total: number; done: boolean };
 
 export type ConversationPurpose = "registration" | "management";
@@ -262,13 +241,13 @@ export function latestRegistrationPlan(messages: Pick<BusinessChatMessage, "part
 }
 
 export function planProgress(plan: RegistrationPlan): PlanProgress {
-  const completed = plan.steps.filter((step) => step.status === "completed").length;
-  const resolved = plan.steps.filter(
+  const required = plan.steps.filter((step) => !isOptionalRegistrationStep(step));
+  const resolved = required.filter(
     (step) => step.status === "completed" || step.status === "skipped",
   ).length;
   return {
-    completed,
-    done: plan.steps.length > 0 && resolved === plan.steps.length,
-    total: plan.steps.length,
+    completed: resolved,
+    done: required.length > 0 && resolved === required.length,
+    total: required.length,
   };
 }

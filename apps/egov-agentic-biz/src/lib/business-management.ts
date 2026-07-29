@@ -51,7 +51,7 @@ export function businessManagementContext(business: RegisteredBusiness) {
 
 function taxCalendarAnswer(business: RegisteredBusiness) {
   if (!business.taxObligations.length)
-    return `There are no tax reminders saved for **${business.name}** yet. Check the Tax calendar tab and confirm the registered tax types directly with BIR.`;
+    return `There are no authoritative tax reminders saved for **${business.name}**. Its DX BIR registration record and generated forms are available, but no recurring tax types or filing deadlines have been assigned yet; confirm those directly with BIR.`;
   const entries = business.taxObligations
     .slice(0, 4)
     .map(
@@ -59,7 +59,7 @@ function taxCalendarAnswer(business: RegisteredBusiness) {
         `- **${formatDate(item.dueDate)}** — ${item.title} (${item.formCode}, ${item.periodLabel})`,
     )
     .join("\n");
-  return `Here are the next saved tax reminders for **${business.name}**:\n\n${entries}\n\nThese are demo reminders. Confirm the actual forms and deadlines with BIR before filing.`;
+  return `Here are the next saved tax reminders for **${business.name}**:\n\n${entries}\n\nConfirm the actual forms and deadlines with BIR before filing.`;
 }
 
 function filesAnswer(business: RegisteredBusiness) {
@@ -88,7 +88,7 @@ function complianceAnswer(business: RegisteredBusiness, prompt: string) {
   const entries = relevant
     .map((record) => `- **${record.title}** — ${record.status}. ${record.note}`)
     .join("\n");
-  return `Here’s what the saved record shows for **${business.name}**:\n\n${entries}\n\nThese are demo records; confirm any live requirement with the named agency.`;
+  return `Here’s what the DX-backed record shows for **${business.name}**:\n\n${entries}\n\nIf a requirement is not represented by BNRS, LGU, or BIR DX, confirm it with the responsible agency.`;
 }
 
 export function deterministicBusinessManagementResponse(
@@ -105,5 +105,5 @@ export function deterministicBusinessManagementResponse(
     nextDue
       ? ` The next calendar item is **${nextDue.title}** on **${formatDate(nextDue.dueDate)}**.`
       : ""
-  }\n\nYou can ask me about its tax calendar, files, registrations and permits, or what still needs attention. The saved records are demo data and should be confirmed with the responsible agency.`;
+  }\n\nYou can ask me about its generated BIR forms, BNRS registration, LGU permit and clearance, or what is not yet represented by the available DX modules.`;
 }

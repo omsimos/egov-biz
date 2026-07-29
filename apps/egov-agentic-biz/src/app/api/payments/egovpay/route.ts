@@ -1,7 +1,7 @@
-import { eGovPayApi } from "@repo/egov/eGovPay";
+import { BnrsError } from "@repo/dx/bnrs";
+import { LguError } from "@repo/dx/lgu";
 import { z } from "zod";
 import { readSession } from "@/lib/auth/session";
-import { dtiRegistrationFee } from "@/lib/dti-fees";
 import {
   egovPayBaseUrl,
   hostedCheckoutUrl,
@@ -9,160 +9,126 @@ import {
   paymentUrls,
 } from "@/lib/payment-urls";
 import { classifyPaymentNetworkError, paymentNetworkMessage } from "@/lib/payment-network";
+import { BirDstPaymentError, createBirDstCheckout } from "@/server/bir-dst-payment";
 import { getConversation } from "@/server/conversations";
-import {
-  createPayment,
-  getLatestPaymentForService,
-  isPaidStatus,
-  type PaymentServiceType,
-} from "@/server/payments";
+import { listBirArtifacts } from "@/server/dx/bir-artifacts";
+import { bnrsActorFromProfile } from "@/server/dx/bnrs";
+import { createBnrsCheckout } from "@/server/dx/bnrs-applications";
+import { lguPaymentEnvironment } from "@/server/dx/lgu";
+import { createLguCheckout } from "@/server/dx/lgu-applications";
 
 export const dynamic = "force-dynamic";
 
-const requestSchema = z.discriminatedUnion("serviceType", [
-  z.object({
-    serviceType: z.literal("dti-business-name"),
-    conversationId: z.string().uuid(),
-    proposedName: z.string().trim().min(1).max(200),
-    territorialScope: z.enum(["Barangay", "City / municipality", "Regional", "National"]),
-    serviceReference: z.string().max(200).optional(),
-  }),
-  z.object({
-    serviceType: z.literal("barangay-clearance"),
-    conversationId: z.string().uuid(),
-    proposedName: z.string().trim().min(1).max(200),
-    serviceReference: z.string().trim().min(1).max(200),
-  }),
-  z.object({
-    serviceType: z.literal("ebpls-business-permit"),
-    conversationId: z.string().uuid(),
-    proposedName: z.string().trim().min(1).max(200),
-    serviceReference: z.string().trim().min(1).max(200),
-  }),
-]);
-
-const services: Record<PaymentServiceType, { amount: number; prefix: string; label: string }> = {
-  "dti-business-name": {
-    amount: 0,
-    prefix: "DTI-BNR",
-    label: "DTI Business Name Registration",
-  },
-  "barangay-clearance": {
-    amount: 500,
-    prefix: "BRGY-CLR",
-    label: "Barangay Business Clearance",
-  },
-  "ebpls-business-permit": {
-    amount: 2_500,
-    prefix: "EBPLS-BP",
-    label: "EBPLS Mayor’s / Business Permit",
-  },
-};
+const requestSchema = z.object({
+  serviceType: z.enum(["dti-business-name", "lgu-business-permit", "bir-documentary-stamp-tax"]),
+  conversationId: z.string().uuid(),
+});
 
 export async function POST(request: Request) {
   const session = await readSession(request);
   if (!session) return Response.json({ error: "Authentication required." }, { status: 401 });
-
+  const actor = bnrsActorFromProfile(session.rawProfile);
   const parsed = requestSchema.safeParse(await request.json());
   if (!parsed.success)
     return Response.json(
       { error: "Check the application details and try again." },
       { status: 400 },
     );
-  if (!(await getConversation(parsed.data.conversationId)))
+  if (!(await getConversation(actor.egovUserId, parsed.data.conversationId)))
     return Response.json({ error: "Chat session not found." }, { status: 404 });
 
-  if (
-    !process.env.EGOVPAY_BASE_URL?.trim() ||
-    !process.env.EGOVPAY_API_KEY?.trim() ||
-    !process.env.EGOVPAY_SETTLEMENT_TEMPLATE_UUID?.trim()
-  )
-    return Response.json({ error: "eGovPay is not available right now." }, { status: 503 });
-
-  const existing = await getLatestPaymentForService(
-    parsed.data.conversationId,
-    parsed.data.serviceType,
-  );
-  if (existing && isPaidStatus(existing.status))
-    return Response.json(
-      { error: "This fee has already been paid.", payment: existing },
-      { status: 409 },
-    );
-
-  const service = services[parsed.data.serviceType];
-  const amount =
-    parsed.data.serviceType === "dti-business-name"
-      ? dtiRegistrationFee(parsed.data.territorialScope)
-      : service.amount;
-  const transactionId = `${service.prefix}-${crypto.randomUUID()}`;
-
   try {
-    const baseUrl = egovPayBaseUrl();
-    const { callbackUrl, redirectUrl } = paymentUrls(request, {
+    const urls = paymentUrls(request, {
       conversationId: parsed.data.conversationId,
-      transactionId,
+      paymentService: parsed.data.serviceType,
     });
-    const payment = await eGovPayApi.fromEnv({ baseUrl }).generatePayment(
-      {
-        amount,
-        callbackUrl,
-        currency: "PHP",
-        description: {
-          service: service.label,
-          ...(parsed.data.serviceType === "dti-business-name"
-            ? { scope: parsed.data.territorialScope }
-            : { reference: parsed.data.serviceReference }),
+    if (parsed.data.serviceType === "bir-documentary-stamp-tax") {
+      const artifact = (
+        await listBirArtifacts({
+          conversationId: parsed.data.conversationId,
+          ownerEgovUserId: actor.egovUserId,
+        })
+      ).find(({ formType }) => formType === "1901");
+      if (!artifact)
+        return Response.json(
+          { error: "Generate BIR Form 1901 before paying the documentary stamp tax." },
+          { status: 409 },
+        );
+      const baseUrl = egovPayBaseUrl();
+      const checkout = await createBirDstCheckout({
+        artifactId: artifact.artifactId,
+        callbackUrl: urls.callbackUrl,
+        conversationId: parsed.data.conversationId,
+        email: session.profile.email || undefined,
+        mobile: session.profile.mobile || undefined,
+        redirectUrl: urls.redirectUrl,
+        taxpayerName: session.profile.fullName,
+      });
+      return Response.json({
+        amount: checkout.amount,
+        checkoutUrl: hostedCheckoutUrl(checkout.checkoutUrl, baseUrl).toString(),
+        payment: {
+          serviceType: parsed.data.serviceType,
+          status: checkout.payment.status,
         },
-        items: [{ amount, name: service.label }],
-        name: session.profile.fullName,
-        redirectUrl,
-        transactionId,
-        ...(session.profile.mobile ? { mobile: session.profile.mobile } : {}),
-      },
-      { signal: AbortSignal.timeout(12_000) },
-    );
-    const checkoutUrl = hostedCheckoutUrl(payment.data.url, baseUrl);
-    const storedPayment = await createPayment({
+        transactionId: checkout.transactionId,
+        transactionUuid: checkout.transactionUuid,
+      });
+    }
+    if (parsed.data.serviceType === "dti-business-name") {
+      const baseUrl = egovPayBaseUrl();
+      const checkout = await createBnrsCheckout({
+        actor,
+        callbackUrl: urls.callbackUrl,
+        conversationId: parsed.data.conversationId,
+        redirectUrl: urls.redirectUrl,
+      });
+      return Response.json({
+        amount: checkout.amount,
+        checkoutUrl: hostedCheckoutUrl(checkout.checkoutUrl, baseUrl).toString(),
+        payment: { serviceType: parsed.data.serviceType, status: "pending" },
+        transactionId: checkout.transactionId,
+        transactionUuid: checkout.transactionUuid,
+      });
+    }
+
+    const lguEnvironment = lguPaymentEnvironment();
+    if (!lguEnvironment.baseUrl)
+      throw new PaymentUrlConfigurationError(
+        "LGU_EGOVPAY_BASE_URL",
+        "LGU eGovPay base URL is missing",
+      );
+    const checkout = await createLguCheckout({
+      actor,
+      callbackUrl: urls.callbackUrl,
       conversationId: parsed.data.conversationId,
-      transactionUuid: payment.data.uuid,
-      transactionId,
-      amount,
-      status: "pending",
-      proposedName: parsed.data.proposedName,
-      territorialScope:
-        parsed.data.serviceType === "dti-business-name"
-          ? parsed.data.territorialScope
-          : "Not applicable",
-      ownerName: session.profile.fullName,
-      serviceType: parsed.data.serviceType,
-      serviceReference: parsed.data.serviceReference ?? null,
+      redirectUrl: urls.redirectUrl,
     });
     return Response.json({
-      checkoutUrl: checkoutUrl.toString(),
-      transactionUuid: payment.data.uuid,
-      transactionId,
-      amount,
-      payment: storedPayment,
+      amount: checkout.amount,
+      checkoutUrl: hostedCheckoutUrl(checkout.checkoutUrl, lguEnvironment.baseUrl).toString(),
+      payment: { serviceType: parsed.data.serviceType, status: "pending" },
+      transactionId: checkout.transactionId,
+      transactionUuid: checkout.transactionUuid,
     });
   } catch (error) {
-    if (error instanceof PaymentUrlConfigurationError) {
-      console.error("eGovPay URL configuration failed", {
-        field: error.field,
-        reason: error.message,
-      });
+    if (
+      error instanceof BnrsError ||
+      error instanceof LguError ||
+      error instanceof BirDstPaymentError
+    )
+      return Response.json({ error: error.message, code: error.code }, { status: 409 });
+    if (error instanceof PaymentUrlConfigurationError)
       return Response.json(
         { error: "Online payment is not configured correctly right now." },
         { status: 503 },
       );
-    }
     const networkCode = classifyPaymentNetworkError(error);
-    if (networkCode) {
-      console.error("eGovPay network request failed", { code: networkCode });
+    if (networkCode)
       return Response.json(
         { error: paymentNetworkMessage(networkCode), code: networkCode },
         { status: 503 },
       );
-    }
     console.error(
       "eGovPay payment creation failed",
       error instanceof Error ? error.message : "Unknown error",

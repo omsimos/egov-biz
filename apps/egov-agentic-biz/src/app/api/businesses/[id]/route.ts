@@ -1,5 +1,6 @@
 import { readSession } from "@/lib/auth/session";
-import { getRegisteredBusiness } from "@/server/registered-businesses";
+import { getBusiness } from "@/server/businesses";
+import { bnrsActorFromProfile } from "@/server/dx/bnrs";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,12 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       { headers: { "Cache-Control": "no-store" }, status: 401 },
     );
   const { id } = await context.params;
-  const business = await getRegisteredBusiness(session.profile.id, id);
+  const business = await getBusiness(
+    {
+      actor: bnrsActorFromProfile(session.rawProfile),
+    },
+    id,
+  );
   if (!business)
     return Response.json(
       { error: "Business record not found." },

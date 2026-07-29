@@ -1,6 +1,12 @@
 import { createMCPClient } from "@ai-sdk/mcp";
 import type { EgovSsoCitizenProfile } from "@repo/egov/eGovSso";
 import {
+  BnrsError,
+  mapEgovSsoProfileToBnrsResidentialAddress,
+  type BnrsCertificate,
+  type BnrsBusinessAddressInput,
+} from "@repo/dx/bnrs";
+import {
   convertToModelMessages,
   createGateway,
   createUIMessageStream,
@@ -13,6 +19,8 @@ import {
   type UIMessageStreamWriter,
 } from "ai";
 import { z } from "zod";
+import { generateBirFormInputSchema } from "@repo/dx/bir";
+import { LguError, type LguApplicationStatus, type LguIssuedDocuments } from "@repo/dx/lgu";
 import { fallbackQuestionFor, inferCategory } from "@/lib/business-rules";
 import {
   buildRationale,
@@ -22,30 +30,27 @@ import {
   selectRdo,
 } from "@/lib/government-data";
 import {
+  planProgress,
   uniqueMessagesById,
-  type BarangayClearance,
   type BusinessChatMessage,
   type DtiBusinessNameForm,
-  type EbplsBusinessPermitReceipt,
+  type LguPermitSummary,
   type PaymentServiceType,
   type RegistrationPlan,
   type UserInfoOutput,
 } from "@/lib/business-chat";
 import { readSession } from "@/lib/auth/session";
 import { createBirFormArtifact } from "@/lib/bir-form/artifact";
-import { generateBirFormInputSchema } from "@/lib/bir-form/schema";
 import {
   completeRegistrationPlan,
   initialRegistrationPlan,
   normalizeRegistrationPlan,
 } from "@/lib/registration-plan";
-import { dtiRegistrationFee, formatPeso } from "@/lib/dti-fees";
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import {
   availableUserInfoFields,
-  extractExplicitBusinessAddress,
   profileAddressPreference,
-  resolveBusinessFormAddress,
+  shouldCollectStructuredBusinessAddress,
 } from "@/lib/form-prefill";
 import {
   extractExplicitSmsMessage,
@@ -65,26 +70,38 @@ import {
 } from "@/lib/emessage";
 import type { BusinessPlan, IntakeAnswer, IntakeQuestion } from "@/lib/questions";
 import { isValidChoiceAnswer } from "@/lib/intake-validation";
-import {
-  buildFinalBusiness,
-  buildFinalSelfEmployedBusiness,
-  buildMockCompliance,
-  buildSelfEmployedMockCompliance,
-} from "@/lib/mock-compliance";
 import { describesBusinessIdea, isRegistrationStart } from "@/lib/registration-intent";
 import {
   businessManagementContext,
   deterministicBusinessManagementResponse,
 } from "@/lib/business-management";
 import type { RegisteredBusiness } from "@/lib/registered-business";
-import { getConversation, saveMessages, setActiveStream } from "@/server/conversations";
+import { getBusiness } from "@/server/businesses";
 import {
-  getLatestPaymentForConversation,
-  getLatestPaymentForService,
-  isPaidStatus,
-} from "@/server/payments";
+  getBnrsConversationLink,
+  getConversation,
+  saveMessages,
+  setActiveStream,
+} from "@/server/conversations";
+import { BirDstPaymentError, syncBirDstPaymentForConversation } from "@/server/bir-dst-payment";
+import { isPaidStatus, type StoredPayment } from "@/server/payments";
+import {
+  finalizeBirSelfEmployedRegistration,
+  finalizeBirSoleProprietorRegistration,
+} from "@/server/dx/bir-registrations";
+import { bnrsActorFromProfile, getBnrs } from "@/server/dx/bnrs";
+import {
+  getBnrsCertificateForConversation,
+  prepareBnrsApplication,
+  syncBnrsPaymentForConversation,
+} from "@/server/dx/bnrs-applications";
+import {
+  getLguDocumentsForConversation,
+  getLguStatusForConversation,
+  prepareLguApplication,
+  syncLguPaymentForConversation,
+} from "@/server/dx/lgu-applications";
 import { getResumableContext } from "@/server/resumable";
-import { getRegisteredBusiness, upsertRegisteredBusiness } from "@/server/registered-businesses";
 import {
   dispatchSmsOnce,
   SmsDispatchRateLimitError,
@@ -95,37 +112,69 @@ import {
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-const BARANGAY_CLEARANCE_MOCK_DELAY_MS = 2_000;
-const EBPLS_PERMIT_MOCK_DELAY_MS = 5_000;
-const COMPLIANCE_MOCK_DELAY_MS = 900;
+function operationalErrorLabel(error: unknown) {
+  const name = error instanceof Error && error.name ? error.name : "UnknownError";
+  const status =
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    typeof error.status === "number"
+      ? ` (HTTP ${error.status})`
+      : "";
+  return `${name}${status}`;
+}
+
+function readBnrsCatalog() {
+  const bnrs = getBnrs();
+  return {
+    nameRequirements: bnrs.getBusinessNameRequirements(),
+    scopes: bnrs.getBusinessScopes(),
+    termsAndConditions: bnrs.getTermsAndConditions(),
+  };
+}
+
+type BnrsCatalog = ReturnType<typeof readBnrsCatalog>;
+
+function formatPeso(amount: number) {
+  return new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+    minimumFractionDigits: 0,
+  }).format(amount);
+}
+
+function lguPermitSummary(
+  status: LguApplicationStatus,
+  documents: LguIssuedDocuments | null = status.issuedDocuments,
+): LguPermitSummary {
+  return {
+    applicationId: status.applicationId,
+    state:
+      status.state === "COMPLETED"
+        ? "COMPLETED"
+        : status.state === "PAYMENT_PENDING"
+          ? "PAYMENT_PENDING"
+          : "PAYMENT_READY",
+    businessName: status.certificate.businessName,
+    city: status.city,
+    feeLabel: formatPeso(status.fee.totalFee),
+    paymentStatus:
+      status.payment?.status === "PAID"
+        ? "PAID"
+        : status.payment?.status === "PENDING" || status.payment?.status === "CREATING"
+          ? "PENDING"
+          : null,
+    businessPermitNumber: documents?.businessPermit.permitNumber ?? null,
+    barangayClearanceNumber: documents?.barangayClearance.clearanceNumber ?? null,
+    validUntil: documents?.businessPermit.validUntil ?? null,
+  };
+}
 
 const PLACEHOLDER_ANSWER =
   /^(?:a+s+s+|asdf+|test(?:ing)?|sample|placeholder|none|n\/?a|not sure|unknown|idk|tbd|xxx+|-+)$/i;
 
 function normalizedAnswerText(value: string | string[]) {
   return (Array.isArray(value) ? value.join(" ") : value).trim().replace(/\s+/g, " ");
-}
-
-function birFormConsentQuestion(): IntakeQuestion {
-  return {
-    id: "self-employed-bir-form-consent",
-    eyebrow: "Your confirmation",
-    title: "Generate your prefilled BIR Form 1901 now?",
-    helpText: "The demo PDF will use verified fields from your authenticated eGov profile.",
-    type: "single",
-    options: [
-      {
-        id: "yes",
-        label: "Yes, generate it",
-        description: "Create the prefilled PDF now",
-      },
-      {
-        id: "no",
-        label: "No, not now",
-        description: "Pause before generating the form",
-      },
-    ],
-  };
 }
 
 function hasCompletedTool(messages: UIMessage[], type: string) {
@@ -152,12 +201,13 @@ function isCompleteBusinessAddress(value: string) {
 }
 
 function isUsableIntakeAnswer(answer: IntakeAnswer, question?: IntakeQuestion) {
+  if (answer.questionId === "bnrs-terms-accepted") return answer.value === "accept";
   if (question?.type === "single" || question?.type === "multi")
     return isValidChoiceAnswer(question, answer.value);
   const text = normalizedAnswerText(answer.value);
   if (!text || PLACEHOLDER_ANSWER.test(text)) return false;
   if (answer.questionId === "business-address") return isCompleteBusinessAddress(text);
-  if (answer.questionId === "proposed-business-name") return isMeaningfulBusinessName(text);
+  if (answer.questionId === "business-dominant-name") return isMeaningfulBusinessName(text);
   return true;
 }
 
@@ -175,9 +225,10 @@ const questionSchema = z
       .max(60),
     eyebrow: z.string().min(1).max(30),
     title: z.string().min(1).max(120),
-    helpText: z.string().max(180),
+    helpText: z.string().max(2_000),
     type: z.enum(["single", "multi", "number", "text"]),
-    options: z.array(optionSchema).max(8).optional(),
+    options: z.array(optionSchema).max(40).optional(),
+    allowOther: z.boolean().optional(),
     placeholder: z.string().max(100).optional(),
     suffix: z.string().max(30).optional(),
     minimum: z.number().optional(),
@@ -194,51 +245,40 @@ const questionSchema = z
         path: ["options"],
       });
   });
-const dtiFormSchema = z.object({
-  applicationType: z.literal("New registration"),
-  status: z.enum(["Ready to submit", "Submitted"]),
-  proposedName: z
-    .string()
-    .trim()
-    .refine(isMeaningfulBusinessName, "A complete proposed business name is required"),
-  businessActivity: z.string().trim().min(1),
-  territorialScope: z.enum(["Barangay", "City / municipality", "Regional", "National"]),
-  ownerName: z.string().trim().min(1),
-  businessAddress: z
-    .string()
-    .trim()
-    .refine(isCompleteBusinessAddress, "A complete business address is required"),
-  city: z.string().trim().min(1),
-  feeLabel: z.string().trim().min(1),
-  missingFields: z.array(z.string()).max(0),
-});
-const barangayClearanceApplicationSchema = z.object({
-  businessName: z.string(),
-  ownerName: z.string(),
-  businessActivity: z.string(),
-  businessAddress: z.string(),
-  barangay: z.string(),
-  city: z.string(),
-  registrationDocument: z.string(),
-  supportingDocuments: z.array(z.string()),
-});
-const ebplsBusinessPermitApplicationSchema = z.object({
-  system: z.literal("EBPLS"),
-  permitType: z.literal("New business permit"),
-  businessName: z.string(),
-  ownerName: z.string(),
-  businessActivity: z.string(),
-  businessAddress: z.string(),
-  barangay: z.string(),
-  city: z.string(),
-  barangayClearanceReference: z.string(),
-  registrationDocument: z.string(),
-  attachments: z.array(z.string()),
-});
+function dtiFormSchema(catalog: BnrsCatalog) {
+  const descriptorIds = new Set<string>(catalog.nameRequirements.descriptors.map(({ id }) => id));
+  const scopeIds = new Set<string>(catalog.scopes.map(({ id }) => id));
+  return z.object({
+    applicationType: z.literal("New registration"),
+    status: z.enum(["Ready to submit", "Submitted"]),
+    dominantName: z
+      .string()
+      .trim()
+      .refine(isMeaningfulBusinessName, "A dominant business name is required"),
+    descriptorId: z.string().refine((id) => descriptorIds.has(id), "Select a BNRS descriptor"),
+    businessActivity: z.string().trim().min(1),
+    territorialScopeId: z
+      .enum(["CITY_MUNICIPALITY", "REGIONAL", "NATIONAL"])
+      .refine((id) => scopeIds.has(id), "Select a BNRS scope"),
+    ownerName: z.string().trim().min(1),
+    businessAddress: z
+      .string()
+      .trim()
+      .refine(isCompleteBusinessAddress, "A complete business address is required"),
+    city: z.string().trim().min(1),
+    missingFields: z.array(z.string()).max(0),
+  });
+}
+type EditDtiFormInput = {
+  form: z.infer<ReturnType<typeof dtiFormSchema>>;
+  note: string;
+};
+type EditDtiFormOutput = { applicationId: string; form: DtiBusinessNameForm };
 const planStepSchema = z.object({
   id: z.string().min(1).max(60),
   label: z.string().min(1).max(120),
   status: z.enum(["pending", "in_progress", "completed", "skipped"]),
+  optional: z.boolean().optional(),
 });
 const registrationPlanSchema = z.object({
   title: z.string().min(1).max(120),
@@ -246,14 +286,14 @@ const registrationPlanSchema = z.object({
 });
 const paymentServiceSchema = z.enum([
   "dti-business-name",
-  "barangay-clearance",
-  "ebpls-business-permit",
+  "lgu-business-permit",
+  "bir-documentary-stamp-tax",
 ]);
 const requestSchema = z.object({
   id: z.string().uuid(),
   messages: z.array(z.unknown()),
   initialPrompt: z.string().trim().min(1).max(2_000),
-  event: z.enum(["payment-completed"]).optional(),
+  event: z.enum(["payment-completed", "registration-completed"]).optional(),
   paymentService: paymentServiceSchema.optional(),
 });
 type GeneratedRoute = {
@@ -278,9 +318,10 @@ function profileAddressQuestion(): IntakeQuestion {
   return {
     id: "profile-address",
     eyebrow: "Business address",
-    title: "Which address should this business use?",
-    helpText: "Your registered eGov address is used only if you choose it here.",
+    title: "Which address should this registration use?",
+    helpText: "Choose your residential address from eGov SSO or enter a business address.",
     type: "single",
+    allowOther: false,
     options: [
       {
         id: "use-profile-address",
@@ -300,24 +341,6 @@ function addressPreference(answers: IntakeAnswer[]) {
   return profileAddressPreference(
     answers.find((answer) => answer.questionId === "profile-address")?.value,
   );
-}
-
-function lastBarangayClearance(messages: UIMessage[]) {
-  for (const message of [...messages].reverse())
-    for (const part of [...message.parts].reverse()) {
-      if (part.type === "tool-submitBarangayClearance" && part.state === "output-available")
-        return (part.output as { clearance: BarangayClearance }).clearance;
-    }
-  return null;
-}
-
-function lastEbplsReceipt(messages: UIMessage[]) {
-  for (const message of [...messages].reverse())
-    for (const part of [...message.parts].reverse()) {
-      if (part.type === "tool-submitEbplsBusinessPermit" && part.state === "output-available")
-        return (part.output as { receipt: EbplsBusinessPermitReceipt }).receipt;
-    }
-  return null;
 }
 
 function planAfterPermitIssued(plan: RegistrationPlan): RegistrationPlan {
@@ -342,16 +365,21 @@ function planAfterPermitIssued(plan: RegistrationPlan): RegistrationPlan {
 
 function questionsForIncompleteDtiForm(
   form: DtiBusinessNameForm,
-  profile: CitizenProfile | null,
   answers: IntakeAnswer[],
+  catalog: BnrsCatalog,
 ) {
   const answered = new Set(answers.map((answer) => answer.questionId));
   const questions: IntakeQuestion[] = [];
-  if (!isMeaningfulBusinessName(form.proposedName) && !answered.has("proposed-business-name"))
-    questions.push(proposedNameQuestion());
-  if (!isCompleteBusinessAddress(form.businessAddress) && !answered.has("business-address"))
+  if (!form.dominantName && !answered.has("business-dominant-name"))
+    questions.push(dominantNameQuestion(catalog));
+  if (!form.descriptorId && !answered.has("business-descriptor"))
+    questions.push(descriptorQuestion(catalog));
+  if (!form.territorialScopeId && !answered.has("business-territorial-scope"))
+    questions.push(territorialScopeQuestion(catalog));
+  if (!form.termsAccepted) questions.push(termsQuestion(catalog));
+  if (!form.businessAddressDetails)
     questions.push(
-      businessAddressQuestion(form.city || profile?.city || "your city or municipality"),
+      ...structuredAddressQuestions("Sole proprietor").filter(({ id }) => !answered.has(id)),
     );
   return questions;
 }
@@ -390,141 +418,6 @@ function immediatelyFailedTaxReminderInput(
   return null;
 }
 
-function planAfterBarangayClearance(plan: RegistrationPlan): RegistrationPlan {
-  return normalizeRegistrationPlan({
-    ...plan,
-    steps: plan.steps.map((step) => ({
-      ...step,
-      status:
-        step.id === "details" ||
-        step.id === "structure" ||
-        step.id === "name-registration" ||
-        step.id === "local-clearance"
-          ? "completed"
-          : step.id === "business-permit"
-            ? "in_progress"
-            : "pending",
-    })),
-  });
-}
-
-function planAfterEbplsSubmission(plan: RegistrationPlan): RegistrationPlan {
-  return normalizeRegistrationPlan({
-    ...plan,
-    steps: plan.steps.map((step) => ({
-      ...step,
-      status:
-        step.id === "details" ||
-        step.id === "structure" ||
-        step.id === "name-registration" ||
-        step.id === "local-clearance"
-          ? "completed"
-          : step.id === "business-permit"
-            ? "in_progress"
-            : "pending",
-    })),
-  });
-}
-
-function wait(milliseconds: number) {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
-}
-
-function mockReference(prefix: string) {
-  return `${prefix}-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-}
-
-function mockBarangayClearance(
-  payment: NonNullable<Awaited<ReturnType<typeof getLatestPaymentForConversation>>>,
-  form: DtiBusinessNameForm | null,
-  profile: CitizenProfile | null,
-): BarangayClearance {
-  const submittedAt = new Date();
-  const barangay = profile?.barangay || "Business-address barangay";
-  const city = form?.city || profile?.city || "Local government unit";
-  return {
-    businessName: payment.proposedName,
-    ownerName: payment.ownerName || profile?.fullName || "Registered owner",
-    businessActivity: form?.businessActivity || "Business activity on registration record",
-    businessAddress:
-      form?.businessAddress || profile?.address || "Business address on registration record",
-    barangay,
-    city,
-    registrationDocument: `DTI Business Name Certificate — ${payment.proposedName}`,
-    supportingDocuments: [
-      "DTI Business Name Certificate",
-      "Government-issued ID",
-      "Proof of business address",
-      "Owner consent or lease, if applicable",
-    ],
-    status: "Payment required",
-    referenceNumber: mockReference("BCLR"),
-    submittedAt: submittedAt.toISOString(),
-    approvedAt: null,
-    validUntil: null,
-    feeLabel: formatPeso(500),
-    usedFor: [
-      "Supporting document for the EBPLS mayor’s/business permit application",
-      "Proof of barangay approval for the declared business location",
-      "Local inspection and permit-record verification",
-    ],
-  };
-}
-
-function mockEbplsReceipt(clearance: BarangayClearance): EbplsBusinessPermitReceipt {
-  const submittedAt = new Date();
-  return {
-    system: "EBPLS",
-    permitType: "New business permit",
-    businessName: clearance.businessName,
-    ownerName: clearance.ownerName,
-    businessActivity: clearance.businessActivity,
-    businessAddress: clearance.businessAddress,
-    barangay: clearance.barangay,
-    city: clearance.city,
-    barangayClearanceReference: clearance.referenceNumber,
-    registrationDocument: clearance.registrationDocument,
-    attachments: [
-      clearance.registrationDocument,
-      `Barangay Clearance ${clearance.referenceNumber}`,
-      "Government-issued ID",
-      "Proof of business address",
-    ],
-    status: "Payment required",
-    referenceNumber: mockReference("EBPLS"),
-    submittedAt: submittedAt.toISOString(),
-    issuedAt: null,
-    validUntil: null,
-    feeLabel: formatPeso(2_500),
-    nextAction:
-      "Pay the assessed LGU fees through eGovPay so EBPLS can issue the mock mayor’s/business permit.",
-  };
-}
-
-function approveBarangayClearance(clearance: BarangayClearance): BarangayClearance {
-  const approvedAt = new Date();
-  const validUntil = new Date(approvedAt);
-  validUntil.setFullYear(validUntil.getFullYear() + 1);
-  return {
-    ...clearance,
-    status: "Approved",
-    approvedAt: approvedAt.toISOString(),
-    validUntil: validUntil.toISOString(),
-  };
-}
-
-function issueEbplsPermit(receipt: EbplsBusinessPermitReceipt): EbplsBusinessPermitReceipt {
-  const issuedAt = new Date();
-  const validUntil = new Date(issuedAt.getFullYear(), 11, 31, 23, 59, 59);
-  return {
-    ...receipt,
-    status: "Permit issued",
-    issuedAt: issuedAt.toISOString(),
-    validUntil: validUntil.toISOString(),
-    nextAction: "Continue to BIR registration and retain this permit with the business records.",
-  };
-}
-
 function planAfterPayment(plan: RegistrationPlan | null): RegistrationPlan {
   const source = plan ?? initialRegistrationPlan;
   return normalizeRegistrationPlan({
@@ -541,20 +434,21 @@ function planAfterPayment(plan: RegistrationPlan | null): RegistrationPlan {
   });
 }
 
-function resumableConsumer(conversationId: string) {
+function resumableConsumer(ownerEgovUserId: string, conversationId: string) {
   return async ({ stream }: { stream: ReadableStream<string> }) => {
     const streamId = crypto.randomUUID();
-    await setActiveStream(conversationId, streamId);
+    await setActiveStream(ownerEgovUserId, conversationId, streamId);
     try {
       await getResumableContext().createNewResumableStream(streamId, () => stream);
     } catch (error) {
-      await setActiveStream(conversationId, null);
+      await setActiveStream(ownerEgovUserId, conversationId, null);
       console.error("Business chat resumable stream failed", error);
     }
   };
 }
 
 function manualResponse(
+  ownerEgovUserId: string,
   conversationId: string,
   messages: BusinessChatMessage[],
   execute: (writer: UIMessageStreamWriter<BusinessChatMessage>) => Promise<void> | void,
@@ -564,17 +458,20 @@ function manualResponse(
     originalMessages: messages,
     execute: ({ writer }) => execute(writer),
     onEnd: async ({ messages: completeMessages }) => {
-      await saveMessages(conversationId, completeMessages);
-      await setActiveStream(conversationId, null);
+      await saveMessages(ownerEgovUserId, conversationId, completeMessages);
+      await setActiveStream(ownerEgovUserId, conversationId, null);
     },
   });
   return createUIMessageStreamResponse({
     stream,
-    ...(options.resumable === false ? {} : { consumeSseStream: resumableConsumer(conversationId) }),
+    ...(options.resumable === false
+      ? {}
+      : { consumeSseStream: resumableConsumer(ownerEgovUserId, conversationId) }),
   });
 }
 
 async function managementResponse(
+  ownerEgovUserId: string,
   conversationId: string,
   business: RegisteredBusiness,
   messages: BusinessChatMessage[],
@@ -585,6 +482,7 @@ async function managementResponse(
   const latestPrompt = latestUser?.text ?? "";
   if (!process.env.AI_GATEWAY_API_KEY)
     return manualResponse(
+      ownerEgovUserId,
       conversationId,
       messages,
       (writer) => {
@@ -628,7 +526,7 @@ async function managementResponse(
     stopWhen: stepCountIs(3),
     system: `You are the post-registration business assistant for one Filipino business. Answer concisely and warmly using the saved business record below. Help with the tax calendar, saved files, registrations, permits, renewals, employer obligations, and remaining operational compliance.
 
-Treat the record as the only source of truth about this business. Never start or continue a new-business registration workflow. Never invent a filing, status, deadline, reference number, document, or completed government action. Say clearly when the record does not contain an answer. All records are demo data: distinguish what the saved record shows from what the citizen must confirm with BIR, the LGU, BFP, or another responsible agency. Prefer short paragraphs and lists; use a table only when comparing three or more records.
+Treat the record as the only source of truth about this business. Never start or continue a new-business registration workflow. Never invent a filing, status, deadline, reference number, document, or completed government action. Say clearly when the record does not contain an answer. Records come from the BNRS, LGU, and BIR DX modules; distinguish that sandbox service state from actions the citizen must confirm with BIR, the LGU, BFP, or another responsible agency. Prefer short paragraphs and lists; use a table only when comparing three or more records.
 
 Use send_sms_message only when the citizen explicitly asks to send an SMS. Pass a recipient number only when the citizen supplied one in chat; otherwise omit it so the authenticated eGov SSO number is used. Use simulate_tax_payment_reminder only when the citizen explicitly asks to simulate sending a tax payment reminder. Never send a reminder for an ordinary question about tax dates or obligations.
 
@@ -648,8 +546,8 @@ ${JSON.stringify(businessManagementContext(business))}`,
       generateMessageId: () => responseMessageId,
       sendReasoning: false,
       onEnd: async ({ messages: completeMessages }) => {
-        await saveMessages(conversationId, completeMessages);
-        await setActiveStream(conversationId, null);
+        await saveMessages(ownerEgovUserId, conversationId, completeMessages);
+        await setActiveStream(ownerEgovUserId, conversationId, null);
       },
     })
     .pipeTo(new WritableStream())
@@ -663,15 +561,116 @@ ${JSON.stringify(businessManagementContext(business))}`,
   });
 }
 
-function proposedNameQuestion(): IntakeQuestion {
+function dominantNameQuestion(catalog: BnrsCatalog): IntakeQuestion {
   return {
-    id: "proposed-business-name",
+    id: "business-dominant-name",
     eyebrow: "Business identity",
-    title: "What business name do you want to register?",
-    helpText: "Enter the complete proposed name. You can still revise it before payment.",
+    title: "What distinctive name do you want to register?",
+    helpText: `Enter only the dominant name; choose the business descriptor separately. ${catalog.nameRequirements.reminders[4]}`,
     type: "text",
-    placeholder: "Proposed trade name",
+    placeholder: "For example, Molar Bear",
   };
+}
+
+function descriptorQuestion(catalog: BnrsCatalog): IntakeQuestion {
+  return {
+    id: "business-descriptor",
+    eyebrow: "Business identity",
+    title: "Which BNRS descriptor best matches the business?",
+    helpText: "Choose an official descriptor. It will be kept separate from the dominant name.",
+    type: "single",
+    allowOther: false,
+    options: catalog.nameRequirements.descriptors.map(({ id, label }) => ({ id, label })),
+  };
+}
+
+function territorialScopeQuestion(catalog: BnrsCatalog): IntakeQuestion {
+  return {
+    id: "business-territorial-scope",
+    eyebrow: "Registration scope",
+    title: "Where should the business name be protected?",
+    helpText: "Each total includes the documentary stamp tax.",
+    type: "single",
+    allowOther: false,
+    options: catalog.scopes.map((scope) => ({
+      id: scope.id,
+      label: scope.label === "City/Municipality" ? "City / municipality" : scope.label,
+      description: `${formatPeso(scope.totalFee)} total`,
+    })),
+  };
+}
+
+function termsQuestion(catalog: BnrsCatalog): IntakeQuestion {
+  return {
+    id: "bnrs-terms-accepted",
+    eyebrow: "BNRS terms",
+    title: "Do you accept the BNRS terms and conditions?",
+    helpText: catalog.termsAndConditions,
+    type: "single",
+    allowOther: false,
+    options: [
+      { id: "accept", label: "I accept", description: "Continue the BNRS application" },
+      { id: "decline", label: "I do not accept", description: "Do not create the application" },
+    ],
+  };
+}
+
+function structuredAddressQuestions(
+  registrationType: BusinessPlan["registrationType"],
+): IntakeQuestion[] {
+  return [
+    {
+      id: "business-address-line-1",
+      eyebrow: "Business address",
+      title: "What is the street, building, or unit for the business?",
+      helpText: "Enter address line 1 only.",
+      type: "text",
+      placeholder: "Unit, building, street",
+    },
+    {
+      id: "business-barangay",
+      eyebrow: "Business address",
+      title: "What barangay is the business in?",
+      helpText: "Enter the official barangay name.",
+      type: "text",
+      placeholder: "Barangay",
+    },
+    {
+      id: "business-city-municipality",
+      eyebrow: "Business address",
+      title: "What city or municipality is the business in?",
+      helpText: "Enter the official city or municipality name.",
+      type: "text",
+      placeholder: "City or municipality",
+    },
+    {
+      id: "business-province",
+      eyebrow: "Business address",
+      title: "What province is the business in?",
+      helpText: "For Metro Manila addresses, enter Metro Manila.",
+      type: "text",
+      placeholder: "Province",
+    },
+    {
+      id: "business-region",
+      eyebrow: "Business address",
+      title: "What region is the business in?",
+      helpText: "Enter the official region name.",
+      type: "text",
+      placeholder: "Region",
+    },
+    {
+      id: "business-postal-code",
+      eyebrow: "Business address",
+      title: "What is the four-digit postal code?",
+      helpText:
+        registrationType === "Self-employed"
+          ? "Enter the postal code for the work address."
+          : "BNRS requires a complete postal code.",
+      type: "text",
+      placeholder: "1234",
+    },
+  ];
 }
 
 function promptHasWorkSetup(prompt: string) {
@@ -686,7 +685,13 @@ function promptHasStaffing(prompt: string) {
   );
 }
 
-function intakeBatch(prompt: string, profile: CitizenProfile | null, answers: IntakeAnswer[]) {
+function intakeBatch(
+  prompt: string,
+  profile: CitizenProfile | null,
+  answers: IntakeAnswer[],
+  catalog: BnrsCatalog,
+  residentialAddress: BnrsBusinessAddressInput | null,
+) {
   const answered = new Set(answers.map((answer) => answer.questionId));
   const location = resolveBusinessLocation(prompt, profile?.city ?? "Philippines", answers);
   const questions: IntakeQuestion[] = [];
@@ -700,41 +705,27 @@ function intakeBatch(prompt: string, profile: CitizenProfile | null, answers: In
     questions.push(activityQuestion);
   if (!answered.has("workers") && !promptHasStaffing(prompt))
     questions.push(fallbackQuestionFor(prompt, 1));
-  const explicitAddress = extractExplicitBusinessAddress(prompt);
   const preference = addressPreference(answers);
-  if (!explicitAddress && !preference && profile?.address.trim())
-    questions.push(profileAddressQuestion());
-  if (
-    !explicitAddress &&
-    !answered.has("business-address") &&
-    (!profile?.address.trim() || preference === "different")
-  )
-    questions.push(businessAddressQuestion(location.city));
-  const promptName =
-    prompt
-      .match(
-        /(?:called|named|name is|business name(?: is|:)?|trade name(?: is|:)?)\s+[“"]?([^.”"\n]+)/i,
-      )?.[1]
-      ?.trim() ?? "";
   const registrationType = makePlan(prompt, profile, answers).registrationType;
-  if (
-    registrationType !== "Self-employed" &&
-    !answered.has("proposed-business-name") &&
-    !isMeaningfulBusinessName(promptName)
+  if (!preference) questions.push(profileAddressQuestion());
+  else if (
+    shouldCollectStructuredBusinessAddress(
+      preference,
+      registrationType,
+      Boolean(residentialAddress),
+    )
   )
-    questions.push(proposedNameQuestion());
-  return questions;
-}
-
-function businessAddressQuestion(city: string): IntakeQuestion {
-  return {
-    id: "business-address",
-    eyebrow: "Location",
-    title: `What is the complete business address in ${city}?`,
-    helpText: "Include the house, unit, street, or building and the barangay—not just the city.",
-    type: "text",
-    placeholder: `Street or building, barangay, ${city}`,
-  };
+    questions.push(
+      ...structuredAddressQuestions(registrationType).filter(({ id }) => !answered.has(id)),
+    );
+  if (registrationType === "Sole proprietor") {
+    if (!answered.has("bnrs-terms-accepted")) questions.push(termsQuestion(catalog));
+    if (!answered.has("business-dominant-name")) questions.push(dominantNameQuestion(catalog));
+    if (!answered.has("business-descriptor")) questions.push(descriptorQuestion(catalog));
+    if (!answered.has("business-territorial-scope"))
+      questions.push(territorialScopeQuestion(catalog));
+  }
+  return questions.slice(0, 6);
 }
 
 function toolAnswers(messages: UIMessage[]): IntakeAnswer[] {
@@ -858,6 +849,86 @@ function emitTool(
   writer.write({ type: "tool-output-available", toolCallId, output } as never);
 }
 
+function planForBirPayment(
+  plan: RegistrationPlan,
+  registrationType: BusinessPlan["registrationType"],
+) {
+  return normalizeRegistrationPlan({
+    ...plan,
+    steps: plan.steps.map((step) => ({
+      ...step,
+      status:
+        step.id === "bir"
+          ? ("in_progress" as const)
+          : registrationType === "Self-employed" &&
+              ["name-registration", "local-clearance", "business-permit"].includes(step.id)
+            ? ("skipped" as const)
+            : ["details", "structure"].includes(step.id)
+              ? ("completed" as const)
+              : step.status,
+    })),
+  });
+}
+
+async function emitBir1901Generation(
+  writer: UIMessageStreamWriter<BusinessChatMessage>,
+  request: Request,
+  rawProfile: EgovSsoCitizenProfile,
+  conversationId: string,
+  plan: RegistrationPlan,
+) {
+  const toolCallId = crypto.randomUUID();
+  writer.write({
+    type: "tool-input-available",
+    toolCallId,
+    toolName: "generate_bir_form",
+    input: { type: "1901", data: {} },
+  });
+
+  try {
+    const output = {
+      artifact: await createBirFormArtifact(
+        request,
+        rawProfile,
+        { type: "1901", data: {} },
+        conversationId,
+      ),
+      source: "BIR tool input merged with authenticated eGov SSO profile" as const,
+    };
+
+    writer.write({ type: "tool-output-available", toolCallId, output });
+    const generatedPlan = {
+      ...plan,
+      note: "BIR Form 1901 generated. Documentary stamp tax payment is the final required checkpoint.",
+    };
+    emitTool(writer, "updatePlan", generatedPlan, { plan: generatedPlan });
+    const textId = crypto.randomUUID();
+    writer.write({ type: "text-start", id: textId });
+    writer.write({
+      type: "text-delta",
+      id: textId,
+      delta:
+        "Your DX-generated BIR Form 1901 is ready. Preview the PDF, then pay the ₱30 Documentary Stamp Tax below to complete this registration plan. Books and invoices, sector permits, and employer-agency registrations are optional follow-ups.",
+    });
+    writer.write({ type: "text-end", id: textId });
+  } catch (error) {
+    console.warn(`BIR form artifact generation failed: ${operationalErrorLabel(error)}`);
+    writer.write({
+      type: "tool-output-error",
+      toolCallId,
+      errorText: "The PDF could not be generated.",
+    } as never);
+    const textId = crypto.randomUUID();
+    writer.write({ type: "text-start", id: textId });
+    writer.write({
+      type: "text-delta",
+      id: textId,
+      delta: "I couldn’t generate the BIR form PDF. No downstream registration was recorded.",
+    });
+    writer.write({ type: "text-end", id: textId });
+  }
+}
+
 function planForAnswers(
   answers: IntakeAnswer[],
   hasSearched: boolean,
@@ -970,58 +1041,145 @@ function makePlan(
   };
 }
 
-function answerText(answers: IntakeAnswer[], pattern: RegExp) {
-  return (
-    answers
-      .find((answer) => pattern.test(`${answer.questionId} ${answer.question}`))
-      ?.labels.join(", ") ?? ""
-  );
+function answerValue(answers: IntakeAnswer[], questionId: string) {
+  const value = answers.find((answer) => answer.questionId === questionId)?.value;
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function businessAddressFromAnswers(
+  answers: IntakeAnswer[],
+  residentialAddress: BnrsBusinessAddressInput | null,
+): BnrsBusinessAddressInput | null {
+  if (addressPreference(answers) === "profile" && residentialAddress) return residentialAddress;
+  const addressLine1 = answerValue(answers, "business-address-line-1");
+  const barangay = answerValue(answers, "business-barangay");
+  const cityMunicipality = answerValue(answers, "business-city-municipality");
+  const province = answerValue(answers, "business-province");
+  const region = answerValue(answers, "business-region");
+  const postalCode = answerValue(answers, "business-postal-code");
+  if (
+    !addressLine1 ||
+    !barangay ||
+    !cityMunicipality ||
+    !province ||
+    !region ||
+    !/^\d{4}$/.test(postalCode)
+  )
+    return null;
+  return {
+    source: "USER_PROVIDED",
+    addressLine1,
+    barangay,
+    cityMunicipality,
+    province,
+    region,
+    postalCode,
+  };
+}
+
+function businessAddressLabel(address: BnrsBusinessAddressInput | null) {
+  if (!address) return "";
+  return [
+    address.addressLine1,
+    address.addressLine2,
+    address.barangay,
+    address.cityMunicipality,
+    address.province,
+    address.region,
+    address.postalCode,
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
+async function completedBusinessRecord(input: {
+  actor: ReturnType<typeof bnrsActorFromProfile>;
+  answers: IntakeAnswer[];
+  businessAddress: BnrsBusinessAddressInput | null;
+  conversationId: string;
+  payment: StoredPayment;
+  profile: CitizenProfile;
+  prompt: string;
+}) {
+  const plan = makePlan(input.prompt, input.profile, input.answers);
+  if (plan.registrationType === "Self-employed")
+    return finalizeBirSelfEmployedRegistration({
+      businessActivity: plan.businessLabel,
+      businessAddress:
+        businessAddressLabel(input.businessAddress) || input.profile.address || plan.city,
+      category: plan.category,
+      city: plan.city,
+      conversationId: input.conversationId,
+      finalizedAt: input.payment.paidAt ?? input.payment.updatedAt,
+      name: input.profile.fullName,
+      ownerEgovUserId: input.actor.egovUserId,
+      rdo: plan.rdo ? `${plan.rdo.code} - ${plan.rdo.name}` : "For BIR confirmation",
+      tinMasked: input.profile.tinMasked,
+    });
+
+  const businessLink = await getBnrsConversationLink(input.actor.egovUserId, input.conversationId);
+  if (!businessLink?.applicationId) return null;
+  const business = await getBusiness({ actor: input.actor }, businessLink.applicationId);
+  if (!business) return null;
+  return finalizeBirSoleProprietorRegistration({
+    business,
+    finalizedAt: input.payment.paidAt ?? input.payment.updatedAt,
+    ownerEgovUserId: input.actor.egovUserId,
+  });
+}
+
+function appScopeLabel(
+  scope: BnrsCatalog["scopes"][number],
+): DtiBusinessNameForm["territorialScope"] {
+  return scope.label === "City/Municipality" ? "City / municipality" : scope.label;
+}
+
+function composeProposedName(dominantName: string, descriptorLabel: string) {
+  return [dominantName.trim(), descriptorLabel].filter(Boolean).join(" ");
 }
 
 function makeDtiForm(
   description: string,
-  prompt: string,
   profile: CitizenProfile | null,
   answers: IntakeAnswer[],
   plan: BusinessPlan,
-  usesProfileAddress: boolean,
+  catalog: BnrsCatalog,
+  residentialAddress: BnrsBusinessAddressInput | null,
 ): DtiBusinessNameForm {
-  const proposedNameMatch = prompt.match(
-    /(?:called|named|name is|business name(?: is|:)?|trade name(?: is|:)?)\s+[“"]?([^.”"\n]+)/i,
-  );
-  const rawProposedName =
-    answerText(answers, /proposed.*name|business.*name|trade.*name/i) ||
-    proposedNameMatch?.[1]?.trim() ||
-    "";
-  const proposedName = isMeaningfulBusinessName(rawProposedName) ? rawProposedName : "";
-  const rawBusinessAddress = resolveBusinessFormAddress(
-    extractExplicitBusinessAddress(prompt) ||
-      answerText(answers, /business.*address|operating.*address|exact.*address/i),
-    profile,
-    usesProfileAddress,
-  );
-  const businessAddress = isCompleteBusinessAddress(rawBusinessAddress) ? rawBusinessAddress : "";
-  const scope: DtiBusinessNameForm["territorialScope"] = /nationwide|national/i.test(prompt)
-    ? "National"
-    : /region(?:al|wide)/i.test(prompt)
-      ? "Regional"
-      : /barangay only|within (?:the )?barangay/i.test(prompt)
-        ? "Barangay"
-        : "City / municipality";
+  const rawDominantName = answerValue(answers, "business-dominant-name");
+  const dominantName = isMeaningfulBusinessName(rawDominantName) ? rawDominantName : "";
+  const descriptorId = answerValue(answers, "business-descriptor");
+  const descriptor = catalog.nameRequirements.descriptors.find(({ id }) => id === descriptorId);
+  const scopeId = answerValue(answers, "business-territorial-scope");
+  const scope = catalog.scopes.find(({ id }) => id === scopeId);
+  const businessAddressDetails = businessAddressFromAnswers(answers, residentialAddress);
+  const businessAddress = businessAddressLabel(businessAddressDetails);
+  const termsAccepted = answerValue(answers, "bnrs-terms-accepted") === "accept";
   const missingFields = [
-    ...(!proposedName ? ["Proposed business name"] : []),
-    ...(!businessAddress ? ["Business address"] : []),
+    ...(!dominantName ? ["Dominant business name"] : []),
+    ...(!descriptor ? ["Business descriptor"] : []),
+    ...(!scope ? ["Territorial scope"] : []),
+    ...(!termsAccepted ? ["BNRS terms acceptance"] : []),
+    ...(!businessAddressDetails ? ["Business address"] : []),
   ];
   return {
     applicationType: "New registration",
     status: missingFields.length ? "Draft" : "Ready to submit",
-    proposedName,
+    dominantName,
+    descriptorId: descriptor?.id ?? "",
+    descriptorLabel: descriptor?.label ?? "",
+    proposedName: composeProposedName(dominantName, descriptor?.label ?? ""),
     businessActivity: description.slice(0, 160),
-    territorialScope: scope,
+    territorialScope: scope ? appScopeLabel(scope) : "City / municipality",
+    territorialScopeId: scope?.id,
     ownerName: profile?.fullName ?? "",
     businessAddress,
+    ...(businessAddressDetails ? { businessAddressDetails } : {}),
     city: plan.city,
-    feeLabel: formatPeso(dtiRegistrationFee(scope)),
+    feeLabel: scope ? formatPeso(scope.totalFee) : "",
+    termsAndConditions: catalog.termsAndConditions,
+    businessNameRequirements: catalog.nameRequirements.reminders,
+    termsAccepted,
     missingFields,
   };
 }
@@ -1030,20 +1188,15 @@ function deterministicNext(
   prompt: string,
   profile: CitizenProfile | null,
   answers: IntakeAnswer[],
+  catalog: BnrsCatalog,
+  residentialAddress: BnrsBusinessAddressInput | null,
 ) {
-  const questions = intakeBatch(prompt, profile, answers);
+  const questions = intakeBatch(prompt, profile, answers, catalog, residentialAddress);
   if (questions.length) return { questions };
   const plan = makePlan(prompt, profile, answers);
   if (plan.registrationType !== "Sole proprietor") return { plan };
-  const form = makeDtiForm(
-    prompt,
-    prompt,
-    profile,
-    answers,
-    plan,
-    addressPreference(answers) === "profile",
-  );
-  const missingQuestions = questionsForIncompleteDtiForm(form, profile, answers);
+  const form = makeDtiForm(prompt, profile, answers, plan, catalog, residentialAddress);
+  const missingQuestions = questionsForIncompleteDtiForm(form, answers, catalog);
   if (missingQuestions.length) return { questions: missingQuestions };
   return { plan, form };
 }
@@ -1171,8 +1324,11 @@ function agentTools(
   allowTaxReminderRetry: boolean,
   dispatchKey: Omit<SmsDispatchKey, "recipient" | "toolName">,
   businessCity: string,
-  usesProfileAddress: boolean,
-  confirmedBusinessAddress: string,
+  actor: ReturnType<typeof bnrsActorFromProfile>,
+  bnrsAddress: BnrsBusinessAddressInput | null,
+  catalog: BnrsCatalog,
+  conversationId: string,
+  termsAccepted: boolean,
 ) {
   let userInfoReady = hasUserInfo;
   return {
@@ -1198,7 +1354,7 @@ function agentTools(
       execute: async (input) => {
         if (!userInfoReady) throw new Error("Call user_info before generate_bir_form");
         return {
-          artifact: await createBirFormArtifact(request, rawProfile, input),
+          artifact: await createBirFormArtifact(request, rawProfile, input, conversationId),
           source: "BIR tool input merged with authenticated eGov SSO profile" as const,
         };
       },
@@ -1225,32 +1381,47 @@ function agentTools(
       }),
       execute: ({ query, numResults }) => searchOfficialWeb(query, numResults),
     }),
-    editDtiBusinessNameForm: tool({
+    editDtiBusinessNameForm: tool<EditDtiFormInput, EditDtiFormOutput, Record<string, unknown>>({
       description:
-        "Create or revise a complete DTI Business Name Registration form. Never call with blank or missing fields; use askUser first for every unresolved required field.",
-      inputSchema: z.object({ form: dtiFormSchema, note: z.string().max(180) }),
-      execute: ({ form }) => {
-        const businessAddress = resolveBusinessFormAddress(
-          confirmedBusinessAddress || form.businessAddress,
-          profile,
-          usesProfileAddress,
+        "Create or revise a complete DTI Business Name Registration form. Keep the dominant name separate from an exact descriptor and territorial-scope ID in the supplied BNRS catalog. Never call with blank or missing fields; use askUser first for every unresolved required field.",
+      inputSchema: z.object({ form: dtiFormSchema(catalog), note: z.string().max(180) }),
+      execute: async ({ form }) => {
+        if (!bnrsAddress)
+          throw new Error("Ask for the complete structured business address before continuing.");
+        const descriptor = catalog.nameRequirements.descriptors.find(
+          ({ id }) => id === form.descriptorId,
         );
-        if (!isCompleteBusinessAddress(businessAddress))
-          throw new Error(
-            "Ask the user for the complete business address before creating the DTI form.",
-          );
-        return {
-          form: {
-            ...form,
-            ownerName: profile.fullName,
-            businessActivity: prompt.slice(0, 160),
-            businessAddress,
-            city: businessCity,
-            feeLabel: formatPeso(dtiRegistrationFee(form.territorialScope)),
-            missingFields: [],
-            status: "Ready to submit" as const,
-          },
+        const scope = catalog.scopes.find(({ id }) => id === form.territorialScopeId);
+        if (!descriptor) throw new Error("Select an exact descriptor from the BNRS catalog.");
+        if (!scope) throw new Error("Select an exact territorial scope from the BNRS catalog.");
+        const application = await prepareBnrsApplication({
+          actor,
+          address: bnrsAddress,
+          conversationId,
+          descriptorId: descriptor.id,
+          dominantName: form.dominantName,
+          ownerProfile: rawProfile,
+          scopeId: scope.id,
+          termsAccepted,
+        });
+        const completeForm: DtiBusinessNameForm = {
+          ...form,
+          descriptorLabel: descriptor.label,
+          proposedName: composeProposedName(form.dominantName, descriptor.label),
+          territorialScope: appScopeLabel(scope),
+          ownerName: profile.fullName,
+          businessActivity: prompt.slice(0, 160),
+          businessAddress: businessAddressLabel(bnrsAddress),
+          businessAddressDetails: bnrsAddress,
+          city: businessCity,
+          feeLabel: formatPeso(scope.totalFee),
+          termsAndConditions: catalog.termsAndConditions,
+          businessNameRequirements: [...catalog.nameRequirements.reminders],
+          termsAccepted,
+          missingFields: [],
+          status: "Ready to submit",
         };
+        return { applicationId: application.applicationId, form: completeForm };
       },
       toModelOutput: ({ output }) => ({
         type: "json",
@@ -1259,22 +1430,9 @@ function agentTools(
             ...output.form,
             ownerName: "[server-prefilled verified name]",
             businessAddress: "[server-confirmed business address]",
+            businessNameRequirements: [...(output.form.businessNameRequirements ?? [])],
           },
         },
-      }),
-    }),
-    submitBarangayClearance: tool({
-      description:
-        "Submit an electronic barangay business-clearance request and return the clearance response.",
-      inputSchema: z.object({
-        application: barangayClearanceApplicationSchema,
-      }),
-    }),
-    submitEbplsBusinessPermit: tool({
-      description:
-        "Submit a mayor's or business-permit application through EBPLS (Electronic Business Permits and Licensing System).",
-      inputSchema: z.object({
-        application: ebplsBusinessPermitApplicationSchema,
       }),
     }),
     updatePlan: tool({
@@ -1295,20 +1453,22 @@ function agentTools(
 export async function POST(request: Request) {
   const session = await readSession(request);
   if (!session) return Response.json({ error: "Authentication required" }, { status: 401 });
+  const actor = bnrsActorFromProfile(session.rawProfile);
 
   const parsed = requestSchema.safeParse(await request.json());
   if (!parsed.success) return Response.json({ error: "Invalid chat request" }, { status: 400 });
-  const conversation = await getConversation(parsed.data.id);
+  const conversation = await getConversation(actor.egovUserId, parsed.data.id);
   if (!conversation) return Response.json({ error: "Chat session not found" }, { status: 404 });
   const managementBusiness =
     conversation.purpose === "management" && conversation.businessId
-      ? await getRegisteredBusiness(session.profile.id, conversation.businessId)
+      ? await getBusiness({ actor }, conversation.businessId)
       : null;
   if (conversation.purpose === "management" && !managementBusiness)
     return Response.json({ error: "Chat session not found" }, { status: 404 });
   const messages = uniqueMessagesById(parsed.data.messages as BusinessChatMessage[]);
-  await saveMessages(conversation.id, messages);
-  await setActiveStream(conversation.id, null);
+  await saveMessages(actor.egovUserId, conversation.id, messages);
+  await setActiveStream(actor.egovUserId, conversation.id, null);
+  const bnrsCatalog = readBnrsCatalog();
   const profile = session.profile;
   const latestUser = latestUserMessage(messages);
   const latestPrompt = latestUser?.text || parsed.data.initialPrompt;
@@ -1322,6 +1482,7 @@ export async function POST(request: Request) {
     const mention = smsNumberMention(latestPrompt);
     if (mention.kind === "ambiguous")
       return manualResponse(
+        actor.egovUserId,
         conversation.id,
         messages,
         (writer) => {
@@ -1350,6 +1511,7 @@ export async function POST(request: Request) {
       );
       if (selection.kind === "ambiguous" || selection.kind === "not-found")
         return manualResponse(
+          actor.egovUserId,
           conversation.id,
           messages,
           (writer) => {
@@ -1376,6 +1538,7 @@ export async function POST(request: Request) {
       };
     } else if (retryChangesObligation) {
       return manualResponse(
+        actor.egovUserId,
         conversation.id,
         messages,
         (writer) => {
@@ -1400,7 +1563,7 @@ export async function POST(request: Request) {
       ...(suppliedNumber ? { number: suppliedNumber } : {}),
     };
 
-    return manualResponse(conversation.id, messages, async (writer) => {
+    return manualResponse(actor.egovUserId, conversation.id, messages, async (writer) => {
       const toolCallId = crypto.randomUUID();
       writer.write({
         type: "tool-input-available",
@@ -1438,9 +1601,7 @@ export async function POST(request: Request) {
         });
         writer.write({ type: "text-end", id: textId });
       } catch (error) {
-        console.warn("Simulated tax reminder failed", {
-          name: error instanceof Error ? error.name : "UnknownError",
-        });
+        console.warn(`Simulated tax reminder failed: ${operationalErrorLabel(error)}`);
         writer.write({
           type: "tool-output-error",
           toolCallId,
@@ -1467,6 +1628,7 @@ export async function POST(request: Request) {
     const message = extractExplicitSmsMessage(latestPrompt);
     if (!message)
       return manualResponse(
+        actor.egovUserId,
         conversation.id,
         messages,
         (writer) => {
@@ -1486,6 +1648,7 @@ export async function POST(request: Request) {
     const mention = smsNumberMention(latestPrompt);
     if (mention.kind === "ambiguous")
       return manualResponse(
+        actor.egovUserId,
         conversation.id,
         messages,
         (writer) => {
@@ -1510,6 +1673,7 @@ export async function POST(request: Request) {
     });
     if (!parsedSmsInput.success)
       return manualResponse(
+        actor.egovUserId,
         conversation.id,
         messages,
         (writer) => {
@@ -1526,7 +1690,7 @@ export async function POST(request: Request) {
         { resumable: false },
       );
     const smsInput = parsedSmsInput.data;
-    return manualResponse(conversation.id, messages, async (writer) => {
+    return manualResponse(actor.egovUserId, conversation.id, messages, async (writer) => {
       const toolCallId = crypto.randomUUID();
       writer.write({
         type: "tool-input-available",
@@ -1556,9 +1720,7 @@ export async function POST(request: Request) {
         });
         writer.write({ type: "text-end", id: textId });
       } catch (error) {
-        console.warn("SMS send failed", {
-          name: error instanceof Error ? error.name : "UnknownError",
-        });
+        console.warn(`SMS send failed: ${operationalErrorLabel(error)}`);
         writer.write({
           type: "tool-output-error",
           toolCallId,
@@ -1582,6 +1744,7 @@ export async function POST(request: Request) {
   }
   if (managementBusiness)
     return managementResponse(
+      actor.egovUserId,
       conversation.id,
       managementBusiness,
       messages,
@@ -1596,18 +1759,21 @@ export async function POST(request: Request) {
   const prompt = conversationText || parsed.data.initialPrompt;
   const answers = toolAnswers(messages);
   const invalidAnswers = invalidIntakeAnswerIds(messages);
-  const birFormConsent = answers.find(
-    (answer) => answer.questionId === "self-employed-bir-form-consent",
+  const legacyBirFormConsent = answers.find(
+    (answer) =>
+      answer.questionId === "bir-form-consent" ||
+      answer.questionId === "self-employed-bir-form-consent",
   );
-  const birFormConsentValue = birFormConsent
-    ? normalizedAnswerText(birFormConsent.value).toLowerCase()
+  const legacyBirFormConsentValue = legacyBirFormConsent
+    ? normalizedAnswerText(legacyBirFormConsent.value).toLowerCase()
     : null;
-  const shouldGenerateBirForm = birFormConsentValue === "yes";
+  const shouldGenerateLegacyBirForm =
+    legacyBirFormConsentValue === "yes" && !hasCompletedTool(messages, "tool-generate_bir_form");
   const initialLocation = resolveBusinessLocation(prompt, profile?.city ?? "Philippines", answers);
   const preference = addressPreference(answers);
-  const confirmedBusinessAddress =
-    extractExplicitBusinessAddress(prompt) ||
-    answerText(answers, /business.*address|operating.*address|exact.*address/i);
+  const residentialAddress = mapEgovSsoProfileToBnrsResidentialAddress(session.rawProfile);
+  const bnrsAddress = businessAddressFromAnswers(answers, residentialAddress);
+  const termsAccepted = answerValue(answers, "bnrs-terms-accepted") === "accept";
   const existingPlan = lastRegistrationPlan(messages);
   const hasSearched = messages.some((message) =>
     message.parts.some(
@@ -1635,212 +1801,48 @@ export async function POST(request: Request) {
       userMessageId: latestUser?.message.id ?? conversation.id,
     },
     initialLocation.city,
-    preference === "profile",
-    confirmedBusinessAddress,
+    actor,
+    bnrsAddress,
+    bnrsCatalog,
+    conversation.id,
+    termsAccepted,
   );
-  const previousClearance = lastBarangayClearance(messages);
-  const previousEbplsReceipt = lastEbplsReceipt(messages);
   const location = initialLocation;
 
   if (parsed.data.event === "payment-completed") {
     const paymentService: PaymentServiceType = parsed.data.paymentService ?? "dti-business-name";
-    const payment = await getLatestPaymentForService(conversation.id, paymentService);
-    if (!payment || !isPaidStatus(payment.status))
-      return Response.json({ error: "Payment has not been marked paid." }, { status: 409 });
-    if (paymentService === "barangay-clearance") {
-      if (!previousClearance)
-        return Response.json(
-          { error: "Barangay clearance assessment not found." },
-          { status: 409 },
-        );
-      const clearance = approveBarangayClearance(previousClearance);
-      const permitPlan = planAfterBarangayClearance(existingPlan ?? planAfterPayment(null));
-      return manualResponse(conversation.id, messages, async (writer) => {
-        const barangayId = crypto.randomUUID();
-        writer.write({
-          type: "tool-input-available",
-          toolCallId: barangayId,
-          toolName: "submitBarangayClearance",
-          input: {
-            application: {
-              businessName: clearance.businessName,
-              ownerName: clearance.ownerName,
-              businessActivity: clearance.businessActivity,
-              businessAddress: clearance.businessAddress,
-              barangay: clearance.barangay,
-              city: clearance.city,
-              registrationDocument: clearance.registrationDocument,
-              supportingDocuments: clearance.supportingDocuments,
-            },
-          },
-        });
-        await wait(BARANGAY_CLEARANCE_MOCK_DELAY_MS);
-        writer.write({
-          type: "tool-output-available",
-          toolCallId: barangayId,
-          output: { clearance },
-        });
-        emitTool(
-          writer,
-          "updatePlan",
-          {
-            ...permitPlan,
-            note: "Barangay clearance paid and approved. Starting EBPLS assessment.",
-          },
-          { plan: permitPlan },
-        );
-        const textId = crypto.randomUUID();
-        writer.write({ type: "text-start", id: textId });
-        writer.write({
-          type: "text-delta",
-          id: textId,
-          delta:
-            "The barangay clearance is paid and approved. I’m attaching it to the mayor’s/business permit application through **EBPLS — Electronic Business Permits and Licensing System**.",
-        });
-        writer.write({ type: "text-end", id: textId });
-        const receipt = mockEbplsReceipt(clearance);
-        const ebplsId = crypto.randomUUID();
-        writer.write({
-          type: "tool-input-available",
-          toolCallId: ebplsId,
-          toolName: "submitEbplsBusinessPermit",
-          input: {
-            application: {
-              system: receipt.system,
-              permitType: receipt.permitType,
-              businessName: receipt.businessName,
-              ownerName: receipt.ownerName,
-              businessActivity: receipt.businessActivity,
-              businessAddress: receipt.businessAddress,
-              barangay: receipt.barangay,
-              city: receipt.city,
-              barangayClearanceReference: receipt.barangayClearanceReference,
-              registrationDocument: receipt.registrationDocument,
-              attachments: receipt.attachments,
-            },
-          },
-        });
-        await wait(EBPLS_PERMIT_MOCK_DELAY_MS);
-        writer.write({
-          type: "tool-output-available",
-          toolCallId: ebplsId,
-          output: { receipt },
-        });
-        emitTool(
-          writer,
-          "updatePlan",
-          {
-            ...planAfterEbplsSubmission(permitPlan),
-            note: "EBPLS assessment complete. LGU fee payment is required.",
-          },
-          { plan: planAfterEbplsSubmission(permitPlan) },
-        );
+    if (paymentService === "bir-documentary-stamp-tax") {
+      if (!existingPlan)
+        return Response.json({ error: "Registration plan not found." }, { status: 409 });
+      let payment: StoredPayment;
+      try {
+        payment = await syncBirDstPaymentForConversation(conversation.id);
+        if (!isPaidStatus(payment.status))
+          return Response.json({ error: "Payment has not been marked paid." }, { status: 409 });
+      } catch (error) {
+        if (error instanceof BirDstPaymentError)
+          return Response.json({ error: error.message, code: error.code }, { status: 409 });
+        throw error;
+      }
+      const completedPlan = completeRegistrationPlan(existingPlan);
+      const finalizedBusiness = await completedBusinessRecord({
+        actor,
+        answers,
+        businessAddress: bnrsAddress,
+        conversationId: conversation.id,
+        payment,
+        profile,
+        prompt,
       });
-    }
-    if (paymentService === "ebpls-business-permit") {
-      if (!previousEbplsReceipt)
-        return Response.json({ error: "EBPLS assessment not found." }, { status: 409 });
-      const receipt = issueEbplsPermit(previousEbplsReceipt);
-      const issuedPlan = planAfterPermitIssued(existingPlan ?? initialRegistrationPlan);
-      const businessPlan = makePlan(prompt, profile, answers);
-      const compliance = buildMockCompliance(businessPlan, receipt);
-      const sectorRecords = compliance.records.filter((record) => record.kind === "permit");
-      const employerRecords = compliance.records.filter((record) => record.kind === "employer");
-      const taxRecords = compliance.records.filter((record) => record.kind === "tax");
-      const booksAndInvoiceRecords = taxRecords.filter((record) =>
-        ["books-of-accounts", "invoice-setup"].includes(record.id),
-      );
-      const registrationTaxRecords = taxRecords.filter(
-        (record) => !booksAndInvoiceRecords.includes(record),
-      );
-      const sectorRequired = sectorRecords.some((record) => record.status !== "Not required");
-      const employerRequired = employerRecords.some((record) => record.status !== "Not required");
-      const completedPlan = completeRegistrationPlan(issuedPlan, {
-        employer: employerRequired,
-        sectorPermits: sectorRequired,
-      });
-      const business = await upsertRegisteredBusiness(
-        profile.id,
-        buildFinalBusiness({
-          conversationId: conversation.id,
-          profile,
-          plan: businessPlan,
-          dtiForm: lastForm,
-          clearance: previousClearance,
-          receipt,
-          compliance,
-        }),
-      );
-      return manualResponse(conversation.id, messages, async (writer) => {
-        const ebplsId = crypto.randomUUID();
-        writer.write({
-          type: "tool-input-available",
-          toolCallId: ebplsId,
-          toolName: "submitEbplsBusinessPermit",
-          input: {
-            application: {
-              system: receipt.system,
-              permitType: receipt.permitType,
-              businessName: receipt.businessName,
-              ownerName: receipt.ownerName,
-              businessActivity: receipt.businessActivity,
-              businessAddress: receipt.businessAddress,
-              barangay: receipt.barangay,
-              city: receipt.city,
-              barangayClearanceReference: receipt.barangayClearanceReference,
-              registrationDocument: receipt.registrationDocument,
-              attachments: receipt.attachments,
-            },
-          },
-        });
-        await wait(EBPLS_PERMIT_MOCK_DELAY_MS);
-        writer.write({
-          type: "tool-output-available",
-          toolCallId: ebplsId,
-          output: { receipt },
-        });
-        emitTool(
-          writer,
-          "updatePlan",
-          {
-            ...issuedPlan,
-            note: "Mayor’s/business permit issued. Moving to BIR registration.",
-          },
-          { plan: issuedPlan },
-        );
-        await wait(COMPLIANCE_MOCK_DELAY_MS);
-        const booksToolId = crypto.randomUUID();
-        writer.write({
-          type: "tool-input-available",
-          toolCallId: booksToolId,
-          toolName: "setupBooksAndInvoices",
-          input: {},
-        });
-        await wait(COMPLIANCE_MOCK_DELAY_MS);
-        writer.write({
-          type: "tool-output-available",
-          toolCallId: booksToolId,
-          output: { records: booksAndInvoiceRecords },
-        });
-        emitTool(
-          writer,
-          "setupTaxCompliance",
-          {},
-          {
-            records: registrationTaxRecords,
-            obligations: compliance.taxObligations,
-          },
-        );
-        await wait(COMPLIANCE_MOCK_DELAY_MS);
-        emitTool(writer, "completeSectorPermits", {}, { records: sectorRecords });
-        await wait(COMPLIANCE_MOCK_DELAY_MS);
-        emitTool(writer, "registerEmployerAgencies", {}, { records: employerRecords });
+      if (!finalizedBusiness)
+        return Response.json({ error: "Business record was not found." }, { status: 409 });
+      return manualResponse(actor.egovUserId, conversation.id, messages, (writer) => {
         emitTool(
           writer,
           "updatePlan",
           {
             ...completedPlan,
-            note: "Demo compliance setup complete and business record saved.",
+            note: "BIR documentary stamp tax payment verified. Required registration is complete.",
           },
           { plan: completedPlan },
         );
@@ -1849,9 +1851,11 @@ export async function POST(request: Request) {
           "finalizeBusinessRegistration",
           {},
           {
-            businessId: business.id,
-            businessName: business.name,
-            status: business.status,
+            businessId: finalizedBusiness.id,
+            businessName: finalizedBusiness.name,
+            certificateOfRegistrationFileId: "bir-form-2303",
+            registrationNumber: finalizedBusiness.registrationNumber,
+            status: finalizedBusiness.status,
           },
         );
         const textId = crypto.randomUUID();
@@ -1859,282 +1863,203 @@ export async function POST(request: Request) {
         writer.write({
           type: "text-delta",
           id: textId,
-          delta: `**All set up.** The demo registration for **${business.name}** is complete, including books, invoices, recurring tax reminders, permits, and employer checks. I saved everything to your linked business record. Every generated reference is marked as a mock and is not an official government record.`,
+          delta:
+            "Your ₱30 BIR Documentary Stamp Tax payment is verified, so this registration plan is complete. BIR generated your Certificate of Registration (Form 2303) and added it to the business record. Books and invoices, sector-specific permits, and SSS, PhilHealth, or Pag-IBIG registration remain available as optional follow-ups and do not block completion.",
         });
         writer.write({ type: "text-end", id: textId });
       });
     }
-    const paidPlan = planAfterPayment(existingPlan);
-    return manualResponse(conversation.id, messages, async (writer) => {
+    if (paymentService === "dti-business-name") {
+      let certificate: BnrsCertificate | null;
+      try {
+        const result = await syncBnrsPaymentForConversation({
+          actor,
+          conversationId: conversation.id,
+        });
+        if (!result.registration)
+          return Response.json({ error: "Payment has not been marked paid." }, { status: 409 });
+        certificate = await getBnrsCertificateForConversation({
+          actor,
+          conversationId: conversation.id,
+        });
+      } catch (error) {
+        if (error instanceof BnrsError)
+          return Response.json({ error: error.message, code: error.code }, { status: 409 });
+        throw error;
+      }
+      if (!certificate)
+        return Response.json({ error: "BNRS certificate not found." }, { status: 409 });
+
+      let lguStatus: LguApplicationStatus;
+      try {
+        lguStatus = await prepareLguApplication({
+          actor,
+          certificate,
+          conversationId: conversation.id,
+          ownerProfile: session.rawProfile,
+        });
+      } catch (error) {
+        if (error instanceof LguError)
+          return Response.json({ error: error.message, code: error.code }, { status: 409 });
+        throw error;
+      }
+      const paidPlan = planAfterPayment(existingPlan);
+      const permit = lguPermitSummary(lguStatus);
+      return manualResponse(actor.egovUserId, conversation.id, messages, async (writer) => {
+        emitTool(
+          writer,
+          "updatePlan",
+          {
+            ...paidPlan,
+            note: "BNRS certificate issued. The combined LGU permit application is ready.",
+          },
+          { plan: paidPlan },
+        );
+        const textId = crypto.randomUUID();
+        writer.write({ type: "text-start", id: textId });
+        writer.write({
+          type: "text-delta",
+          id: textId,
+          delta: `BNRS issued certificate **${certificate.certificateNumber}** for **${certificate.businessName}**. I passed that fresh credential to the DX LGU flow, which includes the business permit and barangay clearance in one assessment.`,
+        });
+        writer.write({ type: "text-end", id: textId });
+        emitTool(writer, "prepareLguBusinessPermit", {}, { permit });
+        emitTool(
+          writer,
+          "updatePlan",
+          {
+            ...paidPlan,
+            note: "LGU application validated. One combined permit fee is ready for payment.",
+          },
+          { plan: paidPlan },
+        );
+      });
+    }
+
+    if (paymentService === "lgu-business-permit") {
+      let status: LguApplicationStatus;
+      let documents: LguIssuedDocuments | null;
+      try {
+        const result = await syncLguPaymentForConversation({
+          actor,
+          conversationId: conversation.id,
+        });
+        if (result.status.state !== "COMPLETED")
+          return Response.json({ error: "Payment has not been marked paid." }, { status: 409 });
+        const [currentStatus, linkedDocuments] = await Promise.all([
+          getLguStatusForConversation({ actor, conversationId: conversation.id }),
+          getLguDocumentsForConversation({ actor, conversationId: conversation.id }),
+        ]);
+        if (!currentStatus || !linkedDocuments)
+          throw new LguError(
+            "ISSUED_DOCUMENTS_NOT_FOUND",
+            "The LGU documents have not been issued.",
+          );
+        status = currentStatus;
+        documents = linkedDocuments;
+      } catch (error) {
+        if (error instanceof LguError)
+          return Response.json({ error: error.message, code: error.code }, { status: 409 });
+        throw error;
+      }
+      const issuedPlan = planAfterPermitIssued(existingPlan ?? initialRegistrationPlan);
+      const permit = lguPermitSummary(status, documents);
+      return manualResponse(actor.egovUserId, conversation.id, messages, async (writer) => {
+        emitTool(writer, "issueLguBusinessPermit", {}, { permit });
+        emitTool(
+          writer,
+          "updatePlan",
+          {
+            ...issuedPlan,
+            note: "LGU payment verified; the permit and barangay clearance were issued together.",
+          },
+          { plan: issuedPlan },
+        );
+        const textId = crypto.randomUUID();
+        writer.write({ type: "text-start", id: textId });
+        writer.write({
+          type: "text-delta",
+          id: textId,
+          delta: `The DX LGU flow issued business permit **${permit.businessPermitNumber}** and barangay clearance **${permit.barangayClearanceNumber}**. I’m generating BIR Form 1901 now; the app will not claim BIR registration until its required payment completes.`,
+        });
+        writer.write({ type: "text-end", id: textId });
+        await emitBir1901Generation(
+          writer,
+          request,
+          session.rawProfile,
+          conversation.id,
+          planForBirPayment(issuedPlan, "Sole proprietor"),
+        );
+      });
+    }
+
+    return Response.json({ error: "Unsupported payment service." }, { status: 400 });
+  }
+
+  if (parsed.data.event === "registration-completed") {
+    if (!existingPlan || !planProgress(existingPlan).done)
+      return Response.json({ error: "Registration plan is not complete." }, { status: 409 });
+    let payment: StoredPayment;
+    try {
+      payment = await syncBirDstPaymentForConversation(conversation.id);
+      if (!isPaidStatus(payment.status))
+        return Response.json({ error: "Payment has not been marked paid." }, { status: 409 });
+    } catch (error) {
+      if (error instanceof BirDstPaymentError)
+        return Response.json({ error: error.message, code: error.code }, { status: 409 });
+      throw error;
+    }
+    const finalizedBusiness = await completedBusinessRecord({
+      actor,
+      answers,
+      businessAddress: bnrsAddress,
+      conversationId: conversation.id,
+      payment,
+      profile,
+      prompt,
+    });
+    if (!finalizedBusiness)
+      return Response.json({ error: "Business record was not found." }, { status: 409 });
+    return manualResponse(actor.egovUserId, conversation.id, messages, (writer) => {
       emitTool(
         writer,
-        "updatePlan",
+        "finalizeBusinessRegistration",
+        {},
         {
-          ...paidPlan,
-          note: "Payment recorded. Moving to local clearance requirements.",
+          businessId: finalizedBusiness.id,
+          businessName: finalizedBusiness.name,
+          certificateOfRegistrationFileId: "bir-form-2303",
+          registrationNumber: finalizedBusiness.registrationNumber,
+          status: finalizedBusiness.status,
         },
-        { plan: paidPlan },
       );
       const textId = crypto.randomUUID();
       writer.write({ type: "text-start", id: textId });
       writer.write({
         type: "text-delta",
         id: textId,
-        delta: `Payment is marked paid for **${payment.proposedName}**. Next, I’m submitting the barangay business-clearance request electronically using the registration and address details already on file.`,
+        delta:
+          "Your completed registration is now linked to its business record, including the BIR Certificate of Registration (Form 2303).",
       });
       writer.write({ type: "text-end", id: textId });
-      const clearance = mockBarangayClearance(payment, lastForm, profile);
-      const barangayId = crypto.randomUUID();
-      writer.write({
-        type: "tool-input-available",
-        toolCallId: barangayId,
-        toolName: "submitBarangayClearance",
-        input: {
-          application: {
-            businessName: clearance.businessName,
-            ownerName: clearance.ownerName,
-            businessActivity: clearance.businessActivity,
-            businessAddress: clearance.businessAddress,
-            barangay: clearance.barangay,
-            city: clearance.city,
-            registrationDocument: clearance.registrationDocument,
-            supportingDocuments: clearance.supportingDocuments,
-          },
-        },
-      });
-      await wait(BARANGAY_CLEARANCE_MOCK_DELAY_MS);
-      writer.write({
-        type: "tool-output-available",
-        toolCallId: barangayId,
-        output: { clearance },
-      });
-      emitTool(
-        writer,
-        "updatePlan",
-        {
-          ...paidPlan,
-          note: "Barangay clearance assessed. Payment is required before approval.",
-        },
-        { plan: paidPlan },
-      );
     });
   }
 
-  if (shouldGenerateBirForm)
-    return manualResponse(conversation.id, messages, async (writer) => {
+  if (shouldGenerateLegacyBirForm)
+    return manualResponse(actor.egovUserId, conversation.id, messages, async (writer) => {
       if (!hasUserInfo) emitTool(writer, "user_info", {}, userInfoOutput);
-      const toolCallId = crypto.randomUUID();
-      writer.write({
-        type: "tool-input-available",
-        toolCallId,
-        toolName: "generate_bir_form",
-        input: { type: "1901", data: {} },
-      });
-
-      try {
-        const output = {
-          artifact: await createBirFormArtifact(request, session.rawProfile, {
-            type: "1901",
-            data: {},
-          }),
-          source: "BIR tool input merged with authenticated eGov SSO profile" as const,
-        };
-
-        const plan = makePlan(prompt, profile, answers);
-        if (plan.registrationType === "Self-employed") {
-          const compliance = buildSelfEmployedMockCompliance(plan, profile.fullName);
-          const taxRecords = compliance.records.filter((record) => record.kind === "tax");
-          const booksAndInvoiceRecords = taxRecords.filter((record) =>
-            ["books-of-accounts", "invoice-setup"].includes(record.id),
-          );
-          const registrationTaxRecords = taxRecords.filter(
-            (record) => !booksAndInvoiceRecords.includes(record),
-          );
-          const birCompletedPlan = normalizeRegistrationPlan({
-            ...initialRegistrationPlan,
-            steps: initialRegistrationPlan.steps.map((step) => ({
-              ...step,
-              status: ["details", "structure", "bir"].includes(step.id)
-                ? ("completed" as const)
-                : ["name-registration", "local-clearance", "business-permit"].includes(step.id)
-                  ? ("skipped" as const)
-                  : step.id === "tax-compliance"
-                    ? ("in_progress" as const)
-                    : ("pending" as const),
-            })),
-          });
-          const business = await upsertRegisteredBusiness(
-            profile.id,
-            buildFinalSelfEmployedBusiness({
-              conversationId: conversation.id,
-              profile,
-              plan,
-              businessAddress:
-                confirmedBusinessAddress ||
-                (preference === "profile" ? profile.address : "Address confirmed during intake"),
-              compliance,
-              files: [
-                {
-                  id: "bir-form-1901",
-                  title: "BIR Form 1901",
-                  filename: "BIR-Form-1901.pdf",
-                  documentType: "Registration application",
-                  status: "Generated",
-                  createdAt: new Date().toISOString(),
-                  url: output.artifact.url,
-                  note: "Prefilled from the authenticated eGov profile. Submission to BIR is still required.",
-                  demo: true,
-                },
-                {
-                  id: "bir-form-2303",
-                  title: "BIR Certificate of Registration (Form 2303)",
-                  filename: "DEMO-BIR-Form-2303.pdf",
-                  documentType: "Certificate of Registration",
-                  status: "Available",
-                  createdAt: new Date().toISOString(),
-                  url: null,
-                  note: "Preview file. This is not an official certificate issued by BIR.",
-                  demo: true,
-                },
-                {
-                  id: "books-and-invoices",
-                  title: "Books and invoice setup",
-                  filename: "DEMO-Books-and-Invoices.pdf",
-                  documentType: "Accounting setup record",
-                  status: "Available",
-                  createdAt: new Date().toISOString(),
-                  url: null,
-                  note: "Demo summary of configured books and invoice controls.",
-                  demo: true,
-                },
-                {
-                  id: "tax-calendar",
-                  title: "Recurring tax filing calendar",
-                  filename: "DEMO-Tax-Calendar.pdf",
-                  documentType: "Tax calendar",
-                  status: "Available",
-                  createdAt: new Date().toISOString(),
-                  url: null,
-                  note: "Demo schedule. Filing obligations must be confirmed with BIR.",
-                  demo: true,
-                },
-              ],
-            }),
-          );
-          const completedPlan = completeRegistrationPlan(birCompletedPlan, {
-            employer: false,
-            sectorPermits: false,
-          });
-
-          writer.write({ type: "tool-output-available", toolCallId, output });
-          emitTool(
-            writer,
-            "updatePlan",
-            {
-              ...birCompletedPlan,
-              note: "BIR Form 1901 generated. Setting up books, invoices, and tax filings.",
-            },
-            { plan: birCompletedPlan },
-          );
-
-          await wait(COMPLIANCE_MOCK_DELAY_MS);
-          const booksToolId = crypto.randomUUID();
-          writer.write({
-            type: "tool-input-available",
-            toolCallId: booksToolId,
-            toolName: "setupBooksAndInvoices",
-            input: {},
-          });
-          await wait(COMPLIANCE_MOCK_DELAY_MS);
-          writer.write({
-            type: "tool-output-available",
-            toolCallId: booksToolId,
-            output: { records: booksAndInvoiceRecords },
-          });
-          emitTool(
-            writer,
-            "updatePlan",
-            {
-              ...birCompletedPlan,
-              note: "Books and invoices are configured. Setting up recurring tax filings.",
-            },
-            { plan: birCompletedPlan },
-          );
-
-          await wait(COMPLIANCE_MOCK_DELAY_MS);
-          const taxToolId = crypto.randomUUID();
-          writer.write({
-            type: "tool-input-available",
-            toolCallId: taxToolId,
-            toolName: "setupTaxCompliance",
-            input: {},
-          });
-          await wait(COMPLIANCE_MOCK_DELAY_MS);
-          writer.write({
-            type: "tool-output-available",
-            toolCallId: taxToolId,
-            output: {
-              records: registrationTaxRecords,
-              obligations: compliance.taxObligations,
-            },
-          });
-          emitTool(
-            writer,
-            "updatePlan",
-            {
-              ...completedPlan,
-              note: "Books, invoices, and recurring tax filings are set up.",
-            },
-            { plan: completedPlan },
-          );
-          emitTool(
-            writer,
-            "finalizeBusinessRegistration",
-            {},
-            {
-              businessId: business.id,
-              businessName: business.name,
-              status: business.status,
-            },
-          );
-          const textId = crypto.randomUUID();
-          writer.write({ type: "text-start", id: textId });
-          writer.write({
-            type: "text-delta",
-            id: textId,
-            delta: `**All set up.** Your demo self-employed registration for **${business.name}** now includes the generated BIR Form 1901, books and invoices, and recurring tax filing reminders. DTI and the standard local-permit chain were skipped as not applicable. These are demo records, not official government registrations.`,
-          });
-          writer.write({ type: "text-end", id: textId });
-          return;
-        }
-
-        const textId = crypto.randomUUID();
-        writer.write({ type: "text-start", id: textId });
-        writer.write({
-          type: "text-delta",
-          id: textId,
-          delta: "Your prefilled BIR Form 1901 is ready. Select the PDF to preview it.",
-        });
-        writer.write({ type: "text-end", id: textId });
-      } catch (error) {
-        console.warn("BIR form artifact generation failed", {
-          name: error instanceof Error ? error.name : "UnknownError",
-        });
-        writer.write({
-          type: "tool-output-error",
-          toolCallId,
-          errorText: "The PDF could not be generated.",
-        } as never);
-        const textId = crypto.randomUUID();
-        writer.write({ type: "text-start", id: textId });
-        writer.write({
-          type: "text-delta",
-          id: textId,
-          delta:
-            "I couldn’t generate the BIR form PDF, so tax setup and finalization were not run.",
-        });
-        writer.write({ type: "text-end", id: textId });
-      }
+      const route = makePlan(prompt, profile, answers);
+      const birPaymentPlan = planForBirPayment(
+        existingPlan ?? initialRegistrationPlan,
+        route.registrationType,
+      );
+      await emitBir1901Generation(
+        writer,
+        request,
+        session.rawProfile,
+        conversation.id,
+        birPaymentPlan,
+      );
     });
 
   const firstTurn =
@@ -2149,7 +2074,7 @@ export async function POST(request: Request) {
     (firstTurn && describesBusinessIdea(latestPrompt));
 
   if (!lastForm && continuingIntake) {
-    const questions = intakeBatch(prompt, profile, answers);
+    const questions = intakeBatch(prompt, profile, answers, bnrsCatalog, residentialAddress);
     if (questions.length) {
       const intakeRegistrationType = makePlan(prompt, profile, answers).registrationType;
       const currentPlan = planForAnswers(
@@ -2159,7 +2084,7 @@ export async function POST(request: Request) {
         false,
         intakeRegistrationType,
       );
-      return manualResponse(conversation.id, messages, (writer) => {
+      return manualResponse(actor.egovUserId, conversation.id, messages, (writer) => {
         if (!existingPlan || JSON.stringify(existingPlan) !== JSON.stringify(currentPlan))
           emitTool(
             writer,
@@ -2207,7 +2132,7 @@ export async function POST(request: Request) {
     businessPlan.registrationType === "Self-employed" &&
     !hasCompletedTool(messages, "tool-prepareSelfEmployedRegistration")
   )
-    return manualResponse(conversation.id, messages, (writer) => {
+    return manualResponse(actor.egovUserId, conversation.id, messages, async (writer) => {
       const preparedPlan = normalizeRegistrationPlan({
         ...currentPlan,
         steps: currentPlan.steps.map((step) => ({
@@ -2258,9 +2183,8 @@ export async function POST(request: Request) {
             ? `${businessPlan.rdo.code} - ${businessPlan.rdo.name}`
             : "For BIR confirmation",
           addressSource: preference === "profile" ? "Authenticated profile" : "Business address",
-          status: "Ready for BIR form preparation",
-          nextAction: "Confirm below whether to generate the prefilled BIR Form 1901.",
-          demo: true,
+          status: "Generating BIR Form 1901",
+          nextAction: "Form 1901 is generated automatically. Next: ₱30 DST payment.",
         },
       });
       const textId = crypto.randomUUID();
@@ -2269,38 +2193,21 @@ export async function POST(request: Request) {
         type: "text-delta",
         id: textId,
         delta:
-          "Your self-employed professional route goes directly to BIR; DTI business-name registration is not required when you operate under your legal name.",
+          "Your self-employed professional route goes directly to BIR; DTI business-name registration is not required when you operate under your legal name. I’m generating Form 1901 now.",
       });
       writer.write({ type: "text-end", id: textId });
-      writer.write({
-        type: "tool-input-available",
-        toolCallId: crypto.randomUUID(),
-        toolName: "askUser",
-        input: { questions: [birFormConsentQuestion()] },
-      });
-    });
-
-  if (
-    continuingIntake &&
-    businessPlan.registrationType === "Self-employed" &&
-    hasCompletedTool(messages, "tool-prepareSelfEmployedRegistration") &&
-    birFormConsentValue === "no"
-  )
-    return manualResponse(conversation.id, messages, (writer) => {
-      const textId = crypto.randomUUID();
-      writer.write({ type: "text-start", id: textId });
-      writer.write({
-        type: "text-delta",
-        id: textId,
-        delta:
-          "Form generation is paused at your request. Your confirmed route remains self-employed BIR registration, with DTI and the standard local-permit chain marked not applicable.",
-      });
-      writer.write({ type: "text-end", id: textId });
+      await emitBir1901Generation(
+        writer,
+        request,
+        session.rawProfile,
+        conversation.id,
+        planForBirPayment(preparedPlan, "Self-employed"),
+      );
     });
 
   if (!process.env.AI_GATEWAY_API_KEY) {
     if (!continuingIntake && !lastForm)
-      return manualResponse(conversation.id, messages, (writer) => {
+      return manualResponse(actor.egovUserId, conversation.id, messages, (writer) => {
         const textId = crypto.randomUUID();
         writer.write({ type: "text-start", id: textId });
         writer.write({
@@ -2311,8 +2218,8 @@ export async function POST(request: Request) {
         });
         writer.write({ type: "text-end", id: textId });
       });
-    const next = deterministicNext(prompt, profile, answers);
-    return manualResponse(conversation.id, messages, (writer) => {
+    const next = deterministicNext(prompt, profile, answers, bnrsCatalog, residentialAddress);
+    return manualResponse(actor.egovUserId, conversation.id, messages, async (writer) => {
       const textId = crypto.randomUUID();
       writer.write({ type: "text-start", id: textId });
       const text =
@@ -2330,6 +2237,22 @@ export async function POST(request: Request) {
         });
       else {
         if (next.form) {
+          if (
+            !next.form.businessAddressDetails ||
+            !next.form.descriptorId ||
+            !next.form.territorialScopeId
+          )
+            throw new Error("The BNRS application details are incomplete.");
+          const application = await prepareBnrsApplication({
+            actor,
+            address: next.form.businessAddressDetails,
+            conversationId: conversation.id,
+            descriptorId: next.form.descriptorId,
+            dominantName: next.form.dominantName ?? "",
+            ownerProfile: session.rawProfile,
+            scopeId: next.form.territorialScopeId,
+            termsAccepted: next.form.termsAccepted === true,
+          });
           emitTool(writer, "user_info", {}, userInfoOutput);
           const id = crypto.randomUUID();
           writer.write({
@@ -2338,13 +2261,14 @@ export async function POST(request: Request) {
             toolName: "editDtiBusinessNameForm",
             input: {
               form: next.form,
+              applicationId: application.applicationId,
               note: "Prepared from your profile and conversation.",
             },
           });
           writer.write({
             type: "tool-output-available",
             toolCallId: id,
-            output: { form: next.form },
+            output: { applicationId: application.applicationId, form: next.form },
           });
         }
         writer.write({
@@ -2373,15 +2297,15 @@ export async function POST(request: Request) {
   ) {
     const form = makeDtiForm(
       parsed.data.initialPrompt,
-      prompt,
       profile,
       answers,
       businessPlan,
-      preference === "profile",
+      bnrsCatalog,
+      residentialAddress,
     );
-    const missingQuestions = questionsForIncompleteDtiForm(form, profile, answers);
+    const missingQuestions = questionsForIncompleteDtiForm(form, answers, bnrsCatalog);
     if (missingQuestions.length)
-      return manualResponse(conversation.id, messages, (writer) => {
+      return manualResponse(actor.egovUserId, conversation.id, messages, (writer) => {
         const textId = crypto.randomUUID();
         writer.write({ type: "text-start", id: textId });
         writer.write({
@@ -2400,7 +2324,7 @@ export async function POST(request: Request) {
           input: { questions: missingQuestions },
         });
       });
-    return manualResponse(conversation.id, messages, async (writer) => {
+    return manualResponse(actor.egovUserId, conversation.id, messages, async (writer) => {
       emitTool(
         writer,
         "updatePlan",
@@ -2431,6 +2355,18 @@ export async function POST(request: Request) {
         },
         { plan: afterSearch },
       );
+      if (!form.businessAddressDetails || !form.descriptorId || !form.territorialScopeId)
+        throw new Error("The BNRS application details are incomplete.");
+      const application = await prepareBnrsApplication({
+        actor,
+        address: form.businessAddressDetails,
+        conversationId: conversation.id,
+        descriptorId: form.descriptorId,
+        dominantName: form.dominantName ?? "",
+        ownerProfile: session.rawProfile,
+        scopeId: form.territorialScopeId,
+        termsAccepted: form.termsAccepted === true,
+      });
       const formId = crypto.randomUUID();
       emitTool(writer, "user_info", {}, userInfoOutput);
       writer.write({
@@ -2439,13 +2375,14 @@ export async function POST(request: Request) {
         toolName: "editDtiBusinessNameForm",
         input: {
           form,
+          applicationId: application.applicationId,
           note: "Prepared from your profile and confirmed answers.",
         },
       });
       writer.write({
         type: "tool-output-available",
         toolCallId: formId,
-        output: { form },
+        output: { applicationId: application.applicationId, form },
       });
       writer.write({
         type: "data-plan",
@@ -2494,7 +2431,7 @@ Standard intake questions are handled by the API router before this response. If
 
 For an active registration workflow, every response must advance or explicitly block the workflow. If the next checkpoint is ready, call the applicable tool now; do not merely describe the step, offer to help later, or end with phrases such as “if you want” or “I can help with that next.” If required information is missing, call askUser. Prose-only responses are allowed only for unrelated informational requests, explicit requests to review/explain, tool errors, or a genuinely completed workflow.
 
-Use updatePlan whenever registration progress changes. Keep the comprehensive 8–12 checkpoint plan and preserve stable step IDs. Mark finished work completed, requirements that do not apply to this route skipped, and keep at most one step in_progress. Never mark a requirement completed merely because the user started at a later checkpoint. The current plan is ${JSON.stringify(existingPlan ?? currentPlan)}.
+Use updatePlan whenever registration progress changes. Keep the comprehensive 8–12 checkpoint plan and preserve stable step IDs. Mark finished work completed, requirements that do not apply to this route skipped, and keep at most one step in_progress. The tax-compliance, sector-permits, and employer steps are optional follow-ups: preserve optional: true on them and never let them block registration completion. Never mark a requirement completed merely because the user started at a later checkpoint. The current plan is ${JSON.stringify(existingPlan ?? currentPlan)}.
 
 The user_info tool reports which authenticated eGov SSO fields are available for server-side form prefilling; it never returns their values to the model. It is ${hasUserInfo ? "already loaded in this conversation" : "not loaded yet"}. Call it before a government form tool when it has not already completed.
 
@@ -2506,7 +2443,9 @@ simulate_tax_payment_reminder sends a clearly labeled simulated tax reminder thr
 
 The resolved business city is ${location.city}. Explicit locations override the profile. Reuse every fact the citizen has already stated and never ask for it again. Do not force registration steps when the latest request is unrelated or exploratory; answer that request directly and only return to the saved plan when the citizen asks. The resolved route is ${JSON.stringify(businessPlan)}.
 
-For a sole proprietor, call user_info before creating or updating a DTI Business Name Registration draft with editDtiBusinessNameForm. Verified profile values stay server-side and the registered address may be used only after explicit consent. DTI handles sole-proprietor business-name registration; do not call it a BIR form. Preserve known fields and copy the exact profile owner name. Never invent an address or fee. If the business city differs from the profile city and no full business address was supplied, leave the address blank and list Business address under missingFields. Use the official DTI territorial-scope fee plus documentary stamp supplied by the application; never invent a fee. The citizen may correct any field in ordinary chat; apply the correction by calling editDtiBusinessNameForm with the full revised form. Current form: ${JSON.stringify(lastForm ? { ...lastForm, ownerName: lastForm.ownerName ? "[server-prefilled verified name]" : "", businessAddress: lastForm.businessAddress ? "[server-confirmed business address]" : "" } : null)}.
+The server-provided BNRS catalog is ${JSON.stringify(bnrsCatalog)}. Treat its terms, naming reminders, descriptor IDs, scopes, and fees as authoritative. Never create a descriptor or scope ID. Keep the citizen's dominant name separate from the selected descriptor; never split a complete proposed name heuristically.
+
+For a sole proprietor, call user_info before creating or updating a DTI Business Name Registration draft with editDtiBusinessNameForm. Verified profile values stay server-side and the registered address may be used only after explicit consent. DTI handles sole-proprietor business-name registration; do not call it a BIR form. Preserve known fields and copy the exact profile owner name. Never invent an address or fee. If the business city differs from the profile city and no full business address was supplied, leave the address blank and list Business address under missingFields. Use only the exact BNRS descriptor and territorial-scope IDs already selected during intake. The citizen may correct any field in ordinary chat; apply the correction by calling editDtiBusinessNameForm with the full revised form. Current form: ${JSON.stringify(lastForm ? { ...lastForm, ownerName: lastForm.ownerName ? "[server-prefilled verified name]" : "", businessAddress: lastForm.businessAddress ? "[server-confirmed business address]" : "" } : null)}.
 
 Use webSearch only when new current evidence is useful. Cite only returned official links. Never expose private reasoning. Do not claim submission or payment occurred. After every completed checkpoint, explicitly state the next concrete step.`,
     messages: await convertToModelMessages(messages, {
@@ -2519,9 +2458,9 @@ Use webSearch only when new current evidence is useful. Cite only returned offic
     originalMessages: messages,
     sendReasoning: false,
     onEnd: async ({ messages: completeMessages }) => {
-      await saveMessages(conversation.id, completeMessages);
-      await setActiveStream(conversation.id, null);
+      await saveMessages(actor.egovUserId, conversation.id, completeMessages);
+      await setActiveStream(actor.egovUserId, conversation.id, null);
     },
-    consumeSseStream: resumableConsumer(conversation.id),
+    consumeSseStream: resumableConsumer(actor.egovUserId, conversation.id),
   });
 }

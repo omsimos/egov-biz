@@ -5,6 +5,7 @@ import {
   extractExplicitBusinessAddress,
   profileAddressPreference,
   resolveBusinessFormAddress,
+  shouldCollectStructuredBusinessAddress,
 } from "@/lib/form-prefill";
 
 const profile: CitizenProfile = {
@@ -45,6 +46,14 @@ describe("resolveBusinessFormAddress", () => {
     expect(profileAddressPreference("use-profile-address")).toBe("profile");
     expect(profileAddressPreference("use-different-address")).toBe("different");
     expect(profileAddressPreference("Can I use my home address?")).toBeNull();
+  });
+
+  test("asks for a source choice before collecting address fields", () => {
+    expect(shouldCollectStructuredBusinessAddress(null, "Self-employed", false)).toBe(false);
+    expect(shouldCollectStructuredBusinessAddress("different", "Self-employed", false)).toBe(true);
+    expect(shouldCollectStructuredBusinessAddress("profile", "Self-employed", false)).toBe(false);
+    expect(shouldCollectStructuredBusinessAddress("profile", "Sole proprietor", false)).toBe(true);
+    expect(shouldCollectStructuredBusinessAddress("profile", "Sole proprietor", true)).toBe(false);
   });
 
   test("extracts the latest address correction directly from user text", () => {

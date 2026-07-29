@@ -17,6 +17,14 @@ With the default `TURSO_DATABASE_URL=file:./data/egov-agentic-biz.sqlite` there
 is nothing else to start: the file is created on demand and pending migrations
 are applied on the first query.
 
+BNRS and LGU state is owned by the shared DX database. It defaults to the
+isolated `packages/db/data/egov-dx.sqlite`; initialize it once before using the
+registration flow:
+
+```sh
+bun --env-file=.env --filter @repo/db db:migrate
+```
+
 ### Running against a local libSQL server
 
 A `file:` URL goes through the same Drizzle code path but not the same wire
@@ -56,10 +64,13 @@ Set these in the project (all server-side):
 | ----------------------------------------------- | ------------------------------------------------------------------------------- |
 | `TURSO_DATABASE_URL`                            | `turso db show --url <database>`                                                |
 | `TURSO_AUTH_TOKEN`                              | `turso db tokens create <database>`                                             |
+| `DX_TURSO_DATABASE_URL`                         | URL for the separately provisioned DX database                                  |
+| `DX_TURSO_AUTH_TOKEN`                           | Token for the DX database                                                       |
 | `REDIS_URL`                                     | Upstash — the `rediss://` TCP URL                                               |
 | `R2_BASE_URL`, `R2_ACCESS_KEY`, `R2_SECRET_KEY` | Cloudflare R2                                                                   |
 | `EMESSAGE_BASE_URL`, `EMESSAGE_ACCESS_TOKEN`    | eMessage SMS provider                                                           |
 | `EMESSAGE_ALLOWED_RECIPIENTS`                   | Comma-separated verified demo/test mobile numbers; SSO mobile is always allowed |
+| `EGOVPAY_BASE_URL`, `EGOVPAY_API_KEY`, `EGOVPAY_SETTLEMENT_TEMPLATE_UUID` | eGovPay checkout for BNRS and LGU; optional `LGU_EGOVPAY_*` values can override the LGU account |
 
 Create the database once, then run `bun run db:migrate` against it as part of
 releasing:
@@ -68,6 +79,10 @@ releasing:
 turso db create egov-agentic-biz
 bun --filter egov-agentic-biz run db:migrate
 ```
+
+Provision and migrate the DX database separately with the migration command in
+`packages/db`. The application never creates or migrates remote DX
+infrastructure at runtime.
 
 Two things worth knowing:
 
@@ -90,9 +105,26 @@ src/server/db/
 drizzle/      # generated migrations (committed)
 ```
 
-Repositories in `src/server/` (`conversations`, `payments`,
-`registered-businesses`, `auth-sessions`) are the only callers of `getDatabase`.
-They are all async — libSQL is a network client even when pointed at a file.
+Repositories in `src/server/` (`conversations` and `auth-sessions`) are the only
+callers of the app's `getDatabase`. The server-only DX composition roots use
+`@repo/db` separately for BNRS and LGU workflows, while DX BIR uses the shared
+private artifact store. All repositories are async — libSQL is a network client
+even when pointed at a file.
+
+## DX workflow boundary
+
+The registration path now uses the shared DX modules end to end:
+
+1. `@repo/dx/bnrs` validates the application, owns payment state, and issues the
+   business-name certificate.
+2. The freshly fetched certificate is passed to `@repo/dx/lgu`, which creates
+   one ₱2,500 assessment and issues the business permit and barangay clearance
+   together after payment.
+3. `@repo/dx/bir` generates and stores owner-scoped Forms 1901/1905.
+
+The app does not synthesize a BIR registration, books, invoices, tax calendar,
+sector permits, or employer registrations. Those remain pending until a DX
+module actually supports and completes them.
 
 One thing that will surprise you: **Turso enforces foreign keys off by default**,
 and `PRAGMA foreign_keys = ON` is scoped to a connection, so it does not survive

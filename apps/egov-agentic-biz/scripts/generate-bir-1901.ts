@@ -1,7 +1,6 @@
 import { resolve } from "node:path";
-import { bir1901TemplatePath, writeBir1901Pdf } from "@/lib/bir-form/generator";
+import { bir1901TemplatePath, writeBir1901Pdf, type Bir1901Data } from "@repo/utils/bir-form";
 import { completeEgovSsoTestProfile, mapEgovProfileToBir1901 } from "@/lib/bir-form/profile";
-import type { Bir1901Data } from "@/lib/bir-form/schema";
 
 const appDirectory = resolve(import.meta.dir, "..");
 const repositoryDirectory = resolve(appDirectory, "../..");

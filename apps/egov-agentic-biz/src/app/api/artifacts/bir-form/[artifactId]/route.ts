@@ -1,5 +1,7 @@
-import { birFormArtifactOwnerId, readSession } from "@/lib/auth/session";
-import { downloadBirForm } from "@/server/r2";
+import { BirError } from "@repo/dx/bir";
+import { readSession } from "@/lib/auth/session";
+import { getBir } from "@/server/dx/bir";
+import { bnrsActorFromProfile } from "@/server/dx/bnrs";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -11,10 +13,18 @@ export async function GET(request: Request, context: { params: Promise<{ artifac
   const session = await readSession(request);
   if (!session) return new Response(null, { status: 404 });
 
-  const artifact = await downloadBirForm(birFormArtifactOwnerId(session), artifactId, {
-    signal: request.signal,
-  });
-  if (!artifact) return new Response(null, { status: 404 });
+  let artifact;
+  try {
+    artifact = await getBir().getSavedForm({
+      actor: bnrsActorFromProfile(session.rawProfile),
+      artifactId,
+      signal: request.signal,
+    });
+  } catch (error) {
+    if (error instanceof BirError && error.code === "FORM_NOT_FOUND")
+      return new Response(null, { status: 404 });
+    throw error;
+  }
 
   const body = Uint8Array.from(artifact.bytes).buffer;
   return new Response(body, {

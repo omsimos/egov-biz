@@ -1,22 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  BarangayClearanceCard,
-  ComplianceResultCard,
-  DtiFormCard,
-  EbplsPermitCard,
-  PaymentDialog,
-} from "@/components/business-chat-screen";
+import { DtiFormCard, LguPermitCard, PaymentDialog } from "@/components/business-chat-screen";
 import { BusinessDetailScreen, BusinessLanding } from "@/components/egov-business-app";
 import { HomeScreen } from "@/components/home-screen";
 import { LoginScreen } from "@/components/login-screen";
 import { StatusBar } from "@/components/phone-chrome";
-import type {
-  BarangayClearance,
-  DtiBusinessNameForm,
-  EbplsBusinessPermitReceipt,
-} from "@/lib/business-chat";
+import type { DtiBusinessNameForm, LguPermitSummary } from "@/lib/business-chat";
 import type { CitizenProfile, RegisteredBusiness } from "@/lib/citizen-profile";
 import { writeLastAccount } from "@/lib/last-account";
 import type { RegisteredBusiness as RegisteredBusinessDetail } from "@/lib/registered-business";
@@ -47,7 +37,7 @@ const previewBusinesses: RegisteredBusiness[] = [
     registrationNumber: "DTI-2026-104382",
     status: "Active",
     finalizedAt: "2026-07-22T00:00:00.000Z",
-    nextTaxDue: "2026-08-10",
+    nextTaxDue: null,
   },
 ];
 
@@ -70,108 +60,65 @@ const previewBusinessDetail: RegisteredBusinessDetail = {
     {
       id: "record-dti",
       kind: "registration",
-      agency: "Department of Trade and Industry",
+      agency: "DTI-BNRS",
       title: "Business name registration",
       referenceNumber: "BN-2026-00834912",
       status: "Active",
       issuedAt: "2026-07-22",
       validUntil: "2031-07-22",
-      note: "Registered business name, valid for five years.",
-      demo: true,
+      note: "Fetched from the DX BNRS service.",
+      source: "DX",
     },
     {
       id: "record-brgy",
       kind: "permit",
-      agency: "Barangay San Lorenzo, Makati",
-      title: "Barangay business clearance",
-      referenceNumber: "BRGY-SL-2026-10422",
+      agency: "Makati City LGU",
+      title: "Business Permit",
+      referenceNumber: "LGU-BP-2026-10422",
+      status: "Active",
+      issuedAt: "2026-07-22",
+      validUntil: "2026-12-31",
+      note: "Issued by the combined DX LGU permit flow.",
+      source: "DX",
+    },
+    {
+      id: "record-clearance",
+      kind: "permit",
+      agency: "Makati City LGU",
+      title: "Barangay Business Clearance",
+      referenceNumber: "LGU-BC-2026-10422",
       status: "Issued",
       issuedAt: "2026-07-22",
       validUntil: "2026-12-31",
-      note: "Clearance to operate within the barangay.",
-      demo: true,
-    },
-    {
-      id: "record-bir",
-      kind: "tax",
-      agency: "Bureau of Internal Revenue",
-      title: "Certificate of Registration (Form 2303)",
-      referenceNumber: "COR-118-220-421",
-      status: "Configured",
-      issuedAt: "2026-07-22",
-      validUntil: null,
-      note: "Sole proprietor registered under percentage tax.",
-      demo: true,
-    },
-    {
-      id: "record-employer",
-      kind: "employer",
-      agency: "SSS · PhilHealth · Pag-IBIG",
-      title: "Employer registration",
-      referenceNumber: "—",
-      status: "Not required",
-      issuedAt: null,
-      validUntil: null,
-      note: "No employees declared yet.",
-      demo: true,
+      note: "Issued with the business permit; included in the LGU fee.",
+      source: "DX",
     },
   ],
   files: [
     {
-      id: "file-cor",
-      title: "BIR Certificate of Registration",
-      filename: "kape-diaria-bir-2303.pdf",
-      documentType: "BIR Form 2303",
-      status: "Generated",
-      createdAt: "2026-07-22",
-      url: null,
-      note: "Generated from your registration answers for the demo walkthrough.",
-      demo: true,
-    },
-    {
-      id: "file-dti",
-      title: "DTI Business Name Certificate",
-      filename: "kape-diaria-dti-certificate.pdf",
-      documentType: "DTI Certificate",
+      id: "bir-form-2303",
+      title: "BIR Certificate of Registration (Form 2303)",
+      filename: "BIR-Certificate-of-Registration-2303.html",
+      documentType: "Certificate of Registration",
       status: "Available",
       createdAt: "2026-07-22",
       url: null,
-      note: "Sample certificate held in the document vault.",
-      demo: true,
+      note: "Printable certificate populated from the saved BIR registration record.",
+      source: "DX",
+    },
+    {
+      id: "file-bir-1901",
+      title: "BIR Form 1901",
+      filename: "BIR-Form-1901.pdf",
+      documentType: "Prefilled registration form",
+      status: "Generated",
+      createdAt: "2026-07-22",
+      url: null,
+      note: "Stored by the DX BIR service; submission to BIR is still required.",
+      source: "DX",
     },
   ],
-  taxObligations: [
-    {
-      id: "tax-2551q",
-      title: "Percentage tax return",
-      formCode: "BIR 2551Q",
-      frequency: "Quarterly",
-      periodLabel: "3rd quarter 2026",
-      dueDate: "2026-10-25",
-      status: "Upcoming",
-      note: "File even if there are no sales for the quarter.",
-    },
-    {
-      id: "tax-1701q",
-      title: "Quarterly income tax",
-      formCode: "BIR 1701Q",
-      frequency: "Quarterly",
-      periodLabel: "3rd quarter 2026",
-      dueDate: "2026-11-15",
-      status: "Scheduled",
-      note: "Based on net income for the quarter.",
-    },
-    {
-      id: "tax-0605",
-      title: "Annual registration fee",
-      formCode: "BIR 0605",
-      frequency: "Annual",
-      periodLabel: "Calendar year 2027",
-      dueDate: "2027-01-31",
-      status: "Scheduled",
-      note: "Payable through eGovPay and other ePay channels.",
-    },
-  ],
+  taxObligations: [],
 };
 
 const previewDtiForm: DtiBusinessNameForm = {
@@ -187,43 +134,16 @@ const previewDtiForm: DtiBusinessNameForm = {
   missingFields: [],
 };
 
-const previewClearance: BarangayClearance = {
+const previewLguPermit: LguPermitSummary = {
+  applicationId: "lgu-preview-application",
+  state: "PAYMENT_READY",
   businessName: "Kape Diaria",
-  ownerName: "Josh Preview",
-  businessActivity: "Coffee subscription boxes and small café retail",
-  businessAddress: "Unit 2, 88 Ayala Avenue, Barangay San Lorenzo, Makati",
-  barangay: "San Lorenzo",
   city: "Makati",
-  registrationDocument: "DTI BN-2026-00834912",
-  supportingDocuments: ["DTI business name certificate", "Lease contract", "Valid government ID"],
-  status: "Payment required",
-  referenceNumber: "BRGY-SL-2026-10422",
-  submittedAt: "2026-07-22T09:00:00.000Z",
-  approvedAt: null,
+  feeLabel: "₱2,500",
+  paymentStatus: null,
+  businessPermitNumber: null,
+  barangayClearanceNumber: null,
   validUntil: null,
-  feeLabel: "₱500.00",
-  usedFor: ["Mayor’s permit application", "BIR registration"],
-};
-
-const previewEbpls: EbplsBusinessPermitReceipt = {
-  system: "EBPLS",
-  permitType: "New business permit",
-  businessName: "Kape Diaria",
-  ownerName: "Josh Preview",
-  businessActivity: "Coffee subscription boxes and small café retail",
-  businessAddress: "Unit 2, 88 Ayala Avenue, Barangay San Lorenzo, Makati",
-  barangay: "San Lorenzo",
-  city: "Makati",
-  barangayClearanceReference: "BRGY-SL-2026-10422",
-  registrationDocument: "DTI BN-2026-00834912",
-  attachments: ["Barangay clearance", "DTI certificate", "Lease contract"],
-  status: "Payment required",
-  referenceNumber: "EBPLS-MKT-2026-55817",
-  submittedAt: "2026-07-22T09:30:00.000Z",
-  issuedAt: null,
-  validUntil: null,
-  feeLabel: "₱4,250.00",
-  nextAction: "Pay the assessed local taxes and fees to issue the permit.",
 };
 
 function ChatCardsPreview() {
@@ -237,14 +157,7 @@ function ChatCardsPreview() {
           Show payment sheet
         </button>
         <DtiFormCard form={previewDtiForm} paid={false} onSubmitPay={noop} />
-        <BarangayClearanceCard clearance={previewClearance} paid={false} onPay={noop} />
-        <EbplsPermitCard receipt={previewEbpls} paid={false} onPay={noop} />
-        <ComplianceResultCard
-          title="Registration records saved"
-          subtitle="Kape Diaria is now linked to your eGovPH account."
-          records={previewBusinessDetail.records}
-          obligations={previewBusinessDetail.taxObligations}
-        />
+        <LguPermitCard permit={previewLguPermit} paid={false} onPay={noop} />
       </div>
       {showPayment && (
         <PaymentDialog
@@ -254,9 +167,7 @@ function ChatCardsPreview() {
             serviceType: "dti-business-name",
             serviceLabel: "DTI Business Name Registration",
             proposedName: "Kape Diaria",
-            ownerName: "Josh Preview",
             feeLabel: "₱1,030.00",
-            territorialScope: "City / municipality",
           }}
         />
       )}
@@ -287,7 +198,7 @@ export function PreviewStage() {
             className={screen === item ? "active" : ""}
             key={item}
             onClick={() => {
-              // Seed the remembered account so the login mock shows its full state.
+              // Seed the remembered account so the login preview shows its full state.
               if (item === "login") {
                 writeLastAccount({ firstName: "Josh", maskedMobile: "+63992***5602" });
               }

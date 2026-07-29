@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { readSession } from "@/lib/auth/session";
-import { listRegisteredBusinesses } from "@/server/registered-businesses";
+import { listBusinesses } from "@/server/businesses";
+import { bnrsActorFromProfile } from "@/server/dx/bnrs";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,8 @@ export async function GET(request: Request) {
     );
   }
 
-  const businesses = await listRegisteredBusinesses(session.profile.id);
+  const businesses = await listBusinesses({
+    actor: bnrsActorFromProfile(session.rawProfile),
+  });
   return NextResponse.json({ data: businesses }, { headers: { "Cache-Control": "no-store" } });
 }

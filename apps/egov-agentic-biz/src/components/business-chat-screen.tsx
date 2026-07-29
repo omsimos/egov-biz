@@ -6,14 +6,11 @@ import {
   ArrowRight,
   ArrowRightIcon,
   ArrowSquareOut,
-  Check,
   CheckCircle,
   CheckCircleIcon,
   CheckIcon,
   CircleNotch,
   Buildings,
-  CalendarDots,
-  Certificate,
   DownloadSimple,
   FilePdf,
   FileText,
@@ -58,20 +55,21 @@ import { cn } from "@/lib/utils";
 import { POPOVER_IN, POPOVER_OUT, SCRIM_IN, SCRIM_OUT, SHEET_IN, SHEET_OUT } from "@/lib/motion";
 import type { BirFormArtifact } from "@/lib/bir-form/artifact";
 import {
+  isOptionalRegistrationStep,
   latestRegistrationPlan,
+  planProgress,
   uniqueMessagesById,
-  type BarangayClearance,
   type BusinessChatMessage,
   type BusinessConversation,
   type ConversationSummary,
   type DtiBusinessNameForm,
-  type EbplsBusinessPermitReceipt,
+  type LguPermitSummary,
   type PaymentServiceType,
   type RegistrationPlan,
 } from "@/lib/business-chat";
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import type { IntakeQuestion } from "@/lib/questions";
-import type { BusinessRecord, RegisteredBusiness, TaxObligation } from "@/lib/registered-business";
+import type { RegisteredBusiness } from "@/lib/registered-business";
 
 type AskUserPart = Extract<BusinessChatMessage["parts"][number], { type: "tool-askUser" }>;
 type ReadyAskUserPart = AskUserPart & {
@@ -79,15 +77,31 @@ type ReadyAskUserPart = AskUserPart & {
   input: { questions?: IntakeQuestion[]; question?: IntakeQuestion };
 };
 type PendingQuestion = { part: ReadyAskUserPart; questions: IntakeQuestion[] };
+type IntakeOption = NonNullable<IntakeQuestion["options"]>[number];
 export type PaymentRequest = {
   serviceType: PaymentServiceType;
   serviceLabel: string;
   proposedName: string;
-  ownerName: string;
   feeLabel: string;
   serviceReference?: string;
-  territorialScope?: DtiBusinessNameForm["territorialScope"];
 };
+
+function displayedIntakeOption(questionId: string, option: IntakeOption): IntakeOption {
+  if (questionId !== "profile-address") return option;
+  if (option.id === "use-profile-address")
+    return {
+      ...option,
+      label: "Use my registered eGov address",
+      description: "Prefill the verified address from my profile",
+    };
+  if (option.id === "use-different-address")
+    return {
+      ...option,
+      label: "Use a different address",
+      description: "I will enter the business address",
+    };
+  return option;
+}
 
 function birFormArtifactLabel(artifact: BirFormArtifact) {
   const formType =
@@ -100,60 +114,6 @@ function textOf(message: BusinessChatMessage) {
     .filter((part) => part.type === "text")
     .map((part) => part.text)
     .join("");
-}
-
-function CompletionConfetti() {
-  return (
-    <div className="completion-confetti" aria-hidden="true">
-      {Array.from({ length: 40 }, (_, index) => (
-        <i key={index} />
-      ))}
-    </div>
-  );
-}
-
-export function ComplianceResultCard({
-  title,
-  subtitle,
-  records,
-  obligations = [],
-}: {
-  title: string;
-  subtitle: string;
-  records: BusinessRecord[];
-  obligations?: TaxObligation[];
-}) {
-  return (
-    <article className="compliance-result-card">
-      <header>
-        <span>
-          <ShieldCheck weight="duotone" />
-        </span>
-        <div>
-          <small>Setup result</small>
-          <strong>{title}</strong>
-          <p>{subtitle}</p>
-        </div>
-      </header>
-      <ul>
-        {records.map((record) => (
-          <li key={record.id}>
-            <div>
-              <strong>{record.title}</strong>
-              <span>{record.agency}</span>
-            </div>
-            <i className={record.status === "Not required" ? "muted" : ""}>{record.status}</i>
-          </li>
-        ))}
-      </ul>
-      {obligations.length > 0 && (
-        <footer>
-          <CalendarDots weight="duotone" />
-          <span>{obligations.length} tax reminders added to the business calendar</span>
-        </footer>
-      )}
-    </article>
-  );
 }
 
 function DetailRows({ rows }: { rows: [string, string][] }) {
@@ -169,116 +129,48 @@ function DetailRows({ rows }: { rows: [string, string][] }) {
   );
 }
 
-export function BarangayClearanceCard({
-  clearance,
-  paid,
-  onPay,
+function BusinessFinalizedCard({
+  businessId,
+  businessName,
+  registrationNumber,
+  onOpenBusiness,
 }: {
-  clearance: BarangayClearance;
-  paid: boolean;
-  onPay: (request: PaymentRequest) => void;
+  businessId: string;
+  businessName: string;
+  registrationNumber: string;
+  onOpenBusiness: (businessId: string) => void;
 }) {
-  const approved = clearance.status === "Approved";
   return (
-    <article className={`local-permit-card ${approved ? "approved" : "payment-due"}`}>
-      <header>
-        <span>
-          <Certificate weight="duotone" />
-        </span>
-        <div>
-          <small>Electronic barangay clearance</small>
-          <strong>
-            {clearance.barangay}, {clearance.city}
-          </strong>
-        </div>
-        <i>
-          {approved ? (
-            <>
-              <CheckCircle weight="fill" /> Approved
-            </>
-          ) : (
-            "Payment required"
-          )}
-        </i>
-      </header>
-      <DetailRows
-        rows={[
-          ["Reference", clearance.referenceNumber],
-          ["Business", clearance.businessName],
-          ["Owner", clearance.ownerName],
-          ["Activity", clearance.businessActivity],
-          ["Business address", clearance.businessAddress],
-          [
-            approved ? "Valid until" : "Assessed fee",
-            approved && clearance.validUntil
-              ? new Date(clearance.validUntil).toLocaleDateString("en-PH", {
-                  year: "numeric",
-                  month: "short",
-                  day: "numeric",
-                })
-              : clearance.feeLabel,
-          ],
-        ]}
-      />
-      <section>
-        <small>Documents submitted</small>
-        <ul>
-          {clearance.supportingDocuments.map((document) => (
-            <li key={document}>
-              <FileText /> {document}
-            </li>
-          ))}
-        </ul>
-      </section>
-      <section className="local-permit-use">
-        <small>Used for</small>
-        <ul>
-          {clearance.usedFor.map((use) => (
-            <li key={use}>
-              <Check /> {use}
-            </li>
-          ))}
-        </ul>
-      </section>
-      {!approved && (
-        <footer className="local-permit-payment">
-          <div>
-            <small>Barangay clearance fee</small>
-            <strong>{clearance.feeLabel}</strong>
-          </div>
-          <button
-            type="button"
-            data-cuelume-toggle="page"
-            disabled={paid}
-            onClick={() =>
-              onPay({
-                serviceType: "barangay-clearance",
-                serviceLabel: "Barangay Business Clearance",
-                proposedName: clearance.businessName,
-                ownerName: clearance.ownerName,
-                feeLabel: clearance.feeLabel,
-                serviceReference: clearance.referenceNumber,
-              })
-            }
-          >
-            {paid ? "Paid" : "Pay with eGovPay"} <ArrowRight weight="bold" />
-          </button>
-        </footer>
-      )}
-    </article>
+    <button
+      className="business-finalized-card"
+      data-cuelume-toggle="page"
+      onClick={() => onOpenBusiness(businessId)}
+      type="button"
+    >
+      <span>
+        <Storefront weight="duotone" />
+      </span>
+      <div>
+        <small>All set up</small>
+        <strong>{businessName}</strong>
+        <p>{registrationNumber}</p>
+        <p>Open records and tax calendar</p>
+      </div>
+      <ArrowRight weight="bold" />
+    </button>
   );
 }
 
-export function EbplsPermitCard({
-  receipt,
+export function LguPermitCard({
+  permit,
   paid,
   onPay,
 }: {
-  receipt: EbplsBusinessPermitReceipt;
+  permit: LguPermitSummary;
   paid: boolean;
   onPay: (request: PaymentRequest) => void;
 }) {
-  const issued = receipt.status === "Permit issued";
+  const issued = permit.state === "COMPLETED";
   return (
     <article className={`local-permit-card ebpls ${issued ? "approved" : "payment-due"}`}>
       <header>
@@ -286,8 +178,8 @@ export function EbplsPermitCard({
           <Buildings weight="duotone" />
         </span>
         <div>
-          <small>EBPLS</small>
-          <strong>Mayor’s / business permit</strong>
+          <small>DX LGU</small>
+          <strong>Business permit + barangay clearance</strong>
         </div>
         <i>
           {issued ? (
@@ -300,59 +192,55 @@ export function EbplsPermitCard({
         </i>
       </header>
       <p className="ebpls-expansion">
-        <strong>Electronic Business Permits and Licensing System</strong>
+        <strong>One authoritative local-permit flow</strong>
         <span>
           {issued
-            ? "The LGU permit has been issued electronically."
-            : "The LGU assessment is complete and ready for payment."}
+            ? "DX issued both documents after verifying the eGovPay transaction."
+            : "The BNRS credential passed validation and one combined LGU fee is ready."}
         </span>
       </p>
       <DetailRows
-        rows={[
-          ["EBPLS reference", receipt.referenceNumber],
-          ["Application", receipt.permitType],
-          ["Business", receipt.businessName],
-          ["Location", `${receipt.barangay}, ${receipt.city}`],
-          ["Barangay clearance", receipt.barangayClearanceReference],
-          [
-            issued ? "Valid until" : "Assessed fee",
-            issued && receipt.validUntil
-              ? new Date(receipt.validUntil).toLocaleDateString("en-PH", {
-                  year: "numeric",
-                  month: "short",
-                  day: "numeric",
-                })
-              : receipt.feeLabel,
-          ],
-        ]}
+        rows={
+          issued
+            ? [
+                ["Business", permit.businessName],
+                ["Issuing city", permit.city],
+                ["Business permit", permit.businessPermitNumber ?? "Issued"],
+                ["Barangay clearance", permit.barangayClearanceNumber ?? "Approved"],
+                [
+                  "Valid until",
+                  permit.validUntil
+                    ? new Date(permit.validUntil).toLocaleDateString("en-PH", {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })
+                    : "See issued documents",
+                ],
+              ]
+            : [
+                ["Business", permit.businessName],
+                ["Issuing city", permit.city],
+                ["Includes", "Business permit and barangay clearance"],
+                ["Assessed fee", permit.feeLabel],
+              ]
+        }
       />
-      <section>
-        <small>Attachments sent</small>
-        <ul>
-          {receipt.attachments.map((attachment) => (
-            <li key={attachment}>
-              <FileText /> {attachment}
-            </li>
-          ))}
-        </ul>
-      </section>
       {!issued && (
         <footer className="local-permit-payment">
           <div>
-            <small>Assessed LGU fees</small>
-            <strong>{receipt.feeLabel}</strong>
+            <small>Combined LGU fee</small>
+            <strong>{permit.feeLabel}</strong>
           </div>
           <button
             type="button"
             disabled={paid}
             onClick={() =>
               onPay({
-                serviceType: "ebpls-business-permit",
-                serviceLabel: "EBPLS Mayor’s / Business Permit",
-                proposedName: receipt.businessName,
-                ownerName: receipt.ownerName,
-                feeLabel: receipt.feeLabel,
-                serviceReference: receipt.referenceNumber,
+                serviceType: "lgu-business-permit",
+                serviceLabel: "DX LGU Business Permit",
+                proposedName: permit.businessName,
+                feeLabel: permit.feeLabel,
               })
             }
           >
@@ -360,13 +248,6 @@ export function EbplsPermitCard({
           </button>
         </footer>
       )}
-      <footer>
-        <CircleNotch />
-        <span>
-          <small>NEXT</small>
-          <strong>{receipt.nextAction}</strong>
-        </span>
-      </footer>
     </article>
   );
 }
@@ -398,11 +279,16 @@ function PlanDock({
   useEffect(() => {
     if (collapseKey) setExpanded(false);
   }, [collapseKey]);
-  const completed = plan.steps.filter((step) => step.status === "completed").length;
+  const required = plan.steps.filter((step) => !isOptionalRegistrationStep(step));
+  const completed = required.filter(
+    (step) => step.status === "completed" || step.status === "skipped",
+  ).length;
   const allResolved =
-    plan.steps.length > 0 &&
-    plan.steps.every((step) => step.status === "completed" || step.status === "skipped");
+    required.length > 0 &&
+    required.every((step) => step.status === "completed" || step.status === "skipped");
   const current =
+    required.find((step) => step.status === "in_progress") ??
+    required.find((step) => step.status === "pending") ??
     plan.steps.find((step) => step.status === "in_progress") ??
     plan.steps.find((step) => step.status === "pending") ??
     plan.steps.at(-1);
@@ -455,9 +341,9 @@ function PlanDock({
         </span>
         <span
           className="rounded-sm bg-muted px-[7px] py-1 text-2xs font-extrabold tabular-nums text-muted-foreground"
-          aria-label={`${completed} of ${plan.steps.length} tasks completed`}
+          aria-label={`${completed} of ${required.length} required tasks resolved`}
         >
-          {completed}/{plan.steps.length}
+          {completed}/{required.length}
         </span>
         <CaretDownIcon
           className={cn(
@@ -536,6 +422,9 @@ function PlanDock({
                   </span>
                   <span>
                     {step.label}
+                    {isOptionalRegistrationStep(step) && (
+                      <small className="italic text-gray-500"> (optional)</small>
+                    )}
                     {step.status === "skipped" && (
                       <small className="italic text-gray-500"> (skipped)</small>
                     )}
@@ -576,7 +465,7 @@ function QuestionComposer({
           ? value.join(" ")
           : (value?.trim() ?? "");
     if (!text) return false;
-    if (question.id === "proposed-business-name") return text.length >= 3;
+    if (question.id === "business-dominant-name") return text.length >= 3;
     if (question.id !== "business-address") return true;
     const hasAddressMarker =
       /\b(?:\d{1,5}|unit|room|floor|block|lot|house|street|st\.?|road|rd\.?|avenue|ave\.?|drive|highway|building|bldg\.?|plaza|village|subdivision|purok|sitio|poblacion|barangay|brgy\.?)\b/i.test(
@@ -605,9 +494,10 @@ function QuestionComposer({
         return {
           questionId: question.id,
           value,
-          labels: items.map(
-            (item) => question.options?.find((option) => option.id === item)?.label ?? item,
-          ),
+          labels: items.map((item) => {
+            const option = question.options?.find((option) => option.id === item);
+            return option ? displayedIntakeOption(question.id, option).label : item;
+          }),
         };
       }),
     );
@@ -648,17 +538,20 @@ function QuestionComposer({
         const value = values[question.id];
         const selected = Array.isArray(value) ? value : value ? [value] : [];
         const enteredText = typeof value === "string" ? value.trim() : "";
+        const savedOptions = (question.options ?? []).map((option) =>
+          displayedIntakeOption(question.id, option),
+        );
         const options =
-          question.type === "single"
+          question.type === "single" && question.allowOther !== false
             ? [
-                ...(question.options ?? []),
+                ...savedOptions,
                 {
                   id: "__other__",
                   label: "Other — type your answer",
                   description: "Enter a different answer",
                 },
               ]
-            : (question.options ?? []);
+            : savedOptions;
         // p-3 with a 13px label puts the row at ~46px, over the 44pt tap-target
         // floor it used to sit under. border-2 and the 900 label are what make
         // a selected row read as chosen at a glance — the fill alone doesn't.
@@ -779,7 +672,7 @@ function QuestionComposer({
                   <FieldHint error role="alert" className="mt-0">
                     {question.id === "business-address"
                       ? "Enter the full street, building, or unit and barangay."
-                      : "Enter the complete proposed business name."}
+                      : "Enter a distinctive dominant business name."}
                   </FieldHint>
                 )}
               </div>
@@ -888,6 +781,8 @@ export function DtiFormCard({
   onSubmitPay: () => void;
 }) {
   const rows = [
+    ...(form.dominantName ? [["Dominant name", form.dominantName]] : []),
+    ...(form.descriptorLabel ? [["Descriptor", form.descriptorLabel]] : []),
     ["Proposed business name", form.proposedName || "Needs your answer"],
     ["Business activity", form.businessActivity],
     ["Territorial scope", form.territorialScope],
@@ -944,6 +839,21 @@ export function DtiFormCard({
             : "To change anything, type it below. For example: “Use the name Reyes Coffee Club.”"}
         </span>
       </div>
+      {form.termsAndConditions && (
+        <details className="mx-[13px] mb-3 rounded-md border border-line-soft bg-muted px-3 py-2 text-xs">
+          <summary className="cursor-pointer font-extrabold">
+            BNRS terms and name requirements
+          </summary>
+          <p className="mt-2 leading-[1.45] text-gray-800">{form.termsAndConditions}</p>
+          {form.businessNameRequirements?.length ? (
+            <ul className="mt-2 list-disc space-y-1 pl-4 text-gray-800">
+              {form.businessNameRequirements.map((requirement) => (
+                <li key={requirement}>{requirement}</li>
+              ))}
+            </ul>
+          ) : null}
+        </details>
+      )}
       <div className="grid gap-[9px] border-t border-gray-200 px-[13px] pt-[11px] pb-[13px]">
         <div className="flex items-center justify-between gap-2.5">
           <small className="text-2xs font-extrabold text-muted-foreground">Payment</small>
@@ -975,44 +885,80 @@ export function DtiFormCard({
 
 function BirFormArtifactCard({
   artifact,
+  dstPaid,
+  enableRegistrationPayment,
+  onPay,
   onPreview,
 }: {
   artifact: BirFormArtifact;
+  dstPaid: boolean;
+  enableRegistrationPayment: boolean;
+  onPay: (request: PaymentRequest) => void;
   onPreview: () => void;
 }) {
   const formLabel = birFormArtifactLabel(artifact);
+  const needsDstPayment = enableRegistrationPayment && artifact.formType === "1901";
   return (
-    <button
-      className="pdf-artifact-card"
-      data-cuelume-toggle="page"
-      type="button"
-      onClick={onPreview}
-    >
-      <span className="pdf-artifact-icon">
-        <FilePdf weight="fill" />
-      </span>
-      <span className="pdf-artifact-copy">
-        <small>PDF artifact</small>
-        <strong>{formLabel}</strong>
-        <span>
-          {artifact.pageCount} pages · {Math.max(1, Math.round(artifact.size / 1024))} KB
+    <article className={cn("bir-form-artifact", needsDstPayment && "with-payment")}>
+      <button
+        className="pdf-artifact-card"
+        data-cuelume-toggle="page"
+        type="button"
+        onClick={onPreview}
+      >
+        <span className="pdf-artifact-icon">
+          <FilePdf weight="fill" />
         </span>
-      </span>
-      <span className="pdf-artifact-action">
-        Preview <ArrowRight weight="bold" />
-      </span>
-    </button>
+        <span className="pdf-artifact-copy">
+          <small>PDF artifact</small>
+          <strong>{formLabel}</strong>
+          <span>
+            {artifact.pageCount} pages · {Math.max(1, Math.round(artifact.size / 1024))} KB
+          </span>
+        </span>
+        <span className="pdf-artifact-action">
+          Preview <ArrowRight weight="bold" />
+        </span>
+      </button>
+      {needsDstPayment && (
+        <footer className="local-permit-payment">
+          <div>
+            <small>Final registration payment · Documentary Stamp Tax</small>
+            <strong>₱30.00</strong>
+          </div>
+          <button
+            type="button"
+            disabled={dstPaid}
+            onClick={() =>
+              onPay({
+                serviceType: "bir-documentary-stamp-tax",
+                serviceLabel: "BIR Documentary Stamp Tax",
+                proposedName: formLabel,
+                feeLabel: "₱30.00",
+                serviceReference: artifact.artifactId,
+              })
+            }
+          >
+            {dstPaid ? "Paid" : "Pay with eGovPay"} <ArrowRight weight="bold" />
+          </button>
+        </footer>
+      )}
+    </article>
   );
 }
 
 function ToolPart({
   part,
+  enableBirPayment,
   paidServices,
+  onOpenBusiness,
   onSubmitPay,
   onPreviewPdf,
 }: {
   part: BusinessChatMessage["parts"][number];
+  enableBirPayment: boolean;
   paidServices: Set<PaymentServiceType>;
+  onOpenBusiness: (businessId: string) => void;
   onSubmitPay: (request: PaymentRequest) => void;
   onPreviewPdf: (artifact: BirFormArtifact) => void;
 }) {
@@ -1089,6 +1035,9 @@ function ToolPart({
       return (
         <BirFormArtifactCard
           artifact={part.output.artifact}
+          dstPaid={paidServices.has("bir-documentary-stamp-tax")}
+          enableRegistrationPayment={enableBirPayment}
+          onPay={onSubmitPay}
           onPreview={() => onPreviewPdf(part.output.artifact)}
         />
       );
@@ -1122,24 +1071,29 @@ function ToolPart({
       </div>
     );
   }
-  if (part.type === "tool-setupBooksAndInvoices") {
-    if (part.state !== "output-available")
+  if (
+    part.type === "tool-prepareLguBusinessPermit" ||
+    part.type === "tool-issueLguBusinessPermit"
+  ) {
+    if (part.state === "output-available")
       return (
-        <div className="chat-tool-row active">
-          <CircleNotch className="spin" />
-          <div>
-            <small>Setting up books and invoices</small>
-            <span className="chat-shimmer">Preparing mock accounting records</span>
-          </div>
-          <FileText />
-        </div>
+        <LguPermitCard
+          permit={part.output.permit}
+          paid={paidServices.has("lgu-business-permit")}
+          onPay={onSubmitPay}
+        />
       );
     return (
-      <ComplianceResultCard
-        title="Books and invoices set up"
-        subtitle="Accounting books and sample invoice controls are ready"
-        records={part.output.records}
-      />
+      <div className="local-permit-processing ebpls" role="status">
+        <span>
+          <CircleNotch className="spin" />
+        </span>
+        <div>
+          <small>DX LGU business permit</small>
+          <strong>Validating the BNRS credential…</strong>
+          <em>Preparing the combined permit and barangay-clearance assessment</em>
+        </div>
+      </div>
     );
   }
   if (part.type === "tool-prepareSelfEmployedRegistration") {
@@ -1179,88 +1133,38 @@ function ToolPart({
       </article>
     );
   }
-  if (part.type === "tool-setupTaxCompliance") {
-    if (part.state !== "output-available")
-      return (
-        <div className="chat-tool-row active">
-          <CircleNotch className="spin" />
-          <div>
-            <small>Setting up recurring tax filings</small>
-            <span className="chat-shimmer">Building the mock BIR filing calendar</span>
-          </div>
-          <CalendarDots />
-        </div>
-      );
-    return (
-      <ComplianceResultCard
-        title="Tax calendar set up"
-        subtitle="BIR registration and recurring filing reminders"
-        records={part.output.records}
-        obligations={part.output.obligations}
-      />
-    );
-  }
-  if (part.type === "tool-completeSectorPermits") {
-    if (part.state !== "output-available") return null;
-    return (
-      <ComplianceResultCard
-        title="Sector checks resolved"
-        subtitle="Food, fire, sanitary, and sector requirements"
-        records={part.output.records}
-      />
-    );
-  }
-  if (part.type === "tool-registerEmployerAgencies") {
-    if (part.state !== "output-available") return null;
-    return (
-      <ComplianceResultCard
-        title="Employer registrations resolved"
-        subtitle="SSS, PhilHealth, and Pag-IBIG applicability"
-        records={part.output.records}
-      />
-    );
-  }
   if (part.type === "tool-finalizeBusinessRegistration") {
     if (part.state !== "output-available") return null;
     return (
-      <a
-        className="business-finalized-card"
-        data-cuelume-toggle="page"
-        href={`/?business=${part.output.businessId}`}
-      >
-        <span>
-          <Storefront weight="duotone" />
-        </span>
-        <div>
-          <small>All set up</small>
-          <strong>{part.output.businessName}</strong>
-          <p>Open records and tax calendar</p>
-        </div>
-        <ArrowRight weight="bold" />
-      </a>
+      <BusinessFinalizedCard
+        businessId={part.output.businessId}
+        businessName={part.output.businessName}
+        onOpenBusiness={onOpenBusiness}
+        registrationNumber={part.output.registrationNumber}
+      />
     );
   }
   if (part.type === "tool-webSearch") return <SearchTool part={part} />;
   if (part.type === "tool-updatePlan") return null;
   if (part.type === "tool-editDtiBusinessNameForm") {
-    if (part.state === "output-available")
+    if (part.state === "output-available" && part.output.form) {
+      const form = part.output.form;
       return (
         <DtiFormCard
-          form={part.output.form}
+          form={form}
           note={part.input.note}
           paid={paidServices.has("dti-business-name")}
           onSubmitPay={() =>
             onSubmitPay({
               serviceType: "dti-business-name",
               serviceLabel: "DTI Business Name Registration",
-              proposedName: part.output.form.proposedName,
-              ownerName: part.output.form.ownerName,
-              feeLabel: part.output.form.feeLabel,
-              territorialScope: part.output.form.territorialScope,
+              proposedName: form.proposedName,
+              feeLabel: form.feeLabel,
             })
           }
         />
       );
+    }
     return (
       <div className="chat-tool-row active">
         <CircleNotch className="spin" />
@@ -1269,53 +1173,6 @@ function ToolPart({
           <span className="chat-shimmer">Preparing your DTI form</span>
         </div>
         <PencilSimple />
-      </div>
-    );
-  }
-  if (part.type === "tool-submitBarangayClearance") {
-    if (part.state === "output-available")
-      return (
-        <BarangayClearanceCard
-          clearance={part.output.clearance}
-          paid={paidServices.has("barangay-clearance")}
-          onPay={onSubmitPay}
-        />
-      );
-    const barangay = "input" in part && part.input?.application?.barangay;
-    return (
-      <div className="local-permit-processing" role="status">
-        <span>
-          <CircleNotch className="spin" />
-        </span>
-        <div>
-          <small>Electronic barangay clearance</small>
-          <strong>Submitting{barangay ? ` to ${barangay}` : ""}…</strong>
-          <em>Checking registration and business-address documents</em>
-        </div>
-      </div>
-    );
-  }
-  if (part.type === "tool-submitEbplsBusinessPermit") {
-    if (part.state === "output-available")
-      return (
-        <EbplsPermitCard
-          receipt={part.output.receipt}
-          paid={paidServices.has("ebpls-business-permit")}
-          onPay={onSubmitPay}
-        />
-      );
-    return (
-      <div className="local-permit-processing ebpls" role="status">
-        <span>
-          <CircleNotch className="spin" />
-        </span>
-        <div>
-          <small>EBPLS · Electronic Business Permits and Licensing System</small>
-          <strong>LGU assessment in progress…</strong>
-          <em>
-            Validating the application, approved barangay clearance, and submitted attachments
-          </em>
-        </div>
       </div>
     );
   }
@@ -1349,13 +1206,7 @@ export function PaymentDialog({
       const response = await fetch("/api/payments/egovpay", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          conversationId,
-          serviceType: payment.serviceType,
-          proposedName: payment.proposedName,
-          ...(payment.territorialScope ? { territorialScope: payment.territorialScope } : {}),
-          ...(payment.serviceReference ? { serviceReference: payment.serviceReference } : {}),
-        }),
+        body: JSON.stringify({ conversationId, serviceType: payment.serviceType }),
       });
       const result = (await response.json()) as {
         checkoutUrl?: string;
@@ -1382,8 +1233,8 @@ export function PaymentDialog({
           <span className="text-xs font-bold text-primary">eGovPay</span>
           <DialogTitle className="mt-1 mb-1">Continue to secure payment</DialogTitle>
           <DialogDescription>
-            You’ll continue to eGovPay in this tab. This demo will mark the fee paid while webhook
-            support is being completed.
+            You’ll continue to eGovPay in this tab. Payment is completed only after the server
+            verifies the provider transaction.
           </DialogDescription>
         </div>
         <div className="my-4 flex items-center justify-between gap-3 border-y border-border py-3">
@@ -1496,6 +1347,7 @@ export function BusinessChatScreen({
   paymentService,
   onBack,
   onNewConversation,
+  onOpenBusiness,
   onSelectConversation,
   onDeleteConversation,
 }: {
@@ -1507,6 +1359,7 @@ export function BusinessChatScreen({
   paymentService?: PaymentServiceType | null;
   onBack: () => void;
   onNewConversation: () => void;
+  onOpenBusiness: (businessId: string) => void;
   onSelectConversation: (id: string) => void;
   onDeleteConversation: (conversation: ConversationSummary) => void;
 }) {
@@ -1524,6 +1377,7 @@ export function BusinessChatScreen({
   const [answeringToolCallId, setAnsweringToolCallId] = useState<string | null>(null);
   const answeredToolCalls = useRef(new Set<string>());
   const continuedPayment = useRef<string | null>(null);
+  const recoveredBusinessRecord = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const seeded = useRef(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -1578,7 +1432,8 @@ export function BusinessChatScreen({
     [localPaymentStatuses],
   );
   const latestPlan = latestRegistrationPlan(visibleMessages);
-  const registrationFinalized = visibleMessages.some((message) =>
+  const latestProgress = latestPlan ? planProgress(latestPlan.plan) : null;
+  const hasFinalizedBusinessCard = visibleMessages.some((message) =>
     message.parts.some(
       (part) =>
         part.type === "tool-finalizeBusinessRegistration" && part.state === "output-available",
@@ -1588,9 +1443,8 @@ export function BusinessChatScreen({
     latestPlan?.plan.steps.filter((step) => step.status === "completed").length ?? 0;
   const previousStatus = useRef(status);
   const previousCompletedPlanSteps = useRef(completedPlanSteps);
-  const wasRegistrationFinalized = useRef(registrationFinalized);
   const hadError = useRef(Boolean(error));
-  const pending: PendingQuestion | null = (() => {
+  const pendingQuestion: PendingQuestion | null = (() => {
     for (const message of [...visibleMessages].reverse()) {
       for (const part of [...message.parts].reverse()) {
         if (part.type === "tool-askUser" && part.state === "input-available") {
@@ -1605,6 +1459,12 @@ export function BusinessChatScreen({
     }
     return null;
   })();
+  const legacyBirConsentPending =
+    pendingQuestion?.questions.length === 1 &&
+    ["bir-form-consent", "self-employed-bir-form-consent"].includes(
+      pendingQuestion.questions[0]?.id ?? "",
+    );
+  const pending = legacyBirConsentPending ? null : pendingQuestion;
 
   useEffect(() => {
     // Reconnect and initial seeding are mutually exclusive. A persisted active
@@ -1637,23 +1497,17 @@ export function BusinessChatScreen({
     if (
       status === "ready" &&
       (previous === "submitted" || previous === "streaming") &&
-      !registrationFinalized &&
       completedPlanSteps <= previousCompletedPlanSteps.current &&
       !error &&
       !continuationError
     )
       play("ready");
     previousStatus.current = status;
-  }, [completedPlanSteps, continuationError, error, registrationFinalized, status]);
+  }, [completedPlanSteps, continuationError, error, status]);
   useEffect(() => {
-    if (completedPlanSteps > previousCompletedPlanSteps.current && !registrationFinalized)
-      play("success");
+    if (completedPlanSteps > previousCompletedPlanSteps.current) play("success");
     previousCompletedPlanSteps.current = completedPlanSteps;
-  }, [completedPlanSteps, registrationFinalized]);
-  useEffect(() => {
-    if (registrationFinalized && !wasRegistrationFinalized.current) play("success");
-    wasRegistrationFinalized.current = registrationFinalized;
-  }, [registrationFinalized]);
+  }, [completedPlanSteps]);
   useEffect(() => {
     const failed = Boolean(error || continuationError);
     if (failed && !hadError.current) play("error");
@@ -1663,7 +1517,7 @@ export function BusinessChatScreen({
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const text = input.trim();
-    if (!text || busy || pending) return;
+    if (!text || busy || pending || legacyBirConsentPending) return;
     setInput("");
     void sendMessage({ text });
   };
@@ -1683,6 +1537,37 @@ export function BusinessChatScreen({
       setAnsweringToolCallId(null);
     }
   };
+  useEffect(() => {
+    if (
+      !legacyBirConsentPending ||
+      !pendingQuestion ||
+      busy ||
+      answeredToolCalls.current.has(pendingQuestion.part.toolCallId)
+    )
+      return;
+
+    const toolCallId = pendingQuestion.part.toolCallId;
+    const questionId = pendingQuestion.questions[0]?.id;
+    if (!questionId) return;
+    answeredToolCalls.current.add(toolCallId);
+    setAnsweringToolCallId(toolCallId);
+    void (async () => {
+      try {
+        await addToolOutput({
+          tool: "askUser",
+          toolCallId,
+          output: {
+            answers: [{ questionId, value: "yes", labels: ["Generate immediately"] }],
+          },
+        });
+        await sendMessage();
+      } catch {
+        answeredToolCalls.current.delete(toolCallId);
+      } finally {
+        setAnsweringToolCallId(null);
+      }
+    })();
+  }, [addToolOutput, busy, legacyBirConsentPending, pendingQuestion, sendMessage]);
   const continueAfterPayment = async (serviceType: PaymentServiceType = "dti-business-name") => {
     if (serviceType === "dti-business-name") setLocalPaymentStatus("paid");
     setLocalPaymentStatuses((current) => ({ ...current, [serviceType]: "paid" }));
@@ -1703,17 +1588,58 @@ export function BusinessChatScreen({
     }
   };
 
+  const automaticPaymentService =
+    paymentService ??
+    (!latestProgress?.done && paidServices.has("bir-documentary-stamp-tax")
+      ? "bir-documentary-stamp-tax"
+      : null);
+
   useEffect(() => {
-    if (!paymentService || !/paid|success|complete/i.test(paymentStatus ?? "")) return;
-    const continuationKey = `${conversation.id}:${paymentService}`;
+    if (!automaticPaymentService) return;
+    if (
+      automaticPaymentService === paymentService &&
+      !/paid|success|complete/i.test(paymentStatus ?? "")
+    )
+      return;
+    const continuationKey = `${conversation.id}:${automaticPaymentService}`;
     if (continuedPayment.current === continuationKey) return;
     continuedPayment.current = continuationKey;
-    void continueAfterPayment(paymentService);
-  }, [conversation.id, paymentService, paymentStatus]);
+    void continueAfterPayment(automaticPaymentService);
+  }, [automaticPaymentService, conversation.id, paymentService, paymentStatus]);
+  useEffect(() => {
+    if (
+      management ||
+      !latestProgress?.done ||
+      hasFinalizedBusinessCard ||
+      business ||
+      conversation.businessId ||
+      busy ||
+      recoveredBusinessRecord.current
+    )
+      return;
+    recoveredBusinessRecord.current = true;
+    void sendMessage(
+      {
+        role: "user",
+        parts: [{ type: "data-registrationCompleted", data: { status: "complete" } }],
+      },
+      { body: { event: "registration-completed" } },
+    ).catch(() => {
+      recoveredBusinessRecord.current = false;
+      setContinuationError("Registration is complete, but its business record could not load.");
+    });
+  }, [
+    business,
+    busy,
+    conversation.businessId,
+    hasFinalizedBusinessCard,
+    latestProgress?.done,
+    management,
+    sendMessage,
+  ]);
 
   return (
     <div className="screen agent-chat-screen">
-      {!management && registrationFinalized && <CompletionConfetti />}
       <StatusBar />
       <header className="chat-header" ref={headerRef}>
         <button data-cuelume-toggle="page" onClick={onBack} aria-label="Go back">
@@ -1882,7 +1808,9 @@ export function BusinessChatScreen({
                     <ToolPart
                       key={`${message.id}-${index}`}
                       part={part}
+                      enableBirPayment={Boolean(latestPlan)}
                       paidServices={paidServices}
+                      onOpenBusiness={onOpenBusiness}
                       onSubmitPay={setPaymentRequest}
                       onPreviewPdf={setPdfArtifact}
                     />
@@ -1892,6 +1820,14 @@ export function BusinessChatScreen({
             </article>
           );
         })}
+        {!management && latestProgress?.done && business && !hasFinalizedBusinessCard && (
+          <BusinessFinalizedCard
+            businessId={business.id}
+            businessName={business.name}
+            onOpenBusiness={onOpenBusiness}
+            registrationNumber={business.registrationNumber}
+          />
+        )}
         {busy && (
           <div className="chat-working" role="status" aria-live="polite">
             <AgentDot />
@@ -1905,11 +1841,13 @@ export function BusinessChatScreen({
         {(error || continuationError) && (
           <div className="chat-error">
             {continuationError || "I couldn’t continue. Please try again."}
-            {paid && (
+            {(paid || automaticPaymentService) && (
               <button
                 type="button"
                 data-cuelume-toggle="loading"
-                onClick={() => void continueAfterPayment(paymentService ?? "dti-business-name")}
+                onClick={() =>
+                  void continueAfterPayment(automaticPaymentService ?? "dti-business-name")
+                }
                 disabled={busy}
               >
                 Continue to next step

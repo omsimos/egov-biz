@@ -14,6 +14,9 @@ import {
   type PaymentServiceType,
 } from "@/lib/business-chat";
 import { getDatabase, schema } from "@/server/db";
+import { getBnrs } from "@/server/dx/bnrs";
+import { getLgu } from "@/server/dx/lgu";
+import { isPaidStatus } from "@/server/payments";
 
 type ConversationRow = typeof schema.conversations.$inferSelect;
 
@@ -36,9 +39,28 @@ function titleFor(prompt: string, fallback = "New registration plan") {
  * stateless HTTP connection. Doing it by hand behaves the same against a local
  * file and a remote database; the schema keeps the constraints as documentation.
  */
-export async function deleteConversation(id: string) {
+async function ownsConversation(ownerEgovUserId: string, id: string) {
   const database = await getDatabase();
-  const [, , , conversation] = await database.batch([
+  const [row] = await database
+    .select({ id: schema.conversations.id })
+    .from(schema.conversations)
+    .where(
+      and(
+        eq(schema.conversations.id, id),
+        eq(schema.conversations.ownerEgovUserId, ownerEgovUserId),
+      ),
+    )
+    .limit(1);
+  return Boolean(row);
+}
+
+export async function deleteConversation(ownerEgovUserId: string, id: string) {
+  if (!(await ownsConversation(ownerEgovUserId, id))) return false;
+  const database = await getDatabase();
+  const [, , , , conversation] = await database.batch([
+    database
+      .delete(schema.conversationArtifacts)
+      .where(eq(schema.conversationArtifacts.conversationId, id)),
     database.delete(schema.messages).where(eq(schema.messages.conversationId, id)),
     database.delete(schema.payments).where(eq(schema.payments.conversationId, id)),
     database.delete(schema.smsDispatches).where(eq(schema.smsDispatches.conversationId, id)),
@@ -76,6 +98,7 @@ function progressFromParts(partsJson: string): PlanProgress | null {
 }
 
 export async function listConversations(
+  ownerEgovUserId: string,
   filter: { businessId?: string; purpose?: ConversationPurpose } = {},
 ): Promise<ConversationSummary[]> {
   const database = await getDatabase();
@@ -84,6 +107,7 @@ export async function listConversations(
     .from(schema.conversations)
     .where(
       and(
+        eq(schema.conversations.ownerEgovUserId, ownerEgovUserId),
         filter.purpose ? eq(schema.conversations.purpose, filter.purpose) : undefined,
         filter.businessId ? eq(schema.conversations.businessId, filter.businessId) : undefined,
       ),
@@ -111,16 +135,24 @@ export async function listConversations(
   );
 }
 
-export async function getConversation(id: string): Promise<BusinessConversation | null> {
+export async function getConversation(
+  ownerEgovUserId: string,
+  id: string,
+): Promise<BusinessConversation | null> {
   const database = await getDatabase();
   const [row] = await database
     .select()
     .from(schema.conversations)
-    .where(eq(schema.conversations.id, id))
+    .where(
+      and(
+        eq(schema.conversations.id, id),
+        eq(schema.conversations.ownerEgovUserId, ownerEgovUserId),
+      ),
+    )
     .limit(1);
   if (!row) return null;
 
-  const [payments, messageRows] = await Promise.all([
+  const [payments, messageRows, bnrsStatus, lguStatus] = await Promise.all([
     database
       .select({ serviceType: schema.payments.serviceType, status: schema.payments.status })
       .from(schema.payments)
@@ -135,19 +167,45 @@ export async function getConversation(id: string): Promise<BusinessConversation 
       .from(schema.messages)
       .where(eq(schema.messages.conversationId, id))
       .orderBy(asc(schema.messages.createdAt), insertionOrder),
+    row.bnrsApplicationId
+      ? getBnrs()
+          .getStatus({
+            actor: { egovUserId: ownerEgovUserId },
+            applicationId: row.bnrsApplicationId,
+          })
+          .catch(() => null)
+      : null,
+    row.lguApplicationId
+      ? getLgu()
+          .getStatus({
+            actor: { egovUserId: ownerEgovUserId },
+            applicationId: row.lguApplicationId,
+          })
+          .catch(() => null)
+      : null,
   ]);
 
-  const paymentStatuses = Object.fromEntries(
-    payments.map((payment) => [payment.serviceType, payment.status]),
-  ) as Partial<Record<PaymentServiceType, string>>;
+  const paymentStatuses: Partial<Record<PaymentServiceType, string>> = {};
+  for (const payment of payments) {
+    const current = paymentStatuses[payment.serviceType];
+    if (!current || !isPaidStatus(current)) paymentStatuses[payment.serviceType] = payment.status;
+  }
+  if (bnrsStatus?.payment)
+    paymentStatuses["dti-business-name"] = bnrsStatus.payment.status.toLowerCase();
+  if (lguStatus?.payment)
+    paymentStatuses["lgu-business-permit"] = lguStatus.payment.status.toLowerCase();
   const parsed = messageRows.map((message) => ({
     id: message.id,
     role: message.role,
     parts: JSON.parse(message.partsJson) as UIMessage["parts"],
   }));
   const plan = latestRegistrationPlan(parsed as Pick<BusinessChatMessage, "parts">[]);
+  const linkedBusinessId =
+    row.businessId ??
+    (row.bnrsApplicationId && row.bnrsCertificateNumber ? row.bnrsApplicationId : null);
   return {
     ...mapSummary(row, row.purpose === "registration" && plan ? planProgress(plan.plan) : null),
+    businessId: linkedBusinessId,
     paymentStatus: paymentStatuses["dti-business-name"] ?? null,
     paymentStatuses,
     messages: parsed,
@@ -155,6 +213,7 @@ export async function getConversation(id: string): Promise<BusinessConversation 
 }
 
 export async function createConversation(
+  ownerEgovUserId: string,
   initialPrompt: string,
   options: {
     businessId?: string | null;
@@ -174,22 +233,56 @@ export async function createConversation(
     createdAt: now,
     id,
     initialPrompt: prompt,
+    ownerEgovUserId,
     purpose,
     title: options.title ?? titleFor(prompt),
     updatedAt: now,
   });
-  return (await getConversation(id))!;
+  return (await getConversation(ownerEgovUserId, id))!;
 }
 
-export async function setActiveStream(id: string, streamId: string | null) {
+export async function setActiveStream(
+  ownerEgovUserId: string,
+  id: string,
+  streamId: string | null,
+) {
   const database = await getDatabase();
   await database
     .update(schema.conversations)
     .set({ activeStreamId: streamId, updatedAt: new Date().toISOString() })
-    .where(eq(schema.conversations.id, id));
+    .where(
+      and(
+        eq(schema.conversations.id, id),
+        eq(schema.conversations.ownerEgovUserId, ownerEgovUserId),
+      ),
+    );
 }
 
-export async function saveMessages(conversationId: string, messages: UIMessage[]) {
+export async function linkBusiness(
+  ownerEgovUserId: string,
+  conversationId: string,
+  businessId: string,
+) {
+  const database = await getDatabase();
+  const result = await database
+    .update(schema.conversations)
+    .set({ businessId, updatedAt: new Date().toISOString() })
+    .where(
+      and(
+        eq(schema.conversations.id, conversationId),
+        eq(schema.conversations.ownerEgovUserId, ownerEgovUserId),
+      ),
+    );
+  if (result.rowsAffected === 0) throw new Error("Conversation not found.");
+}
+
+export async function saveMessages(
+  ownerEgovUserId: string,
+  conversationId: string,
+  messages: UIMessage[],
+) {
+  if (!(await ownsConversation(ownerEgovUserId, conversationId)))
+    throw new Error("Conversation not found.");
   const uniqueMessages = uniqueMessagesById(messages);
   const database = await getDatabase();
   const now = Date.now();
@@ -231,7 +324,12 @@ export async function saveMessages(conversationId: string, messages: UIMessage[]
   const touch = database
     .update(schema.conversations)
     .set({ updatedAt: new Date().toISOString() })
-    .where(eq(schema.conversations.id, conversationId));
+    .where(
+      and(
+        eq(schema.conversations.id, conversationId),
+        eq(schema.conversations.ownerEgovUserId, ownerEgovUserId),
+      ),
+    );
 
   const firstUserText = uniqueMessages
     .filter((message) => message.role === "user")
@@ -246,6 +344,7 @@ export async function saveMessages(conversationId: string, messages: UIMessage[]
         .where(
           and(
             eq(schema.conversations.id, conversationId),
+            eq(schema.conversations.ownerEgovUserId, ownerEgovUserId),
             eq(schema.conversations.purpose, "management"),
             eq(schema.conversations.title, "New business chat"),
           ),
@@ -255,8 +354,11 @@ export async function saveMessages(conversationId: string, messages: UIMessage[]
   await database.batch([prune, touch, ...upserts, ...(rename ? [rename] : [])]);
 }
 
-export async function markPaymentCheckpointComplete(conversationId: string) {
-  const conversation = await getConversation(conversationId);
+export async function markPaymentCheckpointComplete(
+  ownerEgovUserId: string,
+  conversationId: string,
+) {
+  const conversation = await getConversation(ownerEgovUserId, conversationId);
   if (!conversation) return;
   let changed = false;
   for (const message of [...conversation.messages].reverse()) {
@@ -281,5 +383,198 @@ export async function markPaymentCheckpointComplete(conversationId: string) {
     }
     if (changed) break;
   }
-  if (changed) await saveMessages(conversationId, conversation.messages);
+  if (changed) await saveMessages(ownerEgovUserId, conversationId, conversation.messages);
+}
+
+export async function getBnrsConversationLink(ownerEgovUserId: string, conversationId: string) {
+  const database = await getDatabase();
+  const [row] = await database
+    .select({
+      applicationId: schema.conversations.bnrsApplicationId,
+      certificateNumber: schema.conversations.bnrsCertificateNumber,
+      transactionUuid: schema.conversations.bnrsTransactionUuid,
+    })
+    .from(schema.conversations)
+    .where(
+      and(
+        eq(schema.conversations.id, conversationId),
+        eq(schema.conversations.ownerEgovUserId, ownerEgovUserId),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+export async function linkBnrsApplication(
+  ownerEgovUserId: string,
+  conversationId: string,
+  applicationId: string,
+) {
+  const database = await getDatabase();
+  const result = await database
+    .update(schema.conversations)
+    .set({ bnrsApplicationId: applicationId, updatedAt: new Date().toISOString() })
+    .where(
+      and(
+        eq(schema.conversations.id, conversationId),
+        eq(schema.conversations.ownerEgovUserId, ownerEgovUserId),
+      ),
+    );
+  if (result.rowsAffected === 0) throw new Error("Conversation not found.");
+}
+
+export async function linkBnrsPayment(
+  ownerEgovUserId: string,
+  conversationId: string,
+  transactionUuid: string,
+) {
+  const database = await getDatabase();
+  const result = await database
+    .update(schema.conversations)
+    .set({ bnrsTransactionUuid: transactionUuid, updatedAt: new Date().toISOString() })
+    .where(
+      and(
+        eq(schema.conversations.id, conversationId),
+        eq(schema.conversations.ownerEgovUserId, ownerEgovUserId),
+      ),
+    );
+  if (result.rowsAffected === 0) throw new Error("Conversation not found.");
+}
+
+export async function linkBnrsCertificateByApplication(
+  applicationId: string,
+  certificateNumber: string,
+) {
+  const database = await getDatabase();
+  const [row] = await database
+    .update(schema.conversations)
+    .set({ bnrsCertificateNumber: certificateNumber, updatedAt: new Date().toISOString() })
+    .where(eq(schema.conversations.bnrsApplicationId, applicationId))
+    .returning({
+      conversationId: schema.conversations.id,
+      ownerEgovUserId: schema.conversations.ownerEgovUserId,
+    });
+  return row?.ownerEgovUserId
+    ? {
+        conversationId: row.conversationId,
+        ownerEgovUserId: row.ownerEgovUserId,
+      }
+    : null;
+}
+
+export async function findConversationByBnrsApplication(applicationId: string) {
+  const database = await getDatabase();
+  const [row] = await database
+    .select({
+      conversationId: schema.conversations.id,
+      ownerEgovUserId: schema.conversations.ownerEgovUserId,
+    })
+    .from(schema.conversations)
+    .where(eq(schema.conversations.bnrsApplicationId, applicationId))
+    .limit(1);
+  return row?.ownerEgovUserId
+    ? {
+        conversationId: row.conversationId,
+        ownerEgovUserId: row.ownerEgovUserId,
+      }
+    : null;
+}
+
+export async function findConversationByBnrsPayment(transactionUuid: string) {
+  const database = await getDatabase();
+  const [row] = await database
+    .select({
+      conversationId: schema.conversations.id,
+      ownerEgovUserId: schema.conversations.ownerEgovUserId,
+    })
+    .from(schema.conversations)
+    .where(eq(schema.conversations.bnrsTransactionUuid, transactionUuid))
+    .limit(1);
+  return row?.ownerEgovUserId
+    ? { conversationId: row.conversationId, ownerEgovUserId: row.ownerEgovUserId }
+    : null;
+}
+
+export async function getLguConversationLink(ownerEgovUserId: string, conversationId: string) {
+  const database = await getDatabase();
+  const [row] = await database
+    .select({
+      applicationId: schema.conversations.lguApplicationId,
+      transactionUuid: schema.conversations.lguTransactionUuid,
+    })
+    .from(schema.conversations)
+    .where(
+      and(
+        eq(schema.conversations.id, conversationId),
+        eq(schema.conversations.ownerEgovUserId, ownerEgovUserId),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+export async function linkLguApplication(
+  ownerEgovUserId: string,
+  conversationId: string,
+  applicationId: string,
+) {
+  const database = await getDatabase();
+  const result = await database
+    .update(schema.conversations)
+    .set({ lguApplicationId: applicationId, updatedAt: new Date().toISOString() })
+    .where(
+      and(
+        eq(schema.conversations.id, conversationId),
+        eq(schema.conversations.ownerEgovUserId, ownerEgovUserId),
+      ),
+    );
+  if (result.rowsAffected === 0) throw new Error("Conversation not found.");
+}
+
+export async function linkLguPayment(
+  ownerEgovUserId: string,
+  conversationId: string,
+  transactionUuid: string,
+) {
+  const database = await getDatabase();
+  const result = await database
+    .update(schema.conversations)
+    .set({ lguTransactionUuid: transactionUuid, updatedAt: new Date().toISOString() })
+    .where(
+      and(
+        eq(schema.conversations.id, conversationId),
+        eq(schema.conversations.ownerEgovUserId, ownerEgovUserId),
+      ),
+    );
+  if (result.rowsAffected === 0) throw new Error("Conversation not found.");
+}
+
+export async function findConversationByLguApplication(applicationId: string) {
+  const database = await getDatabase();
+  const [row] = await database
+    .select({
+      conversationId: schema.conversations.id,
+      ownerEgovUserId: schema.conversations.ownerEgovUserId,
+    })
+    .from(schema.conversations)
+    .where(eq(schema.conversations.lguApplicationId, applicationId))
+    .limit(1);
+  return row?.ownerEgovUserId
+    ? { conversationId: row.conversationId, ownerEgovUserId: row.ownerEgovUserId }
+    : null;
+}
+
+export async function findConversationByLguPayment(transactionUuid: string) {
+  const database = await getDatabase();
+  const [row] = await database
+    .select({
+      conversationId: schema.conversations.id,
+      ownerEgovUserId: schema.conversations.ownerEgovUserId,
+    })
+    .from(schema.conversations)
+    .where(eq(schema.conversations.lguTransactionUuid, transactionUuid))
+    .limit(1);
+  return row?.ownerEgovUserId
+    ? { conversationId: row.conversationId, ownerEgovUserId: row.ownerEgovUserId }
+    : null;
 }

@@ -63,7 +63,11 @@ export function egovPayBaseUrl() {
 
 export function paymentUrls(
   request: Request,
-  context?: { conversationId: string; transactionId: string },
+  context?: {
+    conversationId: string;
+    paymentService?: "dti-business-name" | "lgu-business-permit" | "bir-documentary-stamp-tax";
+    transactionId?: string;
+  },
 ) {
   let requestUrl: URL;
   try {
@@ -89,7 +93,9 @@ export function paymentUrls(
   if (context) {
     returnUrl.searchParams.set("chat", context.conversationId);
     returnUrl.searchParams.set("payment", "return");
-    returnUrl.searchParams.set("transactionId", context.transactionId);
+    if (context.paymentService)
+      returnUrl.searchParams.set("paymentService", context.paymentService);
+    if (context.transactionId) returnUrl.searchParams.set("transactionId", context.transactionId);
   } else if (!returnUrl.searchParams.has("payment")) {
     returnUrl.searchParams.set("payment", "return");
   }
