@@ -1,49 +1,58 @@
+import { eq, lte } from "drizzle-orm";
 import type { EgovSsoCitizenProfile } from "@repo/egov/eGovSso";
-import { getDatabase } from "@/server/db";
-
-type AuthSessionRow = {
-  expires_at: number;
-  raw_profile_json: string;
-};
+import { getDatabase, schema } from "@/server/db";
 
 export type StoredAuthSession = {
   expiresAt: number;
   rawProfile: EgovSsoCitizenProfile;
 };
 
-export function storeAuthSession(
+export async function storeAuthSession(
   sessionId: string,
   rawProfile: EgovSsoCitizenProfile,
   expiresAt: number,
 ) {
-  getDatabase()
-    .prepare("INSERT INTO auth_sessions (id, raw_profile_json, expires_at) VALUES (?, ?, ?)")
-    .run(sessionId, JSON.stringify(rawProfile), expiresAt);
+  const database = await getDatabase();
+  await database.insert(schema.authSessions).values({
+    expiresAt,
+    id: sessionId,
+    rawProfileJson: JSON.stringify(rawProfile),
+  });
 }
 
-export function readStoredAuthSession(sessionId: string): StoredAuthSession | undefined {
-  const row = getDatabase()
-    .prepare("SELECT raw_profile_json, expires_at FROM auth_sessions WHERE id = ?")
-    .get(sessionId) as AuthSessionRow | undefined;
+export async function readStoredAuthSession(
+  sessionId: string,
+): Promise<StoredAuthSession | undefined> {
+  const database = await getDatabase();
+  const [row] = await database
+    .select({
+      expiresAt: schema.authSessions.expiresAt,
+      rawProfileJson: schema.authSessions.rawProfileJson,
+    })
+    .from(schema.authSessions)
+    .where(eq(schema.authSessions.id, sessionId))
+    .limit(1);
   if (!row) return undefined;
 
   try {
-    const rawProfile = JSON.parse(row.raw_profile_json) as EgovSsoCitizenProfile;
+    const rawProfile = JSON.parse(row.rawProfileJson) as EgovSsoCitizenProfile;
     if (!rawProfile || typeof rawProfile !== "object" || Array.isArray(rawProfile)) {
-      deleteStoredAuthSession(sessionId);
+      await deleteStoredAuthSession(sessionId);
       return undefined;
     }
-    return { expiresAt: row.expires_at, rawProfile };
+    return { expiresAt: row.expiresAt, rawProfile };
   } catch {
-    deleteStoredAuthSession(sessionId);
+    await deleteStoredAuthSession(sessionId);
     return undefined;
   }
 }
 
-export function deleteStoredAuthSession(sessionId: string) {
-  getDatabase().prepare("DELETE FROM auth_sessions WHERE id = ?").run(sessionId);
+export async function deleteStoredAuthSession(sessionId: string) {
+  const database = await getDatabase();
+  await database.delete(schema.authSessions).where(eq(schema.authSessions.id, sessionId));
 }
 
-export function pruneStoredAuthSessions(now: number) {
-  getDatabase().prepare("DELETE FROM auth_sessions WHERE expires_at <= ?").run(now);
+export async function pruneStoredAuthSessions(now: number) {
+  const database = await getDatabase();
+  await database.delete(schema.authSessions).where(lte(schema.authSessions.expiresAt, now));
 }

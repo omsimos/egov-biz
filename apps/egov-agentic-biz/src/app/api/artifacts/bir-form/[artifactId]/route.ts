@@ -8,7 +8,7 @@ export async function GET(request: Request, context: { params: Promise<{ artifac
   const { artifactId } = await context.params;
   if (!/^[0-9a-f-]{36}$/i.test(artifactId)) return new Response(null, { status: 404 });
 
-  const session = readSession(request);
+  const session = await readSession(request);
   if (!session) return new Response(null, { status: 404 });
 
   const artifact = await downloadBirForm(birFormArtifactOwnerId(session), artifactId, {

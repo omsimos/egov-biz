@@ -379,7 +379,7 @@ function mockReference(prefix: string) {
 }
 
 function mockBarangayClearance(
-  payment: NonNullable<ReturnType<typeof getLatestPaymentForConversation>>,
+  payment: NonNullable<Awaited<ReturnType<typeof getLatestPaymentForConversation>>>,
   form: DtiBusinessNameForm | null,
   profile: CitizenProfile | null,
 ): BarangayClearance {
@@ -488,11 +488,11 @@ function planAfterPayment(plan: RegistrationPlan | null): RegistrationPlan {
 function resumableConsumer(conversationId: string) {
   return async ({ stream }: { stream: ReadableStream<string> }) => {
     const streamId = crypto.randomUUID();
-    setActiveStream(conversationId, streamId);
+    await setActiveStream(conversationId, streamId);
     try {
       await getResumableContext().createNewResumableStream(streamId, () => stream);
     } catch (error) {
-      setActiveStream(conversationId, null);
+      await setActiveStream(conversationId, null);
       console.error("Business chat resumable stream failed", error);
     }
   };
@@ -506,9 +506,9 @@ function manualResponse(
   const stream = createUIMessageStream<BusinessChatMessage>({
     originalMessages: messages,
     execute: ({ writer }) => execute(writer),
-    onEnd: ({ messages: completeMessages }) => {
-      saveMessages(conversationId, completeMessages);
-      setActiveStream(conversationId, null);
+    onEnd: async ({ messages: completeMessages }) => {
+      await saveMessages(conversationId, completeMessages);
+      await setActiveStream(conversationId, null);
     },
   });
   return createUIMessageStreamResponse({
@@ -1017,16 +1017,16 @@ function agentTools(
 }
 
 export async function POST(request: Request) {
-  const session = readSession(request);
+  const session = await readSession(request);
   if (!session) return Response.json({ error: "Authentication required" }, { status: 401 });
 
   const parsed = requestSchema.safeParse(await request.json());
   if (!parsed.success) return Response.json({ error: "Invalid chat request" }, { status: 400 });
-  const conversation = getConversation(parsed.data.id);
+  const conversation = await getConversation(parsed.data.id);
   if (!conversation) return Response.json({ error: "Chat session not found" }, { status: 404 });
   const messages = uniqueMessagesById(parsed.data.messages as BusinessChatMessage[]);
-  saveMessages(conversation.id, messages);
-  setActiveStream(conversation.id, null);
+  await saveMessages(conversation.id, messages);
+  await setActiveStream(conversation.id, null);
   const profile = session.profile;
   const userInfoOutput: UserInfoOutput = {
     availableFields: availableUserInfoFields(profile),
@@ -1078,7 +1078,7 @@ export async function POST(request: Request) {
 
   if (parsed.data.event === "payment-completed") {
     const paymentService: PaymentServiceType = parsed.data.paymentService ?? "dti-business-name";
-    const payment = getLatestPaymentForService(conversation.id, paymentService);
+    const payment = await getLatestPaymentForService(conversation.id, paymentService);
     if (!payment || !isPaidStatus(payment.status))
       return Response.json({ error: "Payment has not been marked paid." }, { status: 409 });
     if (paymentService === "barangay-clearance") {
@@ -1189,7 +1189,7 @@ export async function POST(request: Request) {
         employer: employerRequired,
         sectorPermits: sectorRequired,
       });
-      const business = upsertRegisteredBusiness(
+      const business = await upsertRegisteredBusiness(
         profile.id,
         buildFinalBusiness({
           conversationId: conversation.id,
@@ -1377,7 +1377,7 @@ export async function POST(request: Request) {
                     : ("pending" as const),
             })),
           });
-          const business = upsertRegisteredBusiness(
+          const business = await upsertRegisteredBusiness(
             profile.id,
             buildFinalSelfEmployedBusiness({
               conversationId: conversation.id,
@@ -1892,9 +1892,9 @@ Use webSearch only when new current evidence is useful. Cite only returned offic
   return result.toUIMessageStreamResponse({
     originalMessages: messages,
     sendReasoning: false,
-    onEnd: ({ messages: completeMessages }) => {
-      saveMessages(conversation.id, completeMessages);
-      setActiveStream(conversation.id, null);
+    onEnd: async ({ messages: completeMessages }) => {
+      await saveMessages(conversation.id, completeMessages);
+      await setActiveStream(conversation.id, null);
     },
     consumeSseStream: resumableConsumer(conversation.id),
   });

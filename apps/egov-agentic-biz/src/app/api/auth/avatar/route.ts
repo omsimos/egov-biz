@@ -13,7 +13,7 @@ function headers(contentType: string) {
 }
 
 export async function GET(request: Request) {
-  const session = readSession(request);
+  const session = await readSession(request);
   if (!session) return new Response(null, { status: 401 });
 
   const source =

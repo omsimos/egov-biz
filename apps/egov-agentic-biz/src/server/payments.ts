@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { getDatabase } from "@/server/db";
+import { and, desc, eq, sql } from "drizzle-orm";
+import { getDatabase, schema } from "@/server/db";
 import { markPaymentCheckpointComplete } from "@/server/conversations";
 
 export type StoredPayment = {
@@ -24,51 +25,47 @@ export type PaymentServiceType =
   | "barangay-clearance"
   | "ebpls-business-permit";
 
-type PaymentRow = {
-  id: string;
-  conversation_id: string;
-  transaction_uuid: string;
-  transaction_id: string;
-  amount: number;
-  status: string;
-  proposed_name: string;
-  territorial_scope: string;
-  owner_name: string;
-  created_at: string;
-  updated_at: string;
-  paid_at: string | null;
-  service_type: PaymentServiceType;
-  service_reference: string | null;
-};
+type PaymentRow = typeof schema.payments.$inferSelect;
+
+// Newest first, with rowid breaking ties between rows written in the same
+// millisecond.
+const newestFirst = [desc(schema.payments.createdAt), sql`rowid desc`] as const;
 
 function mapPayment(row: PaymentRow): StoredPayment {
   return {
     id: row.id,
-    conversationId: row.conversation_id,
-    transactionUuid: row.transaction_uuid,
-    transactionId: row.transaction_id,
+    conversationId: row.conversationId,
+    transactionUuid: row.transactionUuid,
+    transactionId: row.transactionId,
     amount: row.amount,
     status: row.status,
-    proposedName: row.proposed_name,
-    territorialScope: row.territorial_scope,
-    ownerName: row.owner_name,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    paidAt: row.paid_at,
-    serviceType: row.service_type,
-    serviceReference: row.service_reference,
+    proposedName: row.proposedName,
+    territorialScope: row.territorialScope,
+    ownerName: row.ownerName,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    paidAt: row.paidAt,
+    serviceType: row.serviceType,
+    serviceReference: row.serviceReference,
   };
 }
 
-export function getLatestPaymentForService(
+export async function getLatestPaymentForService(
   conversationId: string,
   serviceType: PaymentServiceType,
 ) {
-  const row = getDatabase()
-    .prepare(
-      "SELECT * FROM payments WHERE conversation_id = ? AND service_type = ? ORDER BY created_at DESC, rowid DESC LIMIT 1",
+  const database = await getDatabase();
+  const [row] = await database
+    .select()
+    .from(schema.payments)
+    .where(
+      and(
+        eq(schema.payments.conversationId, conversationId),
+        eq(schema.payments.serviceType, serviceType),
+      ),
     )
-    .get(conversationId, serviceType) as PaymentRow | undefined;
+    .orderBy(...newestFirst)
+    .limit(1);
   return row ? mapPayment(row) : null;
 }
 
@@ -76,78 +73,83 @@ export function isPaidStatus(status: string) {
   return /^(paid|success|successful|completed|complete)$/i.test(status.trim());
 }
 
-export function createPayment(
+export async function createPayment(
   input: Omit<StoredPayment, "id" | "createdAt" | "updatedAt" | "paidAt">,
 ) {
   const now = new Date().toISOString();
-  getDatabase()
-    .prepare(`
-    INSERT INTO payments (
-      id, conversation_id, transaction_uuid, transaction_id, amount, status,
-      proposed_name, territorial_scope, owner_name, created_at, updated_at, paid_at
-      , service_type, service_reference
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
-  `)
-    .run(
-      randomUUID(),
-      input.conversationId,
-      input.transactionUuid,
-      input.transactionId,
-      input.amount,
-      input.status,
-      input.proposedName,
-      input.territorialScope,
-      input.ownerName,
-      now,
-      now,
-      input.serviceType,
-      input.serviceReference,
-    );
-  return getPaymentByTransactionId(input.transactionId)!;
+  const database = await getDatabase();
+  const [row] = await database
+    .insert(schema.payments)
+    .values({
+      amount: input.amount,
+      conversationId: input.conversationId,
+      createdAt: now,
+      id: randomUUID(),
+      ownerName: input.ownerName,
+      paidAt: null,
+      proposedName: input.proposedName,
+      serviceReference: input.serviceReference,
+      serviceType: input.serviceType,
+      status: input.status,
+      territorialScope: input.territorialScope,
+      transactionId: input.transactionId,
+      transactionUuid: input.transactionUuid,
+      updatedAt: now,
+    })
+    .returning();
+  return mapPayment(row!);
 }
 
-export function getPaymentByTransactionId(transactionId: string) {
-  const row = getDatabase()
-    .prepare("SELECT * FROM payments WHERE transaction_id = ?")
-    .get(transactionId) as PaymentRow | undefined;
+export async function getPaymentByTransactionId(transactionId: string) {
+  const database = await getDatabase();
+  const [row] = await database
+    .select()
+    .from(schema.payments)
+    .where(eq(schema.payments.transactionId, transactionId))
+    .limit(1);
   return row ? mapPayment(row) : null;
 }
 
-export function getPaymentByUuid(transactionUuid: string) {
-  const row = getDatabase()
-    .prepare("SELECT * FROM payments WHERE transaction_uuid = ?")
-    .get(transactionUuid) as PaymentRow | undefined;
+export async function getPaymentByUuid(transactionUuid: string) {
+  const database = await getDatabase();
+  const [row] = await database
+    .select()
+    .from(schema.payments)
+    .where(eq(schema.payments.transactionUuid, transactionUuid))
+    .limit(1);
   return row ? mapPayment(row) : null;
 }
 
-export function getLatestPaymentForConversation(conversationId: string) {
-  const row = getDatabase()
-    .prepare(
-      "SELECT * FROM payments WHERE conversation_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1",
-    )
-    .get(conversationId) as PaymentRow | undefined;
+export async function getLatestPaymentForConversation(conversationId: string) {
+  const database = await getDatabase();
+  const [row] = await database
+    .select()
+    .from(schema.payments)
+    .where(eq(schema.payments.conversationId, conversationId))
+    .orderBy(...newestFirst)
+    .limit(1);
   return row ? mapPayment(row) : null;
 }
 
-export function updatePaymentStatus(
+export async function updatePaymentStatus(
   transactionUuid: string,
   status: string,
   paidAt?: string | null,
 ) {
-  const payment = getPaymentByUuid(transactionUuid);
+  const payment = await getPaymentByUuid(transactionUuid);
   if (!payment) return null;
   const paid = isPaidStatus(status);
-  getDatabase()
-    .prepare(
-      "UPDATE payments SET status = ?, paid_at = ?, updated_at = ? WHERE transaction_uuid = ?",
-    )
-    .run(
+  const database = await getDatabase();
+  const [updated] = await database
+    .update(schema.payments)
+    .set({
+      paidAt: paid ? paidAt || new Date().toISOString() : payment.paidAt,
       status,
-      paid ? paidAt || new Date().toISOString() : payment.paidAt,
-      new Date().toISOString(),
-      transactionUuid,
-    );
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(schema.payments.transactionUuid, transactionUuid))
+    .returning();
   if (paid && payment.serviceType === "dti-business-name")
-    markPaymentCheckpointComplete(payment.conversationId);
-  return getPaymentByUuid(transactionUuid);
+    await markPaymentCheckpointComplete(payment.conversationId);
+  return updated ? mapPayment(updated) : null;
 }

@@ -5,7 +5,7 @@ import { listRegisteredBusinesses } from "@/server/registered-businesses";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const session = readSession(request);
+  const session = await readSession(request);
   if (!session) {
     return NextResponse.json(
       { error: "Authentication required." },
@@ -13,6 +13,6 @@ export async function GET(request: Request) {
     );
   }
 
-  const businesses = listRegisteredBusinesses(session.profile.id);
+  const businesses = await listRegisteredBusinesses(session.profile.id);
   return NextResponse.json({ data: businesses }, { headers: { "Cache-Control": "no-store" } });
 }

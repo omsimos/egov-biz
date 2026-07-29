@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   });
   if (!parsed.success)
     return Response.json({ error: "Missing payment reference" }, { status: 400 });
-  const payment = getPaymentByTransactionId(parsed.data.transactionId);
+  const payment = await getPaymentByTransactionId(parsed.data.transactionId);
   if (!payment) return Response.json({ error: "Payment not found" }, { status: 404 });
   if (isPaidStatus(payment.status)) return Response.json({ payment });
 
@@ -26,7 +26,7 @@ export async function GET(request: Request) {
       const transaction = await eGovPayApi
         .fromEnv({ baseUrl: egovPayBaseUrl() })
         .getTransaction(payment.transactionUuid, { signal: AbortSignal.timeout(12_000) });
-      const current = updatePaymentStatus(
+      const current = await updatePaymentStatus(
         payment.transactionUuid,
         transaction.data.payment_status,
         transaction.data.paid_at,
