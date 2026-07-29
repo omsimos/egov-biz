@@ -21,10 +21,10 @@ import {
 } from "@phosphor-icons/react";
 import { AnimatePresence, motion } from "motion/react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BrandLogo } from "@/components/brand-logo";
 import { BusinessChatScreen } from "@/components/business-chat-screen";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { HomeScreen } from "@/components/home-screen";
+import { LandingCopy, LandingHeader } from "@/components/landing-shell";
 import { LoginScreen } from "@/components/login-screen";
 import { BottomNav, StatusBar } from "@/components/phone-chrome";
 import { ProfileAvatar } from "@/components/profile-avatar";
@@ -45,21 +45,36 @@ import type {
   BusinessFile,
   RegisteredBusiness as RegisteredBusinessDetail,
 } from "@/lib/registered-business";
-import { SCREEN, SCREEN_DEPTH, SCREEN_VARIANTS } from "@/lib/motion";
+import { LANDING, SCREEN, SCREEN_DEPTH, SCREEN_VARIANTS } from "@/lib/motion";
 import { useApi } from "@/lib/use-api";
 import { useAuthSession } from "@/lib/use-auth-session";
 import { cn, FOCUS_RING } from "@/lib/utils";
 
 type Screen = "restoring" | "home" | "business" | "business-detail" | "chat";
 
-// Shown on the signed-out desktop rail. A four-step summary of the shape of
-// the ten-step plan the agent builds, not a replacement for it.
-const registrationOutline = [
-  { detail: "DTI, or SEC for a corporation", step: "01", title: "Register the name" },
-  { detail: "Where the business operates", step: "02", title: "Barangay clearance" },
-  { detail: "Your city or municipality", step: "03", title: "Mayor’s permit" },
-  { detail: "And the correct RDO", step: "04", title: "Register with BIR" },
-];
+// The citizen shown in the landing's phone preview, from the design. Nobody is
+// signed in behind that screen, so every field it does not put on glass is
+// blank rather than invented — only the greeting, the avatar and the city are
+// ever read. See the `.landing-preview` subtree, which is inert.
+const PREVIEW_PROFILE: CitizenProfile = {
+  address: "",
+  avatarUrl: "/images/mara-reyes.png",
+  barangay: "",
+  birthDate: "",
+  city: "Makati",
+  email: "",
+  firstName: "Mara",
+  fullName: "Mara Reyes",
+  gender: "",
+  id: "landing-preview",
+  mobile: "",
+  nationality: "",
+  province: "",
+  rdo: "",
+  tinMasked: "",
+};
+
+const noop = () => {};
 
 const suggestions = [
   { icon: CoffeeIcon, text: "I want to start a coffee subscription business in Makati" },
@@ -908,6 +923,27 @@ export function EgaphBusinessApp({
   const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(null);
   const [businessRevision, setBusinessRevision] = useState(0);
   const [pendingDelete, setPendingDelete] = useState<ConversationSummary | null>(null);
+  // Landing → sign-in. Only ever true while signed out; authenticating unmounts
+  // the whole landing, so this never has to be reset on success.
+  const [signingIn, setSigningIn] = useState(false);
+  // The copy column's geometry, which both landing slides are derived from.
+  // Measured rather than computed because its width is a min()/clamp() of the
+  // viewport, and both values are 0 below the landing's breakpoint, where the
+  // column is display:none and nothing moves.
+  const copyRef = useRef<HTMLDivElement>(null);
+  const [copyBox, setCopyBox] = useState({ right: 0, width: 0 });
+  // Only the landing slides, and only above 760px. matchMedia rather than a CSS
+  // class because motion animates inline transforms and cannot read a media
+  // query — the phone must know to stay put on a handset, where the login screen
+  // is the page and there is no preview behind it.
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 760px)");
+    const sync = () => setWide(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
   const { error: authError, logout, profile, status } = useAuthSession();
   const { data: businesses, loading: businessesLoading } = useApi<RegisteredBusiness[]>(
     `/api/businesses?revision=${businessRevision}`,
@@ -1098,176 +1134,206 @@ export function EgaphBusinessApp({
     await logout();
     window.location.assign("/");
   };
+  // The landing is the signed-out experience, so it waits until we actually know
+  // the visitor is signed out. Rendering it during `loading` would flash a
+  // marketing page at someone who already has a session.
+  const onLanding = status !== "loading" && !profile;
+  // offsetLeft/offsetWidth rather than a rect: both are layout values that ignore
+  // transforms, so a reading taken mid-slide is still the resting geometry. The
+  // offsetParent is .landing-stage, which spans the viewport, so offsetLeft is
+  // already a viewport coordinate. Re-measured on resize because the column's
+  // max-width is a min() of the viewport, and re-run when the landing mounts so
+  // the first reading is not taken against a column that is not there yet.
+  useEffect(() => {
+    const node = copyRef.current;
+    if (!node) {
+      setCopyBox({ right: 0, width: 0 });
+      return;
+    }
+    const measure = () =>
+      setCopyBox({ right: node.offsetLeft + node.offsetWidth, width: node.offsetWidth });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [onLanding, wide]);
+  // The copy travels to its own right edge, not merely its own width: it starts
+  // inset from the left of the viewport, so a translate of just the width leaves
+  // that inset — about 225px of headline at 1440 — still on screen.
+  const copySlide = copyBox.right;
+  // The phone travels half the copy's width, because the two are centred as one
+  // group: with the copy beside it, the phone sits W/2 to the right of where it
+  // would sit alone, so that is exactly the distance back to the middle.
+  const phoneSlide = wide && signingIn ? -copyBox.width / 2 : 0;
   return (
-    <div className="prototype-stage">
-      {/* Not aria-hidden any more. It was, correctly, while this rail only
-          restated the phone beside it — but the four steps below exist nowhere
-          else in the signed-out app, so hiding them from screen readers would
-          hide the only copy of that information.
-
-          items-start as well as the definite width on BrandLogo: this column
-          would otherwise stretch every child to 410px, which is what distorted
-          the lockup and would stretch the SSO pill edge to edge too. gap
-          replaces four ad-hoc margins (mt-5/mb-[5px]/mt-5/mt-[55px]).
-
-          pt = the phone's 10px bezel + its status bar's 11px top padding, so
-          the lockup starts on the same line as the time. */}
-      {/* max-h-full plus its own scroller, because .prototype-stage now clips at
-          one viewport: on a short window this copy would otherwise be cut off
-          with no way to reach it. The scrollbar is hidden the same way the
-          phone's own scrollers hide theirs, so the rail never grows furniture
-          the composition has to make room for. */}
-      <div className="hidden min-[760px]:flex min-[760px]:max-h-full min-[760px]:w-[min(410px,100%)] min-[760px]:flex-col min-[760px]:items-start min-[760px]:gap-6 min-[760px]:justify-self-end min-[760px]:overflow-y-auto min-[760px]:pt-[21px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <BrandLogo height={30} />
-        {/* The "Business" eyebrow that sat here said the same word the lockup
-            says, 5px below it. No hard <br> either: it was set for one width
-            and fought the wrap the 410px column already forces at every other. */}
-        <h2 className="m-0 text-[clamp(40px,4vw,60px)] leading-[0.9] -tracking-[0.032em] text-balance font-extrabold">
-          Start your business, step by step.
-        </h2>
-        <p className="m-0 max-w-[380px] text-md leading-[1.5] text-muted-foreground">
-          From your DTI business name to your BIR certificate, the offices, the order, and what each
-          one needs.
-        </p>
-        {/* Numbered because the order is a real dependency, not decoration: no
-            mayor's permit without barangay clearance, no BIR certificate
-            without either. Summarises the ten-step plan the agent generates.
-            Sub-labels stay generic — nobody reading this has signed in yet. */}
-        <ol className="m-0 w-full max-w-[380px] list-none p-0">
-          {registrationOutline.map(({ detail, step, title }) => (
-            <li
-              className="grid grid-cols-[26px_minmax(0,1fr)] items-baseline gap-3.5 border-t border-border py-2.5 last:border-b"
-              key={step}
+    <div className="landing-stage">
+      <div aria-hidden="true" className="landing-blobs" />
+      {onLanding && <LandingHeader onStart={() => setSigningIn(true)} />}
+      <div className="landing-main">
+        {onLanding && (
+          <LandingCopy
+            collapsed={signingIn}
+            onStart={() => setSigningIn(true)}
+            ref={copyRef}
+            slide={copySlide}
+          />
+        )}
+        <motion.div
+          animate={{ x: phoneSlide }}
+          className="phone-shell"
+          // The phone is where it belongs on arrival; only Get started moves it.
+          initial={false}
+          transition={LANDING}
+        >
+          {status === "loading" ? (
+            <div
+              aria-live="polite"
+              className="screen grid place-content-center justify-items-center gap-4 bg-canvas! text-muted-foreground"
+              role="status"
             >
-              <span className="text-xs font-black tabular-nums text-primary">{step}</span>
-              <span className="grid gap-px">
-                <strong className="text-sm">{title}</strong>
-                <span className="text-xs text-muted-foreground">{detail}</span>
-              </span>
-            </li>
-          ))}
-        </ol>
-        {/*<span className="mt-1 inline-flex items-center gap-2 rounded-full border border-success-border bg-success-soft px-3 py-1.5 text-xs font-bold text-success-ink">
-          <ShieldCheckIcon className="size-[14px] shrink-0 text-success" weight="fill" />
-          Live eGov SSO
-        </span>*/}
-      </div>
-      <div className="phone-shell">
-        {status === "loading" ? (
-          <div
-            aria-live="polite"
-            className="screen grid place-content-center justify-items-center gap-4 bg-canvas! text-muted-foreground"
-            role="status"
-          >
-            <div className="grid size-[58px] animate-[auth-pulse_1.2s_ease-in-out_infinite_alternate] place-items-center rounded-[19px] bg-primary text-white motion-reduce:animate-none!">
-              <ShieldCheckIcon className="size-[30px]" weight="duotone" />
+              <div className="grid size-[58px] animate-[auth-pulse_1.2s_ease-in-out_infinite_alternate] place-items-center rounded-[19px] bg-primary text-white motion-reduce:animate-none!">
+                <ShieldCheckIcon className="size-[30px]" weight="duotone" />
+              </div>
+              <p className="m-0 text-sm font-bold">Restoring your secure session…</p>
             </div>
-            <p className="m-0 text-sm font-bold">Restoring your secure session…</p>
-          </div>
-        ) : !profile ? (
-          <LoginScreen initialError={authError} />
-        ) : (
-          // One keyed wrapper per screen instead of five loose conditionals, so
-          // the outgoing screen stays mounted long enough to leave. Each is
-          // absolutely positioned because both halves have to occupy the same
-          // box during the swap; .phone-shell is already `position: relative;
-          // overflow: hidden`, which is what clips the 24px of travel.
-          // initial={false} stops the first screen animating in on load — that
-          // is an arrival, not a navigation.
-          <AnimatePresence custom={goingBack} initial={false}>
-            <motion.div
-              animate="animate"
-              className="absolute inset-0"
-              custom={goingBack}
-              exit="exit"
-              initial="initial"
-              key={screen}
-              transition={SCREEN}
-              variants={SCREEN_VARIANTS}
-            >
-              {screen === "restoring" && (
-                <div className="screen bg-canvas!">
-                  <StatusBar />
-                  <div
-                    className="flex h-[calc(100%-36px)] flex-col items-center justify-center px-[38px] text-center"
-                    role="status"
-                  >
-                    <div className="relative grid size-[62px] animate-[soft-pulse_1.8s_infinite] rotate-[-4deg] place-items-center rounded-[22px] bg-primary text-white shadow-[0_12px_28px_rgba(7,85,233,0.24)] motion-reduce:animate-none!">
-                      <FolderOpenIcon className="size-[29px]" weight="fill" />
-                    </div>
-                    <h1 className="mt-7 mb-2 text-[25px] leading-[1.15] tracking-[-0.8px]">
-                      Opening your saved plan
-                    </h1>
-                    <p className="m-0 text-[14px] text-muted-foreground">
-                      Restoring the conversation…
-                    </p>
-                    <div aria-hidden="true" className="mt-6 flex gap-[5px]">
-                      <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary motion-reduce:animate-none!" />
-                      <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary [animation-delay:0.2s] motion-reduce:animate-none!" />
-                      <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary [animation-delay:0.4s] motion-reduce:animate-none!" />
+          ) : !profile ? (
+            // Both halves stay mounted and slide past each other: the Home
+            // preview leaves to the left as the login screen arrives from the
+            // right, each travelling its own full width so neither is ever
+            // visible outside the frame. Below 760px there is no landing to
+            // preview from, so the login screen is simply the page, parked at 0,
+            // and the preview never renders.
+            <>
+              {/* A picture of the product, not the product: there is no session
+                  yet, so this is the design's own sample citizen and the whole
+                  subtree is inert. */}
+              <motion.div
+                animate={{ x: signingIn ? "-100%" : "0%" }}
+                aria-hidden="true"
+                className="landing-preview hidden min-[760px]:block"
+                initial={false}
+                transition={LANDING}
+              >
+                <HomeScreen onBusiness={noop} onLogout={noop} profile={PREVIEW_PROFILE} />
+              </motion.div>
+              <motion.div
+                animate={{ x: wide && !signingIn ? "100%" : "0%" }}
+                // pointer-events rather than `hidden`: the screen has to keep its
+                // box through the slide, and only the half on screen may take a
+                // click.
+                className={cn("landing-login", wide && !signingIn && "pointer-events-none")}
+                initial={false}
+                transition={LANDING}
+              >
+                <LoginScreen
+                  initialError={authError}
+                  onBack={signingIn ? () => setSigningIn(false) : undefined}
+                />
+              </motion.div>
+            </>
+          ) : (
+            // One keyed wrapper per screen instead of five loose conditionals, so
+            // the outgoing screen stays mounted long enough to leave. Each is
+            // absolutely positioned because both halves have to occupy the same
+            // box during the swap; .phone-shell is already `position: relative;
+            // overflow: hidden`, which is what clips the 24px of travel.
+            // initial={false} stops the first screen animating in on load — that
+            // is an arrival, not a navigation.
+            <AnimatePresence custom={goingBack} initial={false}>
+              <motion.div
+                animate="animate"
+                className="absolute inset-0"
+                custom={goingBack}
+                exit="exit"
+                initial="initial"
+                key={screen}
+                transition={SCREEN}
+                variants={SCREEN_VARIANTS}
+              >
+                {screen === "restoring" && (
+                  <div className="screen bg-canvas!">
+                    <StatusBar />
+                    <div
+                      className="flex h-[calc(100%-36px)] flex-col items-center justify-center px-[38px] text-center"
+                      role="status"
+                    >
+                      <div className="relative grid size-[62px] animate-[soft-pulse_1.8s_infinite] rotate-[-4deg] place-items-center rounded-[22px] bg-primary text-white shadow-[0_12px_28px_rgba(7,85,233,0.24)] motion-reduce:animate-none!">
+                        <FolderOpenIcon className="size-[29px]" weight="fill" />
+                      </div>
+                      <h1 className="mt-7 mb-2 text-[25px] leading-[1.15] tracking-[-0.8px]">
+                        Opening your saved plan
+                      </h1>
+                      <p className="m-0 text-[14px] text-muted-foreground">
+                        Restoring the conversation…
+                      </p>
+                      <div aria-hidden="true" className="mt-6 flex gap-[5px]">
+                        <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary motion-reduce:animate-none!" />
+                        <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary [animation-delay:0.2s] motion-reduce:animate-none!" />
+                        <span className="size-[6px] animate-[dots_1s_infinite_alternate] rounded-full bg-primary [animation-delay:0.4s] motion-reduce:animate-none!" />
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-              {screen === "home" && (
-                <HomeScreen
-                  profile={profile}
-                  onBusiness={() => setScreen("business")}
-                  onLogout={() => void signOut()}
-                />
-              )}
-              {screen === "business" && (
-                <BusinessLanding
-                  profile={profile}
-                  businesses={businesses}
-                  businessesLoading={businessesLoading}
-                  conversations={conversations}
-                  initialPrompt={prompt}
-                  onBack={() => setScreen("home")}
-                  onSubmit={startChat}
-                  onResume={(id) => void openConversation(id)}
-                  onDelete={setPendingDelete}
-                  onOpenBusiness={openBusiness}
-                />
-              )}
-              {screen === "business-detail" && (
-                <BusinessDetailScreen
-                  business={selectedBusiness}
-                  conversations={businessConversations}
-                  conversationsLoading={businessConversationsLoading}
-                  loading={selectedBusinessLoading}
-                  error={selectedBusinessError}
-                  onBack={leaveBusinessDetail}
-                  onNewChat={(businessId) => void startBusinessChat(businessId)}
-                  onOpenChat={(id) => void openConversation(id)}
-                  profile={profile}
-                />
-              )}
-              {screen === "chat" && conversation && (
-                <BusinessChatScreen
-                  business={selectedBusiness}
-                  key={conversation.id}
-                  conversation={conversation}
-                  conversations={
-                    conversation.purpose === "management" ? businessConversations : conversations
-                  }
-                  profile={profile}
-                  paymentStatus={paymentStatus}
-                  paymentService={paymentService}
-                  onBack={leaveChat}
-                  onNewConversation={() => {
-                    if (conversation.purpose === "management" && conversation.businessId)
-                      void startBusinessChat(conversation.businessId);
-                    else leaveChat();
-                  }}
-                  onOpenBusiness={openBusiness}
-                  onSelectConversation={(id) => void openConversation(id)}
-                  onDeleteConversation={setPendingDelete}
-                />
-              )}
-            </motion.div>
-          </AnimatePresence>
-        )}
+                )}
+                {screen === "home" && (
+                  <HomeScreen
+                    profile={profile}
+                    onBusiness={() => setScreen("business")}
+                    onLogout={() => void signOut()}
+                  />
+                )}
+                {screen === "business" && (
+                  <BusinessLanding
+                    profile={profile}
+                    businesses={businesses}
+                    businessesLoading={businessesLoading}
+                    conversations={conversations}
+                    initialPrompt={prompt}
+                    onBack={() => setScreen("home")}
+                    onSubmit={startChat}
+                    onResume={(id) => void openConversation(id)}
+                    onDelete={setPendingDelete}
+                    onOpenBusiness={openBusiness}
+                  />
+                )}
+                {screen === "business-detail" && (
+                  <BusinessDetailScreen
+                    business={selectedBusiness}
+                    conversations={businessConversations}
+                    conversationsLoading={businessConversationsLoading}
+                    loading={selectedBusinessLoading}
+                    error={selectedBusinessError}
+                    onBack={leaveBusinessDetail}
+                    onNewChat={(businessId) => void startBusinessChat(businessId)}
+                    onOpenChat={(id) => void openConversation(id)}
+                    profile={profile}
+                  />
+                )}
+                {screen === "chat" && conversation && (
+                  <BusinessChatScreen
+                    business={selectedBusiness}
+                    key={conversation.id}
+                    conversation={conversation}
+                    conversations={
+                      conversation.purpose === "management" ? businessConversations : conversations
+                    }
+                    profile={profile}
+                    paymentStatus={paymentStatus}
+                    paymentService={paymentService}
+                    onBack={leaveChat}
+                    onNewConversation={() => {
+                      if (conversation.purpose === "management" && conversation.businessId)
+                        void startBusinessChat(conversation.businessId);
+                      else leaveChat();
+                    }}
+                    onOpenBusiness={openBusiness}
+                    onSelectConversation={(id) => void openConversation(id)}
+                    onDeleteConversation={setPendingDelete}
+                  />
+                )}
+              </motion.div>
+            </AnimatePresence>
+          )}
+        </motion.div>
       </div>
       <ConfirmDialog
         confirmLabel={pendingDelete?.purpose === "management" ? "Delete chat" : "Delete plan"}

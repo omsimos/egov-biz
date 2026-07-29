@@ -1,12 +1,12 @@
 "use client";
 
 import {
-  BellSlash,
-  FileText,
-  House,
-  IdentificationCard,
-  Scan,
-  SquaresFour,
+  BellSlashIcon,
+  HouseIcon,
+  NewspaperIcon,
+  QrCodeIcon,
+  UserIcon,
+  WalletIcon,
 } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 
@@ -25,7 +25,7 @@ export function StatusBar() {
     <div className="status-bar" aria-hidden="true">
       <span className="status-left">
         {time ?? "9:41"}
-        <BellSlash weight="fill" />
+        <BellSlashIcon weight="fill" />
       </span>
       <div className="status-icons">
         <span className="signal" />
@@ -57,29 +57,32 @@ export function BottomNav({ active = "home" }: { active?: "home" | "business" })
         className={homeActive ? "active" : ""}
         data-cuelume-toggle="tick"
       >
-        <House weight={homeActive ? "fill" : "regular"} />
+        <HouseIcon weight={homeActive ? "fill" : "regular"} />
         <span>Home</span>
       </div>
       <div className="unbuilt" data-cuelume-toggle="tick">
-        <Scan />
-        <span>Scan</span>
+        <NewspaperIcon />
+        <span>News</span>
       </div>
-      {/* Digital ID keeps full strength: recessing a raised brand-blue orb reads
-          as broken rather than unavailable. It is the most misleading element in
-          this nav and the fix is to wire it or remove it, not to dim it. */}
-      <div className="id-button" data-cuelume-toggle="page">
-        <span className="id-orb">
-          <IdentificationCard weight="fill" />
+      {/* aria-hidden and no cuelume, unlike the labelled Digital ID orb this
+          replaces. The Landing design draws the centre item as an unlabelled QR
+          orb, and an unlabelled icon with nothing behind it has no name worth
+          announcing — the four items around it already name every destination
+          this shell has. It also stays silent on tap: a click sound is a claim
+          that something happened, which was the one thing the old orb got
+          wrong that dimming it could never have fixed. */}
+      <div aria-hidden="true">
+        <span className="qr-orb">
+          <QrCodeIcon weight="fill" />
         </span>
-        <span>Digital ID</span>
       </div>
       <div className="unbuilt" data-cuelume-toggle="tick">
-        <FileText />
-        <span>History</span>
+        <WalletIcon />
+        <span>Wallet</span>
       </div>
       <div className="unbuilt" data-cuelume-toggle="tick">
-        <SquaresFour />
-        <span>Account</span>
+        <UserIcon />
+        <span>Me</span>
       </div>
     </nav>
   );

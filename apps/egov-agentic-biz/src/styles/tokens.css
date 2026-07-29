@@ -92,6 +92,14 @@
   --success-border: #bfe4d6;
   --success-ink: #236348;
 
+  /* Orange tint family. Distinct from --warning-* below, which is the brand's
+     yellow (#fff4cc / #866000): the brand names orange only as the flat accent
+     --egov-orange, with no surface or ink step, so Home's amber quick-action
+     chip had no pair to reach for. These two are the Landing design's own
+     values, not an interpolation of an anchor. */
+  --orange-soft: #fff4e0;
+  --orange-ink: #c07a00;
+
   --warning-border: #ead99c;
   --warning-ink: #866000;
 

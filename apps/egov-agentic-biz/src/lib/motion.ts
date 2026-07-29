@@ -30,6 +30,15 @@ export const SCRIM_OUT: Transition = { duration: 0.16, ease: EASE_OUT };
 // to feel like waiting for it.
 export const SCREEN: Transition = { duration: 0.22, ease: EASE_OUT };
 
+// The landing's one hero move: pressing Get started slides the marketing copy
+// out of frame while the phone glides to the middle of the viewport and the login
+// screen slides in over the Home preview. Slower than SCREEN because this is the
+// page recomposing itself rather than a navigation inside it — SCREEN's 220ms
+// ceiling is about not being kept waiting between screens, which is a different
+// job from this one. A slide is all it is: no fade and no scale, so no part of it
+// reads as a zoom.
+export const LANDING: Transition = { duration: 0.65, ease: EASE_OUT };
+
 // Screens slide along the axis of travel: going deeper, the new screen enters
 // from the right and the old one leaves to the left; coming back, both reverse.
 // 24px, not a full width — this is a cue about direction, not a carousel, and a
