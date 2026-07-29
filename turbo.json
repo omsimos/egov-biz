@@ -17,6 +17,9 @@
       "cache": false,
       "persistent": true
     },
+    "e2e": {
+      "cache": false
+    },
     "format": {
       "cache": false
     },
@@ -27,14 +30,6 @@
     "lint": {
       "dependsOn": ["transit"],
       "outputs": []
-    },
-    "sample": {
-      "dependsOn": ["^build"],
-      "cache": false
-    },
-    "smoke": {
-      "dependsOn": ["^build"],
-      "cache": false
     },
     "test": {
       "dependsOn": ["transit"],

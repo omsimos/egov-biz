@@ -1,0 +1,5 @@
+.env
+!.env.example
+.stagehand-cache/
+artifacts/*
+!artifacts/.gitkeep

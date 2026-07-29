@@ -201,10 +201,14 @@ export function uniqueMessagesById<T extends { id: string }>(messages: readonly 
 // is finished, not abandoned. Null when a conversation has no plan yet.
 export type PlanProgress = { completed: number; total: number; done: boolean };
 
+export type ConversationPurpose = "registration" | "management";
+
 export type ConversationSummary = {
   id: string;
   title: string;
   initialPrompt: string;
+  purpose: ConversationPurpose;
+  businessId: string | null;
   activeStreamId: string | null;
   createdAt: string;
   updatedAt: string;

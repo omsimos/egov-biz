@@ -12,9 +12,7 @@ WORKDIR /repo
 # so a new package under apps/ or packages/ has to be added here too.
 COPY package.json bun.lock ./
 COPY apps/egov-agentic-biz/package.json apps/egov-agentic-biz/package.json
-COPY apps/egov-ai-sample/package.json apps/egov-ai-sample/package.json
-COPY apps/egov-smoke/package.json apps/egov-smoke/package.json
-COPY apps/egov-sso-sample/package.json apps/egov-sso-sample/package.json
+COPY apps/egov-stagehand-e2e/package.json apps/egov-stagehand-e2e/package.json
 COPY apps/rag-hor/package.json apps/rag-hor/package.json
 COPY apps/rag-hor/packages/transcript-scraper/package.json \
   apps/rag-hor/packages/transcript-scraper/package.json

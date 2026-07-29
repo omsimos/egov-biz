@@ -1,0 +1,17 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "e2e": {
+      "cache": false,
+      "passThroughEnv": [
+        "AI_GATEWAY_API_KEY",
+        "E2E_ALLOW_EGOVPAY",
+        "E2E_BASE_URL",
+        "E2E_HEADLESS",
+        "E2E_RUN_ID",
+        "OPENAI_API_KEY",
+        "STAGEHAND_MODEL"
+      ]
+    }
+  }
+}

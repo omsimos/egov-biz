@@ -1,7 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import type { UIMessage } from "ai";
-import type { PaymentServiceType } from "@/lib/business-chat";
+import type { ConversationPurpose, PaymentServiceType } from "@/lib/business-chat";
 import type { RegisteredBusiness } from "@/lib/registered-business";
 
 // Timestamps are ISO-8601 strings rather than SQLite integers so the stored
@@ -19,11 +19,16 @@ export const conversations = sqliteTable(
     id: text("id").primaryKey(),
     title: text("title").notNull(),
     initialPrompt: text("initial_prompt").notNull(),
+    purpose: text("purpose").$type<ConversationPurpose>().notNull().default("registration"),
+    businessId: text("business_id"),
     activeStreamId: text("active_stream_id"),
     createdAt: isoTimestamp("created_at"),
     updatedAt: isoTimestamp("updated_at"),
   },
-  (table) => [index("idx_conversations_updated").on(table.updatedAt)],
+  (table) => [
+    index("idx_conversations_updated").on(table.updatedAt),
+    index("idx_conversations_business_updated").on(table.businessId, table.updatedAt),
+  ],
 );
 
 export const messages = sqliteTable(
