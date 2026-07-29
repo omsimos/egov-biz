@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from "pdf-lib";
+import { dateCellLayout, normalizedDate } from "@/lib/bir-form/date-cells";
 import { standardFontText } from "@/lib/bir-form/pdf-text";
 import type { Bir1905Data } from "@/lib/bir-form/schema";
 
@@ -128,14 +129,10 @@ function drawChoice<T extends string>(
   if (position) drawCheck(page, font, true, position[0], position[1]);
 }
 
-function normalizedDate(value: string | undefined) {
-  if (!value) return "";
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
-  return match ? `${match[2]}/${match[3]}/${match[1]}` : value.trim();
-}
-
 function drawDate(page: PDFPage, font: PDFFont, value: string | undefined, field: TextField) {
-  drawCenteredText(page, font, normalizedDate(value), field);
+  for (const cell of dateCellLayout(value, field)) {
+    drawCenteredText(page, font, cell.text, { ...field, ...cell });
+  }
 }
 
 function drawTinGroups(

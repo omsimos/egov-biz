@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from "pdf-lib";
+import { dateCellLayout } from "@/lib/bir-form/date-cells";
 import { standardFontText } from "@/lib/bir-form/pdf-text";
 import type { Bir1901Data } from "@/lib/bir-form/schema";
 
@@ -106,14 +107,14 @@ function drawChoice<T extends string>(
   if (position) drawCheck(page, font, true, position[0], position[1]);
 }
 
-function normalizedDate(value: string | undefined) {
-  if (!value) return "";
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
-  return match ? `${match[2]}/${match[3]}/${match[1]}` : value.trim();
-}
-
 function drawDate(page: PDFPage, font: PDFFont, value: string | undefined, field: TextField) {
-  drawCenteredText(page, font, normalizedDate(value), { fontSize: 7, ...field });
+  for (const cell of dateCellLayout(value, field)) {
+    drawCenteredText(page, font, cell.text, {
+      fontSize: 7,
+      ...field,
+      ...cell,
+    });
+  }
 }
 
 function drawTinGroups(
@@ -413,15 +414,15 @@ function drawPageOne(page: PDFPage, font: PDFFont, bold: PDFFont, data: Bir1901D
   });
   drawText(page, font, spouse?.name, { maxWidth: 320, x: 32, y: 147 });
   drawTinGroups(page, bold, spouse?.tin, [
-    { maxWidth: 42, x: 362, y: 147 },
-    { maxWidth: 42, x: 420, y: 147 },
-    { maxWidth: 42, x: 478, y: 147 },
+    { maxWidth: 42, x: 362, y: 139 },
+    { maxWidth: 42, x: 420, y: 139 },
+    { maxWidth: 42, x: 478, y: 139 },
   ]);
   drawText(page, font, spouse?.employerName, { maxWidth: 320, x: 32, y: 111 });
   drawTinGroups(page, bold, spouse?.employerTin, [
-    { maxWidth: 42, x: 362, y: 111 },
-    { maxWidth: 42, x: 420, y: 111 },
-    { maxWidth: 42, x: 478, y: 111 },
+    { maxWidth: 42, x: 362, y: 102 },
+    { maxWidth: 42, x: 420, y: 102 },
+    { maxWidth: 42, x: 478, y: 102 },
   ]);
 
   const representative = data.authorizedRepresentative;
@@ -464,15 +465,15 @@ function drawPageTwo(page: PDFPage, font: PDFFont, bold: PDFFont, data: Bir1901D
   drawDate(page, font, representative?.relationshipDate, {
     maxWidth: 112,
     x: 49,
-    y: 864,
+    y: 870,
   });
   drawChoice(page, bold, representative?.addressType, {
-    residence: [205, 861],
-    placeOfBusiness: [291, 861],
-    employerAddress: [424, 861],
+    residence: [205, 869],
+    placeOfBusiness: [291, 869],
+    employerAddress: [424, 869],
   });
-  drawAddress(page, font, representative?.address, 827, 801);
-  drawContact(page, font, representative?.contact, 778, 760);
+  drawAddress(page, font, representative?.address, 834, 809);
+  drawContact(page, font, representative?.contact, 783, 769);
 
   const business = data.businessInformation;
   drawText(page, bold, business?.singleBusinessNumber, {
