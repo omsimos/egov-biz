@@ -1,0 +1,66 @@
+# syntax=docker/dockerfile:1
+
+# Build this file from the repository root:
+# docker build -f apps/egov-agentic-biz/Dockerfile -t egov-agentic-biz .
+
+FROM oven/bun:1.3.14-slim AS dependencies
+
+WORKDIR /repo
+
+# better-sqlite3 compiles from source on platforms without a prebuilt binary.
+# These packages remain in the build stages and are not copied into the runner.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends g++ make python3 \
+  && rm -rf /var/lib/apt/lists/*
+
+# Copy manifests first so dependency installation remains cached when source
+# files change. Bun needs every workspace manifest to honor the frozen lockfile.
+COPY package.json bun.lock ./
+COPY apps/egov-agentic-biz/package.json apps/egov-agentic-biz/package.json
+COPY apps/egov-ai-sample/package.json apps/egov-ai-sample/package.json
+COPY apps/egov-smoke/package.json apps/egov-smoke/package.json
+COPY apps/egov-sso-sample/package.json apps/egov-sso-sample/package.json
+COPY apps/rag-hor/package.json apps/rag-hor/package.json
+COPY apps/rag-hor/packages/transcript-scraper/package.json \
+  apps/rag-hor/packages/transcript-scraper/package.json
+COPY packages/egov/package.json packages/egov/package.json
+COPY packages/transcript-scraper/package.json packages/transcript-scraper/package.json
+
+RUN bun install --frozen-lockfile
+
+FROM dependencies AS builder
+
+ENV NEXT_TELEMETRY_DISABLED=1
+
+COPY turbo.json turbo.json
+COPY packages/egov packages/egov
+COPY apps/egov-agentic-biz apps/egov-agentic-biz
+
+RUN bun run turbo build --filter=egov-agentic-biz
+
+FROM node:24-trixie-slim AS runner
+
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    HOSTNAME=0.0.0.0 \
+    PORT=3000 \
+    DATABASE_PATH=/app/data/egov-agentic-biz.sqlite
+
+WORKDIR /app/apps/egov-agentic-biz
+
+RUN mkdir -p /app/data && chown -R node:node /app
+
+# Next.js does not copy public or static assets into standalone output.
+COPY --from=builder --chown=node:node \
+  /repo/apps/egov-agentic-biz/.next/standalone /app
+COPY --from=builder --chown=node:node \
+  /repo/apps/egov-agentic-biz/.next/static ./.next/static
+COPY --from=builder --chown=node:node \
+  /repo/apps/egov-agentic-biz/public ./public
+
+USER node
+
+EXPOSE 3000
+VOLUME ["/app/data"]
+
+CMD ["node", "server.js"]
