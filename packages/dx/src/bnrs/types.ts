@@ -101,6 +101,18 @@ export type BnrsPaymentProviderSnapshot = {
   expiresAt: Date | null;
 };
 
+export type BnrsCertificate = {
+  certificateNumber: string;
+  issuingAgency: "DTI-BNRS";
+  businessName: string;
+  ownerName: string;
+  descriptor: string;
+  territorialScope: BnrsBusinessScopeId;
+  issuedAt: string;
+  validUntil: string;
+  status: "REGISTERED";
+};
+
 export type BnrsPaymentCheckout = {
   transactionUuid: string;
   transactionId: string;
@@ -135,10 +147,12 @@ export type BnrsRegistrationSummary = {
 export type BnrsRegistrationResult = BnrsRegistrationSummary & {
   ownerDisplayName: string;
   totalPaid: number;
+  certificate: BnrsCertificate;
 };
 
 export type BnrsRegisteredBusiness = BnrsRegistrationSummary & {
   applicationId: string;
+  certificateNumber: string;
 };
 
 export type BnrsPaymentSyncResult = {

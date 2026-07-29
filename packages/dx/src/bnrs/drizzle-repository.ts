@@ -106,6 +106,20 @@ export function createDrizzleBnrsRepository(database: Database): BnrsRepository 
         .limit(1);
       return application ? applicationRecord(application) : null;
     },
+    async getCompletedApplicationByCertificateNumber(input) {
+      const [application] = await database
+        .select()
+        .from(bnrsApplications)
+        .where(
+          and(
+            eq(bnrsApplications.egovUserId, input.egovUserId),
+            eq(bnrsApplications.certificateNumber, input.certificateNumber),
+            eq(bnrsApplications.state, "COMPLETED"),
+          ),
+        )
+        .limit(1);
+      return application ? applicationRecord(application) : null;
+    },
     async listCompletedApplications(egovUserId) {
       const applications = await database
         .select()
@@ -440,7 +454,9 @@ export function createDrizzleBnrsRepository(database: Database): BnrsRepository 
             .set({
               state: "COMPLETED",
               referenceCode: input.referenceCode,
+              certificateNumber: input.certificateNumber,
               issuedAt: input.issuedAt,
+              validUntil: input.validUntil,
               updatedAt: input.now,
             })
             .where(

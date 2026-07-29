@@ -35,7 +35,9 @@ describe("BNRS registration workflow", () => {
       normalizedBusinessName: "MOLAR BEAR DENTAL CLINIC",
       scope: "NATIONAL" as const,
       referenceCode: "BNRS-20260601-AAAAAAAA",
+      certificateNumber: "BNN-20260601-AAAAAAAA",
       issuedAt: new Date("2026-06-01T08:00:00.000Z"),
+      validUntil: new Date("2031-06-01T08:00:00.000Z"),
       createdAt: new Date("2026-07-20T07:00:00.000Z"),
     });
 
@@ -49,7 +51,9 @@ describe("BNRS registration workflow", () => {
       normalizedBusinessName: "DAILY GRIND COFFEE SHOP",
       scope: "CITY_MUNICIPALITY" as const,
       referenceCode: "BNRS-20260701-BBBBBBBB",
+      certificateNumber: "BNN-20260701-BBBBBBBB",
       issuedAt: new Date("2026-07-01T08:00:00.000Z"),
+      validUntil: new Date("2031-07-01T08:00:00.000Z"),
       createdAt: new Date("2026-05-01T07:00:00.000Z"),
     });
 
@@ -63,7 +67,9 @@ describe("BNRS registration workflow", () => {
       descriptorLabel: "ONLINE SHOP",
       scope: "REGIONAL" as const,
       referenceCode: "BNRS-20260715-CCCCCCCC",
+      certificateNumber: "BNN-20260715-CCCCCCCC",
       issuedAt: new Date("2026-07-15T08:00:00.000Z"),
+      validUntil: new Date("2031-07-15T08:00:00.000Z"),
       createdAt: new Date("2026-07-15T07:00:00.000Z"),
     });
 
@@ -71,6 +77,7 @@ describe("BNRS registration workflow", () => {
       {
         applicationId: newer.applicationId,
         referenceCode: "BNRS-20260701-BBBBBBBB",
+        certificateNumber: "BNN-20260701-BBBBBBBB",
         businessName: "Daily Grind Coffee Shop",
         descriptor: "COFFEE SHOP",
         scope: "CITY_MUNICIPALITY",
@@ -79,12 +86,65 @@ describe("BNRS registration workflow", () => {
       {
         applicationId: older.applicationId,
         referenceCode: "BNRS-20260601-AAAAAAAA",
+        certificateNumber: "BNN-20260601-AAAAAAAA",
         businessName: "Molar Bear Dental Clinic",
         descriptor: "DENTAL CLINIC",
         scope: "NATIONAL",
         issuedAt: "2026-06-01T08:00:00.000Z",
       },
     ]);
+  });
+
+  test("retrieves an authoritative JSON certificate only for its authenticated owner", async () => {
+    const { actor, repository, service } = setup();
+    const application = await service.startOrResumeApplication({ actor });
+    Object.assign(repository.applications.get(application.applicationId)!, {
+      state: "COMPLETED" as const,
+      proposedBusinessName: "Molar Bear Dental Clinic",
+      descriptorLabel: "DENTAL CLINIC",
+      scope: "NATIONAL" as const,
+      referenceCode: "BNRS-20260729-AAAAAAAA",
+      certificateNumber: "BNN-20260729-BBBBBBBB",
+      issuedAt: new Date("2026-07-29T08:30:00.000Z"),
+      validUntil: new Date("2031-07-29T08:30:00.000Z"),
+    });
+    repository.owners.set(application.applicationId, {
+      firstName: "Genrev",
+      middleName: "Eledia",
+      lastName: "Zapa",
+    });
+
+    await expect(
+      service.getCertificate({ actor, certificateNumber: "BNN-20260729-BBBBBBBB" }),
+    ).resolves.toEqual({
+      certificateNumber: "BNN-20260729-BBBBBBBB",
+      issuingAgency: "DTI-BNRS",
+      businessName: "Molar Bear Dental Clinic",
+      ownerName: "Genrev Eledia Zapa",
+      descriptor: "DENTAL CLINIC",
+      territorialScope: "NATIONAL",
+      issuedAt: "2026-07-29T08:30:00.000Z",
+      validUntil: "2031-07-29T08:30:00.000Z",
+      status: "REGISTERED",
+    });
+    await expectBnrsError(
+      () =>
+        service.getCertificate({
+          actor: { egovUserId: "another-user" },
+          certificateNumber: "BNN-20260729-BBBBBBBB",
+        }),
+      "CERTIFICATE_NOT_FOUND",
+    );
+  });
+
+  test("does not expose certificates for incomplete registrations", async () => {
+    const { actor, service } = setup();
+    await service.startOrResumeApplication({ actor });
+
+    await expectBnrsError(
+      () => service.getCertificate({ actor, certificateNumber: "BNN-20260729-MISSING0" }),
+      "CERTIFICATE_NOT_FOUND",
+    );
   });
 
   test("starts or resumes the single active application", async () => {

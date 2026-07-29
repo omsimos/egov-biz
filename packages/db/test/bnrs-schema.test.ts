@@ -31,6 +31,28 @@ describe("BNRS schema", () => {
     expect(config.columns.find(({ name }) => name === "latest_payment_id")).toBeDefined();
   });
 
+  test("persists uniquely identified certificate validity", () => {
+    const config = getTableConfig(bnrsApplications);
+    const indexes = config.indexes.map(({ config: index }) => index);
+
+    expect(config.columns.find(({ name }) => name === "certificate_number")).toBeDefined();
+    expect(config.columns.find(({ name }) => name === "valid_until")).toBeDefined();
+    expect(config.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "bnrs_certificate_issuance_complete" }),
+      ]),
+    );
+    expect(indexes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "bnrs_certificate_number_unique",
+          unique: true,
+          where: expect.anything(),
+        }),
+      ]),
+    );
+  });
+
   test("isolates owner details behind a one-to-one application foreign key", () => {
     const config = getTableConfig(bnrsOwnerInformation);
 

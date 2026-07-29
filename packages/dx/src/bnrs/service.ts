@@ -18,6 +18,7 @@ import type {
   BnrsApplicationStatus,
   BnrsBusinessScope,
   BnrsBusinessScopeId,
+  BnrsCertificate,
   BnrsCompletedStep,
   BnrsNextStep,
   BnrsOwnerInformationInput,
@@ -207,6 +208,8 @@ function projectRegisteredBusiness(
   if (
     application.state !== "COMPLETED" ||
     !application.referenceCode ||
+    !application.certificateNumber ||
+    !application.validUntil ||
     !application.proposedBusinessName ||
     !application.descriptorLabel ||
     !application.scope ||
@@ -216,6 +219,7 @@ function projectRegisteredBusiness(
   return {
     applicationId: application.id,
     referenceCode: application.referenceCode,
+    certificateNumber: application.certificateNumber,
     businessName: application.proposedBusinessName,
     descriptor: application.descriptorLabel,
     scope: application.scope,
@@ -314,10 +318,48 @@ export function createBnrsService(options: BnrsServiceOptions) {
     }
   }
 
-  function referenceCode(issuedAt: Date): string {
+  function registrationIdentifier(prefix: "BNRS" | "BNN", issuedAt: Date): string {
     const date = issuedAt.toISOString().slice(0, 10).replaceAll("-", "");
     const suffix = generateId().replaceAll("-", "").slice(0, 8).toUpperCase();
-    return `BNRS-${date}-${suffix}`;
+    return `${prefix}-${date}-${suffix}`;
+  }
+
+  function certificateValidUntil(issuedAt: Date): Date {
+    const validUntil = new Date(issuedAt);
+    const issuedMonth = issuedAt.getUTCMonth();
+    validUntil.setUTCFullYear(issuedAt.getUTCFullYear() + 5);
+    if (validUntil.getUTCMonth() !== issuedMonth) validUntil.setUTCDate(0);
+    return validUntil;
+  }
+
+  async function certificateFor(
+    application: BnrsApplicationRecord,
+  ): Promise<BnrsCertificate | null> {
+    if (
+      application.state !== "COMPLETED" ||
+      !application.certificateNumber ||
+      !application.proposedBusinessName ||
+      !application.descriptorLabel ||
+      !application.scope ||
+      !application.issuedAt ||
+      !application.validUntil
+    )
+      return null;
+    const owner = await options.repository.getOwnerInformation(application.id);
+    const ownerName = [owner?.firstName, owner?.middleName, owner?.lastName, owner?.suffix]
+      .filter((value): value is string => Boolean(value))
+      .join(" ");
+    return {
+      certificateNumber: application.certificateNumber,
+      issuingAgency: "DTI-BNRS",
+      businessName: application.proposedBusinessName,
+      ownerName,
+      descriptor: application.descriptorLabel,
+      territorialScope: application.scope,
+      issuedAt: application.issuedAt.toISOString(),
+      validUntil: application.validUntil.toISOString(),
+      status: "REGISTERED",
+    };
   }
 
   async function registrationFor(
@@ -333,18 +375,17 @@ export function createBnrsService(options: BnrsServiceOptions) {
       !application.scope
     )
       return null;
-    const owner = await options.repository.getOwnerInformation(application.id);
-    const ownerDisplayName = [owner?.firstName, owner?.middleName, owner?.lastName, owner?.suffix]
-      .filter((value): value is string => Boolean(value))
-      .join(" ");
+    const certificate = await certificateFor(application);
+    if (!certificate) return null;
     return {
       referenceCode: application.referenceCode,
       businessName: application.proposedBusinessName,
       descriptor: application.descriptorLabel,
       scope: application.scope,
-      ownerDisplayName,
+      ownerDisplayName: certificate.ownerName,
       issuedAt: application.issuedAt.toISOString(),
       totalPaid: payment.amount,
+      certificate,
     };
   }
 
@@ -409,9 +450,12 @@ export function createBnrsService(options: BnrsServiceOptions) {
       applicationId: payment.applicationId,
       paymentId: payment.id,
       providerStatus: snapshot.providerStatus,
-      referenceCode: currentApplication.referenceCode ?? referenceCode(issuedAt),
+      referenceCode: currentApplication.referenceCode ?? registrationIdentifier("BNRS", issuedAt),
+      certificateNumber:
+        currentApplication.certificateNumber ?? registrationIdentifier("BNN", issuedAt),
       paidAt: snapshot.paidAt ?? transitionNow,
       issuedAt,
+      validUntil: currentApplication.validUntil ?? certificateValidUntil(issuedAt),
       now: transitionNow,
     });
     if (!completed) {
@@ -451,6 +495,19 @@ export function createBnrsService(options: BnrsServiceOptions) {
       return applications
         .map(projectRegisteredBusiness)
         .filter((registration): registration is BnrsRegisteredBusiness => registration !== null);
+    },
+    async getCertificate(input: { actor: BnrsActor; certificateNumber: string }) {
+      const application = await options.repository.getCompletedApplicationByCertificateNumber({
+        egovUserId: validateActor(input.actor),
+        certificateNumber: input.certificateNumber.normalize("NFKC").trim().toUpperCase(),
+      });
+      const certificate = application ? await certificateFor(application) : null;
+      if (!certificate)
+        throw new BnrsError(
+          "CERTIFICATE_NOT_FOUND",
+          "The BNRS certificate was not found for this eGov user.",
+        );
+      return certificate;
     },
     async startOrResumeApplication(input: { actor: BnrsActor }) {
       const application = await options.repository.startOrResumeApplication(

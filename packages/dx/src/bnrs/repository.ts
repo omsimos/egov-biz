@@ -21,7 +21,9 @@ export type BnrsApplicationRecord = {
   totalFee: number | null;
   latestPaymentId: string | null;
   referenceCode: string | null;
+  certificateNumber: string | null;
   issuedAt: Date | null;
+  validUntil: Date | null;
   abandonedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -85,6 +87,10 @@ export class BnrsRepositoryConflict extends Error {
 export interface BnrsRepository {
   startOrResumeApplication(egovUserId: string, now: Date): Promise<BnrsApplicationRecord>;
   getApplication(applicationId: string): Promise<BnrsApplicationRecord | null>;
+  getCompletedApplicationByCertificateNumber(input: {
+    egovUserId: string;
+    certificateNumber: string;
+  }): Promise<BnrsApplicationRecord | null>;
   listCompletedApplications(egovUserId: string): Promise<BnrsApplicationRecord[]>;
   hasOwnerInformation(applicationId: string): Promise<boolean>;
   getOwnerInformation(applicationId: string): Promise<BnrsOwnerInformationInput | null>;
@@ -151,8 +157,10 @@ export interface BnrsRepository {
     paymentId: string;
     providerStatus: string;
     referenceCode: string;
+    certificateNumber: string;
     paidAt: Date;
     issuedAt: Date;
+    validUntil: Date;
     now: Date;
   }): Promise<BnrsPaymentTransitionResult | null>;
 }

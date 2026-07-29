@@ -13,12 +13,18 @@ function setup() {
     "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
     "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
   ];
   const service = createBnrsService({
     repository,
     paymentProvider,
     now: () => NOW,
-    generateId: () => generatedIds.shift() ?? crypto.randomUUID(),
+    generateId: () => {
+      const id = generatedIds.shift();
+      if (!id) throw new Error("The test exhausted its deterministic IDs.");
+      return id;
+    },
   });
   return {
     actor: { egovUserId: "egov-user-1" },
@@ -189,8 +195,50 @@ describe("BNRS hosted payments", () => {
       ownerDisplayName: "Genrev Eledia Zapa",
       issuedAt: NOW.toISOString(),
       totalPaid: 2_030,
+      certificate: {
+        certificateNumber: "BNN-20260729-CCCCCCCC",
+        issuingAgency: "DTI-BNRS",
+        businessName: "Molar Bear Dental Clinic",
+        ownerName: "Genrev Eledia Zapa",
+        descriptor: "DENTAL CLINIC",
+        territorialScope: "NATIONAL",
+        issuedAt: NOW.toISOString(),
+        validUntil: "2031-07-29T08:30:00.000Z",
+        status: "REGISTERED",
+      },
     });
     expect(retried.registration?.referenceCode).toBe(completed.registration?.referenceCode);
+    expect(retried.registration?.certificate).toEqual(completed.registration?.certificate);
+    expect(context.repository.applications.get(applicationId)).toMatchObject({
+      certificateNumber: "BNN-20260729-CCCCCCCC",
+      validUntil: new Date("2031-07-29T08:30:00.000Z"),
+    });
+  });
+
+  test("persists one certificate identity across concurrent paid callbacks", async () => {
+    const context = setup();
+    const applicationId = await prepareApplication(context);
+    const checkout = await context.service.createPayment({
+      actor: context.actor,
+      applicationId,
+      callbackUrl: "https://app.example.test/payments/callback",
+      redirectUrl: "https://app.example.test/payments/return",
+    });
+    context.paymentProvider.updateTransaction(checkout.transactionUuid, {
+      status: "PAID",
+      providerStatus: "paid",
+      paidAt: NOW,
+    });
+
+    const [first, second] = await Promise.all([
+      context.service.syncPaymentStatus({ transactionUuid: checkout.transactionUuid }),
+      context.service.syncPaymentStatus({ transactionUuid: checkout.transactionUuid }),
+    ]);
+
+    expect(first.registration?.certificate).toEqual(second.registration?.certificate);
+    expect(first.registration?.certificate.certificateNumber).toBe(
+      context.repository.applications.get(applicationId)?.certificateNumber,
+    );
   });
 
   test("does not complete a payment whose authoritative amount is different", async () => {
@@ -213,7 +261,11 @@ describe("BNRS hosted payments", () => {
       () => context.service.syncPaymentStatus({ transactionUuid: checkout.transactionUuid }),
       "PAYMENT_VERIFICATION_FAILED",
     );
-    expect(context.repository.applications.get(applicationId)?.state).toBe("PAYMENT_PENDING");
+    expect(context.repository.applications.get(applicationId)).toMatchObject({
+      state: "PAYMENT_PENDING",
+      certificateNumber: null,
+      validUntil: null,
+    });
   });
 
   test("returns failed payments to payment-ready so details can be edited", async () => {

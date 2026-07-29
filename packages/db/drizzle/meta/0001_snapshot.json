@@ -1,0 +1,566 @@
+{
+  "id": "044ef0be-5cae-4453-9209-8771a67d6496",
+  "prevId": "69aba753-640e-4a92-bb9a-65297a3bb556",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.bnrs_applications": {
+      "name": "bnrs_applications",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "egov_user_id": {
+          "name": "egov_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "bnrs_application_state",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'TERMS_PENDING'"
+        },
+        "terms_accepted_at": {
+          "name": "terms_accepted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dominant_name": {
+          "name": "dominant_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "descriptor_id": {
+          "name": "descriptor_id",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "descriptor_label": {
+          "name": "descriptor_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "proposed_business_name": {
+          "name": "proposed_business_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "normalized_business_name": {
+          "name": "normalized_business_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scope": {
+          "name": "scope",
+          "type": "bnrs_business_scope",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "registration_fee": {
+          "name": "registration_fee",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "documentary_stamp_tax": {
+          "name": "documentary_stamp_tax",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_fee": {
+          "name": "total_fee",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "latest_payment_id": {
+          "name": "latest_payment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reference_code": {
+          "name": "reference_code",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "certificate_number": {
+          "name": "certificate_number",
+          "type": "varchar(40)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "issued_at": {
+          "name": "issued_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "valid_until": {
+          "name": "valid_until",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "abandoned_at": {
+          "name": "abandoned_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "bnrs_one_active_application_per_user": {
+          "name": "bnrs_one_active_application_per_user",
+          "columns": [
+            {
+              "expression": "egov_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"bnrs_applications\".\"state\" not in ('COMPLETED', 'ABANDONED')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bnrs_reserved_business_name_unique": {
+          "name": "bnrs_reserved_business_name_unique",
+          "columns": [
+            {
+              "expression": "normalized_business_name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"bnrs_applications\".\"state\" in ('PAYMENT_PENDING', 'COMPLETED')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bnrs_reference_code_unique": {
+          "name": "bnrs_reference_code_unique",
+          "columns": [
+            {
+              "expression": "reference_code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"bnrs_applications\".\"reference_code\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bnrs_certificate_number_unique": {
+          "name": "bnrs_certificate_number_unique",
+          "columns": [
+            {
+              "expression": "certificate_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"bnrs_applications\".\"certificate_number\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bnrs_applications_user_history": {
+          "name": "bnrs_applications_user_history",
+          "columns": [
+            {
+              "expression": "egov_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "bnrs_certificate_issuance_complete": {
+          "name": "bnrs_certificate_issuance_complete",
+          "value": "(\"bnrs_applications\".\"certificate_number\" is null and \"bnrs_applications\".\"valid_until\" is null) or (\"bnrs_applications\".\"certificate_number\" is not null and \"bnrs_applications\".\"valid_until\" is not null and \"bnrs_applications\".\"state\" = 'COMPLETED')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.bnrs_owner_information": {
+      "name": "bnrs_owner_information",
+      "schema": "",
+      "columns": {
+        "application_id": {
+          "name": "application_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "citizenship": {
+          "name": "citizenship",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_name": {
+          "name": "first_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "middle_name": {
+          "name": "middle_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_name": {
+          "name": "last_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "suffix": {
+          "name": "suffix",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "birth_date": {
+          "name": "birth_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gender": {
+          "name": "gender",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "bnrs_owner_information_application_id_bnrs_applications_id_fk": {
+          "name": "bnrs_owner_information_application_id_bnrs_applications_id_fk",
+          "tableFrom": "bnrs_owner_information",
+          "tableTo": "bnrs_applications",
+          "columnsFrom": [
+            "application_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.bnrs_payments": {
+      "name": "bnrs_payments",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "application_id": {
+          "name": "application_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "varchar(40)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'EGOVPAY'"
+        },
+        "status": {
+          "name": "status",
+          "type": "bnrs_payment_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'CREATING'"
+        },
+        "transaction_id": {
+          "name": "transaction_id",
+          "type": "varchar(150)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "transaction_uuid": {
+          "name": "transaction_uuid",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "checkout_url": {
+          "name": "checkout_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "amount": {
+          "name": "amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "currency": {
+          "name": "currency",
+          "type": "varchar(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'PHP'"
+        },
+        "provider_status": {
+          "name": "provider_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "paid_at": {
+          "name": "paid_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "bnrs_one_pending_payment_per_application": {
+          "name": "bnrs_one_pending_payment_per_application",
+          "columns": [
+            {
+              "expression": "application_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"bnrs_payments\".\"status\" in ('CREATING', 'PENDING')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bnrs_payment_transaction_uuid_unique": {
+          "name": "bnrs_payment_transaction_uuid_unique",
+          "columns": [
+            {
+              "expression": "transaction_uuid",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bnrs_payment_transaction_id_unique": {
+          "name": "bnrs_payment_transaction_id_unique",
+          "columns": [
+            {
+              "expression": "transaction_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bnrs_payments_application_history": {
+          "name": "bnrs_payments_application_history",
+          "columns": [
+            {
+              "expression": "application_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "bnrs_payments_application_id_bnrs_applications_id_fk": {
+          "name": "bnrs_payments_application_id_bnrs_applications_id_fk",
+          "tableFrom": "bnrs_payments",
+          "tableTo": "bnrs_applications",
+          "columnsFrom": [
+            "application_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.bnrs_application_state": {
+      "name": "bnrs_application_state",
+      "schema": "public",
+      "values": [
+        "TERMS_PENDING",
+        "OWNER_INFORMATION_PENDING",
+        "BUSINESS_NAME_PENDING",
+        "SCOPE_PENDING",
+        "PAYMENT_READY",
+        "PAYMENT_PENDING",
+        "COMPLETED",
+        "ABANDONED"
+      ]
+    },
+    "public.bnrs_business_scope": {
+      "name": "bnrs_business_scope",
+      "schema": "public",
+      "values": [
+        "CITY_MUNICIPALITY",
+        "REGIONAL",
+        "NATIONAL"
+      ]
+    },
+    "public.bnrs_payment_status": {
+      "name": "bnrs_payment_status",
+      "schema": "public",
+      "values": [
+        "CREATING",
+        "PENDING",
+        "PAID",
+        "FAILED",
+        "EXPIRED",
+        "VOIDED"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

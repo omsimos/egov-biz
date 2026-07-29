@@ -11,7 +11,8 @@ export type BnrsErrorCode =
   | "PAYMENT_NOT_READY"
   | "PAYMENT_NOT_FOUND"
   | "PAYMENT_PROVIDER_ERROR"
-  | "PAYMENT_VERIFICATION_FAILED";
+  | "PAYMENT_VERIFICATION_FAILED"
+  | "CERTIFICATE_NOT_FOUND";
 
 export class BnrsError extends Error {
   readonly code: BnrsErrorCode;

@@ -82,9 +82,11 @@ Use `syncPaymentStatus({ transactionUuid })` from both callback and return handl
 
 If checkout creation is interrupted, retries keep the same provider transaction ID. An authoritative callback can attach the provider UUID to the creating attempt, and a later creation retry restores a missing checkout URL without opening a second logical payment attempt.
 
-After verified payment, DX generates a `BNRS-YYYYMMDD-XXXXXXXX` reference and returns the business name, descriptor, scope, owner display name, issue time, and total paid.
+After verified payment, DX generates a `BNRS-YYYYMMDD-XXXXXXXX` transaction reference and a separate mock DTI Certificate No./Business Name Number in `BNN-YYYYMMDD-XXXXXXXX` form. Completion returns the business name, descriptor, scope, owner display name, issue time, total paid, and a structured JSON certificate. Certificate issuance is part of the same idempotent database transition as payment completion, so payment retries and callback races preserve the first certificate identity.
 
-Use `listRegisteredBusinesses({ actor })` to retrieve the authenticated user's completed BNRS registrations, newest first. Each result includes the application ID, BNRS reference, business name, descriptor, scope, and issue time. Incomplete and abandoned applications are not returned.
+The JSON certificate contains its certificate number, `DTI-BNRS` issuing agency, business and owner names, descriptor, territorial scope, issue time, five-year validity, and `REGISTERED` status. The database stores only the certificate number and validity timestamp; all other fields are projected from authoritative normalized application and owner records.
+
+Use `listRegisteredBusinesses({ actor })` to retrieve the authenticated user's completed BNRS registrations, newest first. Each result includes the application ID, transaction reference, certificate number, business name, descriptor, scope, and issue time. Incomplete and abandoned applications are not returned. The list intentionally includes only the certificate number rather than duplicating the full certificate; pass that value to `getCertificate({ actor, certificateNumber })` to retrieve the current authoritative JSON certificate. Both operations are scoped to the authenticated eGov user.
 
 ## Catalog and fees
 
@@ -102,7 +104,7 @@ Fee and descriptor values are snapshotted on each application so later catalog c
 
 The Drizzle schema uses three tables:
 
-- `bnrs_applications` for ownership, lifecycle, business name, scope, fee snapshot, and registration result
+- `bnrs_applications` for ownership, lifecycle, business name, scope, fee snapshot, registration result, certificate number, and certificate validity
 - `bnrs_owner_information` for the one-to-one owner PII record
 - `bnrs_payments` for every hosted-payment attempt and provider reference
 
@@ -116,4 +118,4 @@ Run the generated migration through the `@repo/db` migration command before usin
 - Barangay scope is not included yet.
 - A fuller descriptor catalog and any database seeder will be added separately.
 - Live DTI/BNRS API calls, agent tools, and application routes are outside this package.
-- Certificate PDF generation is deferred; completion currently returns a structured registration result.
+- Certificate PDF generation and document storage are deferred; the structured JSON certificate is implemented.

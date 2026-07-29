@@ -36,7 +36,9 @@ export class MemoryBnrsRepository implements BnrsRepository {
       totalFee: null,
       latestPaymentId: null,
       referenceCode: null,
+      certificateNumber: null,
       issuedAt: null,
+      validUntil: null,
       abandonedAt: null,
       createdAt: now,
       updatedAt: now,
@@ -47,6 +49,18 @@ export class MemoryBnrsRepository implements BnrsRepository {
 
   async getApplication(applicationId: string) {
     const application = this.applications.get(applicationId);
+    return application ? structuredClone(application) : null;
+  }
+
+  async getCompletedApplicationByCertificateNumber(
+    input: Parameters<BnrsRepository["getCompletedApplicationByCertificateNumber"]>[0],
+  ) {
+    const application = [...this.applications.values()].find(
+      (candidate) =>
+        candidate.egovUserId === input.egovUserId &&
+        candidate.certificateNumber === input.certificateNumber &&
+        candidate.state === "COMPLETED",
+    );
     return application ? structuredClone(application) : null;
   }
 
@@ -251,7 +265,9 @@ export class MemoryBnrsRepository implements BnrsRepository {
     payment.updatedAt = input.now;
     application.state = "COMPLETED";
     application.referenceCode ??= input.referenceCode;
+    application.certificateNumber ??= input.certificateNumber;
     application.issuedAt ??= input.issuedAt;
+    application.validUntil ??= input.validUntil;
     application.updatedAt = input.now;
     return { application: structuredClone(application), payment: structuredClone(payment) };
   }

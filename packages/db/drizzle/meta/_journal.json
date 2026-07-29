@@ -8,6 +8,13 @@
       "when": 1785258959119,
       "tag": "0000_curved_vin_gonzales",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785312433449,
+      "tag": "0001_spooky_captain_midlands",
+      "breakpoints": true
     }
   ]
 }

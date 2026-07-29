@@ -1,5 +1,6 @@
 import { relations, sql } from "drizzle-orm";
 import {
+  check,
   date,
   index,
   integer,
@@ -61,7 +62,9 @@ export const bnrsApplications = pgTable(
     totalFee: integer("total_fee"),
     latestPaymentId: uuid("latest_payment_id"),
     referenceCode: varchar("reference_code", { length: 32 }),
+    certificateNumber: varchar("certificate_number", { length: 40 }),
     issuedAt: timestamp("issued_at", { mode: "date", withTimezone: true }),
+    validUntil: timestamp("valid_until", { mode: "date", withTimezone: true }),
     abandonedAt: timestamp("abandoned_at", { mode: "date", withTimezone: true }),
     ...timestamps,
   },
@@ -75,6 +78,13 @@ export const bnrsApplications = pgTable(
     uniqueIndex("bnrs_reference_code_unique")
       .on(table.referenceCode)
       .where(sql`${table.referenceCode} is not null`),
+    uniqueIndex("bnrs_certificate_number_unique")
+      .on(table.certificateNumber)
+      .where(sql`${table.certificateNumber} is not null`),
+    check(
+      "bnrs_certificate_issuance_complete",
+      sql`(${table.certificateNumber} is null and ${table.validUntil} is null) or (${table.certificateNumber} is not null and ${table.validUntil} is not null and ${table.state} = 'COMPLETED')`,
+    ),
     index("bnrs_applications_user_history").on(table.egovUserId, table.createdAt),
   ],
 );
