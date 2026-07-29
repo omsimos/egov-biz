@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { getDatabase, schema } from "@/server/db";
-import { markPaymentCheckpointComplete } from "@/server/conversations";
 
 export type StoredPayment = {
   id: string;
@@ -149,7 +148,5 @@ export async function updatePaymentStatus(
     })
     .where(eq(schema.payments.transactionUuid, transactionUuid))
     .returning();
-  if (paid && payment.serviceType === "dti-business-name")
-    await markPaymentCheckpointComplete(payment.conversationId);
   return updated ? mapPayment(updated) : null;
 }

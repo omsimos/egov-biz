@@ -14,13 +14,31 @@ import type { BusinessRecord, TaxObligation } from "@/lib/registered-business";
 export type DtiBusinessNameForm = {
   applicationType: "New registration";
   status: "Draft" | "Ready to submit" | "Submitted";
+  /** Optional only so persisted pre-DX conversation messages remain renderable. */
+  dominantName?: string;
+  descriptorId?: string;
+  descriptorLabel?: string;
   proposedName: string;
   businessActivity: string;
   territorialScope: "Barangay" | "City / municipality" | "Regional" | "National";
+  territorialScopeId?: "CITY_MUNICIPALITY" | "REGIONAL" | "NATIONAL";
   ownerName: string;
   businessAddress: string;
+  businessAddressDetails?: {
+    source: "EGOV_RESIDENTIAL" | "USER_PROVIDED";
+    addressLine1: string;
+    addressLine2?: string;
+    barangay: string;
+    cityMunicipality: string;
+    province: string;
+    region: string;
+    postalCode: string;
+  };
   city: string;
   feeLabel: string;
+  termsAndConditions?: string;
+  businessNameRequirements?: readonly string[];
+  termsAccepted?: boolean;
   missingFields: string[];
 };
 
@@ -38,8 +56,15 @@ export type AskUserOutput = {
 };
 export type WebSearchInput = { query: string; numResults?: number };
 export type WebSearchOutput = { results: { title: string; url: string }[] };
-export type EditDtiInput = { form: DtiBusinessNameForm; note: string };
-export type EditDtiOutput = { form: DtiBusinessNameForm };
+export type EditDtiInput = {
+  applicationId?: string;
+  form?: DtiBusinessNameForm;
+  note: string;
+};
+export type EditDtiOutput = {
+  applicationId: string;
+  form?: DtiBusinessNameForm;
+};
 export type BarangayClearanceApplication = {
   businessName: string;
   ownerName: string;

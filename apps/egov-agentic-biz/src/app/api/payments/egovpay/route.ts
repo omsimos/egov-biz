@@ -1,7 +1,7 @@
+import { BnrsError } from "@repo/dx/bnrs";
 import { eGovPayApi } from "@repo/egov/eGovPay";
 import { z } from "zod";
 import { readSession } from "@/lib/auth/session";
-import { dtiRegistrationFee } from "@/lib/dti-fees";
 import {
   egovPayBaseUrl,
   hostedCheckoutUrl,
@@ -10,6 +10,8 @@ import {
 } from "@/lib/payment-urls";
 import { classifyPaymentNetworkError, paymentNetworkMessage } from "@/lib/payment-network";
 import { getConversation } from "@/server/conversations";
+import { bnrsActorFromProfile } from "@/server/dx/bnrs";
+import { createBnrsCheckout } from "@/server/dx/bnrs-applications";
 import {
   createPayment,
   getLatestPaymentForService,
@@ -23,9 +25,6 @@ const requestSchema = z.discriminatedUnion("serviceType", [
   z.object({
     serviceType: z.literal("dti-business-name"),
     conversationId: z.string().uuid(),
-    proposedName: z.string().trim().min(1).max(200),
-    territorialScope: z.enum(["Barangay", "City / municipality", "Regional", "National"]),
-    serviceReference: z.string().max(200).optional(),
   }),
   z.object({
     serviceType: z.literal("barangay-clearance"),
@@ -41,12 +40,10 @@ const requestSchema = z.discriminatedUnion("serviceType", [
   }),
 ]);
 
-const services: Record<PaymentServiceType, { amount: number; prefix: string; label: string }> = {
-  "dti-business-name": {
-    amount: 0,
-    prefix: "DTI-BNR",
-    label: "DTI Business Name Registration",
-  },
+const services: Record<
+  Exclude<PaymentServiceType, "dti-business-name">,
+  { amount: number; prefix: string; label: string }
+> = {
   "barangay-clearance": {
     amount: 500,
     prefix: "BRGY-CLR",
@@ -62,6 +59,7 @@ const services: Record<PaymentServiceType, { amount: number; prefix: string; lab
 export async function POST(request: Request) {
   const session = await readSession(request);
   if (!session) return Response.json({ error: "Authentication required." }, { status: 401 });
+  const actor = bnrsActorFromProfile(session.rawProfile);
 
   const parsed = requestSchema.safeParse(await request.json());
   if (!parsed.success)
@@ -69,7 +67,7 @@ export async function POST(request: Request) {
       { error: "Check the application details and try again." },
       { status: 400 },
     );
-  if (!(await getConversation(parsed.data.conversationId)))
+  if (!(await getConversation(actor.egovUserId, parsed.data.conversationId)))
     return Response.json({ error: "Chat session not found." }, { status: 404 });
 
   if (
@@ -79,25 +77,39 @@ export async function POST(request: Request) {
   )
     return Response.json({ error: "eGovPay is not available right now." }, { status: 503 });
 
-  const existing = await getLatestPaymentForService(
-    parsed.data.conversationId,
-    parsed.data.serviceType,
-  );
-  if (existing && isPaidStatus(existing.status))
-    return Response.json(
-      { error: "This fee has already been paid.", payment: existing },
-      { status: 409 },
-    );
-
-  const service = services[parsed.data.serviceType];
-  const amount =
-    parsed.data.serviceType === "dti-business-name"
-      ? dtiRegistrationFee(parsed.data.territorialScope)
-      : service.amount;
-  const transactionId = `${service.prefix}-${crypto.randomUUID()}`;
-
   try {
     const baseUrl = egovPayBaseUrl();
+    if (parsed.data.serviceType === "dti-business-name") {
+      const { callbackUrl, redirectUrl } = paymentUrls(request, {
+        conversationId: parsed.data.conversationId,
+      });
+      const checkout = await createBnrsCheckout({
+        actor,
+        callbackUrl,
+        conversationId: parsed.data.conversationId,
+        redirectUrl,
+      });
+      return Response.json({
+        checkoutUrl: hostedCheckoutUrl(checkout.checkoutUrl, baseUrl).toString(),
+        transactionUuid: checkout.transactionUuid,
+        transactionId: checkout.transactionId,
+        amount: checkout.amount,
+        payment: { status: "pending", serviceType: "dti-business-name" },
+      });
+    }
+
+    const existing = await getLatestPaymentForService(
+      parsed.data.conversationId,
+      parsed.data.serviceType,
+    );
+    if (existing && isPaidStatus(existing.status))
+      return Response.json(
+        { error: "This fee has already been paid.", payment: existing },
+        { status: 409 },
+      );
+    const service = services[parsed.data.serviceType];
+    const amount = service.amount;
+    const transactionId = `${service.prefix}-${crypto.randomUUID()}`;
     const { callbackUrl, redirectUrl } = paymentUrls(request, {
       conversationId: parsed.data.conversationId,
       transactionId,
@@ -109,9 +121,7 @@ export async function POST(request: Request) {
         currency: "PHP",
         description: {
           service: service.label,
-          ...(parsed.data.serviceType === "dti-business-name"
-            ? { scope: parsed.data.territorialScope }
-            : { reference: parsed.data.serviceReference }),
+          reference: parsed.data.serviceReference,
         },
         items: [{ amount, name: service.label }],
         name: session.profile.fullName,
@@ -129,10 +139,7 @@ export async function POST(request: Request) {
       amount,
       status: "pending",
       proposedName: parsed.data.proposedName,
-      territorialScope:
-        parsed.data.serviceType === "dti-business-name"
-          ? parsed.data.territorialScope
-          : "Not applicable",
+      territorialScope: "Not applicable",
       ownerName: session.profile.fullName,
       serviceType: parsed.data.serviceType,
       serviceReference: parsed.data.serviceReference ?? null,
@@ -145,6 +152,8 @@ export async function POST(request: Request) {
       payment: storedPayment,
     });
   } catch (error) {
+    if (error instanceof BnrsError)
+      return Response.json({ error: error.message, code: error.code }, { status: 409 });
     if (error instanceof PaymentUrlConfigurationError) {
       console.error("eGovPay URL configuration failed", {
         field: error.field,

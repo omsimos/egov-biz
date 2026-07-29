@@ -254,9 +254,7 @@ function ChatCardsPreview() {
             serviceType: "dti-business-name",
             serviceLabel: "DTI Business Name Registration",
             proposedName: "Kape Diaria",
-            ownerName: "Josh Preview",
             feeLabel: "₱1,030.00",
-            territorialScope: "City / municipality",
           }}
         />
       )}

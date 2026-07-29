@@ -2,7 +2,8 @@ import { readSession } from "@/lib/auth/session";
 import { createBirFormArtifact } from "@/lib/bir-form/artifact";
 import { generateDemoBusinessFilePdf } from "@/lib/business-file-pdf";
 import { buildBir2303Input, generateBir2303Html } from "@/lib/form-generators/bir-2303";
-import { getRegisteredBusiness } from "@/server/registered-businesses";
+import { getBusiness } from "@/server/businesses";
+import { bnrsActorFromProfile } from "@/server/dx/bnrs";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,13 @@ export async function GET(
   const session = await readSession(request);
   if (!session) return Response.json({ error: "Authentication required." }, { status: 401 });
   const { id, fileId } = await context.params;
-  const business = await getRegisteredBusiness(session.profile.id, id);
+  const business = await getBusiness(
+    {
+      actor: bnrsActorFromProfile(session.rawProfile),
+      legacyProfileId: session.profile.id,
+    },
+    id,
+  );
   const file = business?.files.find((item) => item.id === fileId);
   if (!business || !file)
     return Response.json({ error: "Business file not found." }, { status: 404 });
