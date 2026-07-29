@@ -21,8 +21,14 @@ mock.module("@/server/auth-sessions", () => ({
   },
 }));
 
-const { AUTH_COOKIE_NAME, createSession, deleteSession, readSession, sessionCookieOptions } =
-  await import("@/lib/auth/session");
+const {
+  AUTH_COOKIE_NAME,
+  birFormArtifactOwnerId,
+  createSession,
+  deleteSession,
+  readSession,
+  sessionCookieOptions,
+} = await import("@/lib/auth/session");
 
 const globalSessionRegistry = globalThis as typeof globalThis & {
   egovAgenticBizSessions?: Map<string, unknown>;
@@ -59,6 +65,23 @@ describe("authenticated session", () => {
       fullName: "Juan Dela Cruz",
       id: rawProfile.uniqid,
     });
+    expect(readSession(requestFor(sessionId))?.id).toBe(sessionId);
+    expect(birFormArtifactOwnerId(readSession(requestFor(sessionId))!)).toBe(
+      `citizen:${rawProfile.uniqid}`,
+    );
+  });
+
+  test("provides storage ownership even when the SSO profile has no uniqid", () => {
+    const { sessionId } = createSession({
+      email: "no-id@example.test",
+      first_name: "No",
+      last_name: "ID",
+    } as EgovSsoCitizenProfile);
+    createdSessionIds.push(sessionId);
+
+    const session = readSession(requestFor(sessionId));
+    expect(session?.id).toBe(sessionId);
+    expect(birFormArtifactOwnerId(session!)).toBe(`session:${sessionId}`);
   });
 
   test("uses a persistent HttpOnly cookie", () => {

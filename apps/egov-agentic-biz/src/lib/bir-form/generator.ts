@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from "pdf-lib";
+import { standardFontText } from "@/lib/bir-form/pdf-text";
 import type { Bir1901Data } from "@/lib/bir-form/schema";
 
 type TextField = {
@@ -52,7 +53,7 @@ function fitFontSize(
 }
 
 function drawText(page: PDFPage, font: PDFFont, value: unknown, field: TextField) {
-  const text = printable(value);
+  const text = standardFontText(font, printable(value));
   if (!text) return;
   const fontSize = fitFontSize(
     font,
@@ -72,7 +73,7 @@ function drawText(page: PDFPage, font: PDFFont, value: unknown, field: TextField
 }
 
 function drawCenteredText(page: PDFPage, font: PDFFont, value: unknown, field: TextField) {
-  const text = printable(value);
+  const text = standardFontText(font, printable(value));
   if (!text) return;
   const fontSize = fitFontSize(
     font,
@@ -220,17 +221,7 @@ async function signatureImage(pdf: PDFDocument, source: string | undefined) {
   } else if (/^[A-Za-z0-9+/=\s]+$/.test(value) && value.length > 100) {
     bytes = Buffer.from(value.replaceAll(/\s/g, ""), "base64");
   } else {
-    const url = new URL(value);
-    if (url.protocol !== "https:") throw new Error("Signature URL must use HTTPS");
-    const response = await fetch(url, {
-      cache: "no-store",
-      redirect: "follow",
-      signal: AbortSignal.timeout(8_000),
-    });
-    const contentLength = Number.parseInt(response.headers.get("content-length") ?? "0", 10);
-    if (!response.ok) throw new Error("Signature URL could not be loaded");
-    if (contentLength > 2_000_000) throw new Error("Signature image is too large");
-    bytes = new Uint8Array(await response.arrayBuffer());
+    throw new Error("Signature image must be an embedded PNG or JPEG");
   }
 
   if (bytes.byteLength > 2_000_000) throw new Error("Signature image is too large");
@@ -527,8 +518,8 @@ function drawPageTwo(page: PDFPage, font: PDFFont, bold: PDFFont, data: Bir1901D
   drawText(page, font, incentives?.legalBasis, { maxWidth: 130, x: 205, y: 597 });
   drawText(page, font, incentives?.incentiveGranted, { maxWidth: 200, x: 376, y: 597 });
   drawCenteredText(page, font, incentives?.numberOfYears, {
-    maxWidth: 70,
-    x: 32,
+    maxWidth: 58,
+    x: 103,
     y: 579,
   });
   drawDate(page, font, incentives?.startDate, { maxWidth: 103, x: 263, y: 579 });

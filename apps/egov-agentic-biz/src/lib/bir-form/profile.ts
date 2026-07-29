@@ -1,5 +1,5 @@
 import type { EgovSsoCitizenProfile } from "@repo/egov/eGovSso";
-import type { Bir1901Data } from "@/lib/bir-form/schema";
+import type { Bir1901Data, Bir1905Data } from "@/lib/bir-form/schema";
 import { normalizeTin } from "@/lib/tin";
 
 const syntheticSignature =
@@ -178,7 +178,7 @@ export function mapEgovProfileToBir1901(profile: unknown): Bir1901Data {
     mother.mother_maiden_lastname,
   ]);
   const foreignAddress = foreignAddressFromUnknown(rawProfile.foreign_address);
-  const signatureSource = [rawProfile.signature, nationalId.signature, rawProfile.signature_url]
+  const signatureSource = [rawProfile.signature, nationalId.signature]
     .map(stringValue)
     .find(Boolean);
   const tin = normalizeTin(rawProfile.tin_id) || undefined;
@@ -247,6 +247,30 @@ export function mapEgovProfileToBir1901(profile: unknown): Bir1901Data {
     paymentOrder: {
       taxpayerTin: tin,
       taxpayerName: fullName || undefined,
+    },
+  };
+}
+
+export function mapEgovProfileToBir1905(profile: unknown): Bir1905Data {
+  const rawProfile = recordValue(profile);
+  const nationalId = recordValue(rawProfile.national_id);
+  const registeredName = joinNonEmpty(
+    [rawProfile.last_name, rawProfile.first_name, rawProfile.middle_name, rawProfile.suffix],
+    ", ",
+  );
+  const signatureSource = [rawProfile.signature, nationalId.signature]
+    .map(stringValue)
+    .find(Boolean);
+
+  return {
+    taxpayerInformation: {
+      tin: normalizeTin(rawProfile.tin_id) || undefined,
+      contactNumber: optionalString(rawProfile.mobile) || optionalString(rawProfile.landline),
+      registeredName: registeredName || undefined,
+    },
+    declaration: {
+      signatureSource,
+      printedName: registeredName || undefined,
     },
   };
 }

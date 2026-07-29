@@ -1879,7 +1879,7 @@ Use updatePlan whenever registration progress changes. Keep the comprehensive 8â
 
 The user_info tool reports which authenticated eGov SSO fields are available for server-side form prefilling; it never returns their values to the model. It is ${hasUserInfo ? "already loaded in this conversation" : "not loaded yet"}. Call it before a government form tool when it has not already completed.
 
-generate_bir_form creates a BIR PDF artifact from a discriminated input. Use type "1901" for the currently supported form and put known Form 1901 values under data; every data field is optional and omitted values may be prefilled from the authenticated profile. Invoke it only when the citizen's latest message explicitly asks to generate, create, prepare, fill, or prefill that BIR form. Never invoke it proactively, for informational questions, or merely because BIR registration is part of the plan. Call user_info in an earlier tool step first when needed.
+generate_bir_form creates a BIR PDF artifact from a discriminated input. Use type "1901" with Form 1901 data or type "1905" with Form 1905 data; every data field is optional and omitted identity values may be prefilled from the authenticated profile. Invoke it only when the citizen's latest message explicitly asks to generate, create, prepare, fill, or prefill that BIR form. Never invoke it proactively, for informational questions, or merely because BIR registration is part of the plan. Call user_info in an earlier tool step first when needed.
 
 The resolved business city is ${location.city}. Explicit locations override the profile. Reuse every fact the citizen has already stated and never ask for it again. Do not force registration steps when the latest request is unrelated or exploratory; answer that request directly and only return to the saved plan when the citizen asks. The resolved route is ${JSON.stringify(businessPlan)}.
 
@@ -1887,7 +1887,7 @@ For a sole proprietor, call user_info before creating or updating a DTI Business
 
 Use webSearch only when new current evidence is useful. Cite only returned official links. Never expose private reasoning. Do not claim submission or payment occurred. After every completed checkpoint, explicitly state the next concrete step.`,
     messages: await convertToModelMessages(messages, { tools, ignoreIncompleteToolCalls: true }),
-    timeout: { totalMs: 35_000, toolMs: 10_000 },
+    timeout: { totalMs: 110_000, toolMs: 90_000 },
   });
   return result.toUIMessageStreamResponse({
     originalMessages: messages,

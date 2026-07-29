@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  bir1905DataSchema,
+  bir1905FormInputSchema,
+  type Bir1905Data,
+  type Bir1905FormInput,
+} from "@/lib/bir-form/schema-1905";
 
 const optionalText = (description: string) => z.string().describe(description).optional();
 const optionalDate = (description: string) =>
@@ -107,7 +113,7 @@ const employerSchema = z
   .describe("One employer listed under multiple employments.");
 
 const signatureSourceSchema = optionalText(
-  "Signature image source. Supply a PNG/JPEG data URL, base64 image, or HTTPS image URL.",
+  "Signature image source. Supply a PNG or JPEG data URL, or the image bytes encoded as base64.",
 );
 
 /**
@@ -647,9 +653,11 @@ export const bir1901FormInputSchema = z
  * both at runtime (Zod) and compile time (TypeScript).
  */
 export const generateBirFormInputSchema = z
-  .discriminatedUnion("type", [bir1901FormInputSchema])
+  .discriminatedUnion("type", [bir1901FormInputSchema, bir1905FormInputSchema])
   .describe("Generate-BIR-form input selected by its form type discriminator.");
 
 export type Bir1901Data = z.infer<typeof bir1901DataSchema>;
 export type Bir1901FormInput = z.infer<typeof bir1901FormInputSchema>;
 export type GenerateBirFormInput = z.infer<typeof generateBirFormInputSchema>;
+export { bir1905DataSchema, bir1905FormInputSchema };
+export type { Bir1905Data, Bir1905FormInput };

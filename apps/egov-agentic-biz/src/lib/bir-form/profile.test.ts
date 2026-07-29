@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { EgovSsoCitizenProfile } from "@repo/egov/eGovSso";
-import { completeEgovSsoTestProfile, mapEgovProfileToBir1901 } from "@/lib/bir-form/profile";
-import { bir1901DataSchema } from "@/lib/bir-form/schema";
+import {
+  completeEgovSsoTestProfile,
+  mapEgovProfileToBir1901,
+  mapEgovProfileToBir1905,
+} from "@/lib/bir-form/profile";
+import { bir1901DataSchema, bir1905DataSchema } from "@/lib/bir-form/schema";
 
 describe("mapEgovProfileToBir1901", () => {
   test("maps every authoritative BIR 1901 field in the complete SSO fixture", () => {
@@ -131,5 +135,42 @@ describe("mapEgovProfileToBir1901", () => {
     expect(result.taxpayerInformation?.localResidenceAddress?.streetName).toBe(
       "Fallback Residence Address",
     );
+  });
+
+  test("does not pass a remote profile signature URL to the PDF generator", () => {
+    const result = mapEgovProfileToBir1901({
+      first_name: "Juan",
+      signature_url: "https://assets.example.test/user-signature.png",
+    });
+
+    expect(result.declaration?.signatureSource).toBeUndefined();
+  });
+});
+
+describe("mapEgovProfileToBir1905", () => {
+  test("maps the authoritative Form 1905 identity fields", () => {
+    const result = mapEgovProfileToBir1905(completeEgovSsoTestProfile);
+
+    expect(result).toMatchObject({
+      taxpayerInformation: {
+        tin: "12345678900000",
+        contactNumber: "+639170000000",
+        registeredName: "Dela Cruz, Juan, Santos, Jr.",
+      },
+      declaration: {
+        printedName: "Dela Cruz, Juan, Santos, Jr.",
+      },
+    });
+    expect(result.declaration?.signatureSource).toStartWith("data:image/png;base64,");
+    expect(bir1905DataSchema.safeParse(result).success).toBe(true);
+  });
+
+  test("does not pass a remote profile signature URL to the PDF generator", () => {
+    const result = mapEgovProfileToBir1905({
+      first_name: "Juan",
+      signature_url: "https://assets.example.test/user-signature.png",
+    });
+
+    expect(result.declaration?.signatureSource).toBeUndefined();
   });
 });

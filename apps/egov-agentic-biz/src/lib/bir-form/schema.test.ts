@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { z } from "zod";
 import {
   bir1901DataSchema,
+  bir1905DataSchema,
   generateBirFormInputSchema,
   type GenerateBirFormInput,
 } from "@/lib/bir-form/schema";
@@ -57,7 +58,9 @@ describe("generateBirFormInputSchema", () => {
 
     const parsed = generateBirFormInputSchema.parse(input);
     expect(parsed.type).toBe("1901");
-    expect(parsed.data.invoices?.birPrintedInvoices?.numberOfBooklets).toBe(2);
+    if (parsed.type === "1901") {
+      expect(parsed.data.invoices?.birPrintedInvoices?.numberOfBooklets).toBe(2);
+    }
   });
 
   test("allows an empty Form 1901 draft because every data field is optional", () => {
@@ -67,27 +70,75 @@ describe("generateBirFormInputSchema", () => {
     });
   });
 
+  test("narrows Form 1905 data from the required discriminator", () => {
+    const input: GenerateBirFormInput = {
+      type: "1905",
+      data: {
+        taxpayerInformation: {
+          tin: "123-456-789-00000",
+          registeredName: "Dela Cruz, Juan Santos",
+        },
+        registrationInformationUpdate: {
+          registeredAddress: {
+            selected: true,
+            transferToAnotherRdo: true,
+            oldRdoCode: "039",
+            newRdoCode: "040",
+          },
+        },
+      },
+    };
+
+    const parsed = generateBirFormInputSchema.parse(input);
+    expect(parsed.type).toBe("1905");
+    if (parsed.type === "1905") {
+      expect(parsed.data.registrationInformationUpdate?.registeredAddress?.newRdoCode).toBe("040");
+    }
+  });
+
+  test("allows an empty Form 1905 draft because every data field is optional", () => {
+    expect(generateBirFormInputSchema.parse({ type: "1905", data: {} })).toEqual({
+      type: "1905",
+      data: {},
+    });
+  });
+
   test("serializes the discriminator and form data as a tool-compatible JSON Schema", () => {
     const jsonSchema = z.toJSONSchema(generateBirFormInputSchema);
-    expect(jsonSchema).toMatchObject({
-      description: "Generate-BIR-form input selected by its form type discriminator.",
-      oneOf: [
-        {
-          properties: {
+    expect(jsonSchema.description).toBe(
+      "Generate-BIR-form input selected by its form type discriminator.",
+    );
+    expect(jsonSchema.oneOf).toHaveLength(2);
+    expect(jsonSchema.oneOf).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          properties: expect.objectContaining({
             type: {
               const: "1901",
               description: 'BIR form discriminator. Use "1901".',
+              type: "string",
             },
-            data: {
+            data: expect.objectContaining({
               description: "Form-specific values for BIR Form 1901. Every field is optional.",
               type: "object",
+            }),
+          }),
+        }),
+        expect.objectContaining({
+          properties: expect.objectContaining({
+            type: {
+              const: "1905",
+              description: 'BIR form discriminator. Use "1905".',
+              type: "string",
             },
-          },
-          required: ["type", "data"],
-          type: "object",
-        },
-      ],
-    });
+            data: expect.objectContaining({
+              description: "Form-specific values for BIR Form 1905. Every field is optional.",
+              type: "object",
+            }),
+          }),
+        }),
+      ]),
+    );
     expect(propertiesMissingDescriptions(jsonSchema)).toEqual([]);
   });
 
@@ -145,6 +196,99 @@ describe("generateBirFormInputSchema", () => {
       voluntaryPaymentDeclaration: {
         printedName: "Juan Dela Cruz",
         titlePosition: "Taxpayer",
+      },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  test("accepts data from every page of the supplied Form 1905", () => {
+    const result = bir1905DataSchema.safeParse({
+      taxpayerInformation: {
+        tin: "1234",
+        rdoCode: "040",
+        contactNumber: "call me",
+        registeredName: "Dela Cruz, Juan",
+      },
+      replacementOrCancellation: {
+        forms: { certificateOfRegistration: true },
+        reasons: { lostOrDamaged: true },
+      },
+      otherUpdates: { registerOrUpdateBooks: true },
+      registrationInformationUpdate: {
+        registeredOrTradeName: {
+          selected: true,
+          changeTradeName: true,
+          oldName: "Old Trade",
+          newName: "New Trade",
+        },
+        registeredAddress: {
+          selected: true,
+          transferToAnotherRdo: true,
+          newAddress: { municipalityCity: "Quezon City", zipCode: "11001" },
+        },
+        accountingPeriod: {
+          selected: true,
+          calendarToFiscal: {
+            selected: true,
+            accountingStartMonth: "13",
+            effectivityDate: "any date",
+          },
+        },
+        registeredActivity: {
+          selected: true,
+          newActivityOrLineOfBusiness: "Consulting",
+        },
+        facilityDetails: {
+          selected: true,
+          facilities: [{ facilityCode: "F01", facilityTypes: ["warehouse"] }],
+        },
+        incentiveDetails: {
+          selected: true,
+          investmentPromotionAgency: "Example Agency",
+        },
+        taxTypeDetails: {
+          selected: true,
+          cancelled: [{ taxType: "VAT", formType: "2550Q", atc: "VT010" }],
+        },
+        contactType: {
+          selected: true,
+          contactTypes: ["mobile"],
+          contactNumber: "+639170000000",
+          email: "not-an-email",
+        },
+        contactPerson: {
+          selected: true,
+          registeredName: "Dela Cruz, Maria",
+        },
+        relatedParties: {
+          selected: true,
+          parties: [{ registeredName: "Example Partner", tin: "1234" }],
+        },
+      },
+      closureOrCancellation: {
+        cancellationOfTin: { selected: true, death: true },
+      },
+      civilStatusChange: {
+        changeType: "singleToMarried",
+        spouse: { employmentStatus: "employedLocally", name: "Dela Cruz, Maria" },
+      },
+      booksOfAccounts: {
+        books: [
+          {
+            type: "manual",
+            booksToBeRegistered: "General Journal",
+            quantity: -1,
+          },
+        ],
+        registrations: [{ permitNumber: "PTU-001" }],
+      },
+      otherUpdateOrCorrection: { details: "Other correction" },
+      declaration: { printedName: "Dela Cruz, Juan" },
+      documentaryRequirements: {
+        tinCardIssuance: { governmentIssuedId: true },
+        manualBooks: { permanentlyBoundBooks: true },
+        businessTransferNewRdo: { birForm1905Copies: true },
       },
     });
 
