@@ -469,7 +469,9 @@ function QuestionCard({
   const canContinue = complete(question);
   const lastQuestion = index === pending.questions.length - 1;
   const allAnswered = pending.questions.every(complete);
-  useEffect(() => onValidityChange(canContinue), [canContinue, onValidityChange]);
+  useEffect(() => {
+    onValidityChange(canContinue);
+  }, [canContinue, onValidityChange]);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!canContinue || disabled) return;
@@ -1335,11 +1337,14 @@ export function PaymentSheet({
   payment,
   conversationId,
   onClose,
+  onCheckoutFailed,
   onOpeningCheckout,
 }: {
   payment: PaymentRequest;
   conversationId: string;
   onClose: () => void;
+  /** Fired if the redirect never happens, so the island stops claiming it did. */
+  onCheckoutFailed?: () => void;
   /** Fired before the redirect, so the island can show the payment in flight. */
   onOpeningCheckout?: () => void;
 }) {
@@ -1373,6 +1378,7 @@ export function PaymentSheet({
       play("error");
       setPaymentError(error instanceof Error ? error.message : "eGovPay could not open checkout.");
       setOpening(false);
+      onCheckoutFailed?.();
     }
   };
 
@@ -1470,6 +1476,14 @@ export function PaymentSheet({
 
 export type IslandState = "idle" | "paying" | "paid";
 
+// What the island calls each service. The conversation title is the citizen's
+// own prompt, not a reference number, and using it here read as one.
+const PAID_SERVICE_LABELS: Record<PaymentServiceType, string> = {
+  "bir-documentary-stamp-tax": "BIR documentary stamp tax",
+  "dti-business-name": "DTI business name registration",
+  "lgu-business-permit": "LGU business permit",
+};
+
 /**
  * Payment status over the top of the screen instead of a modal in front of it,
  * so the plan stays readable while eGovPay works. Two states, two fixed sizes:
@@ -1483,16 +1497,22 @@ export type IslandState = "idle" | "paying" | "paid";
 function PaymentIsland({
   amount,
   onOpen,
-  reference,
+  service,
   state,
 }: {
-  amount: string;
+  /**
+   * Omitted once the citizen is back from checkout: at that point the screen
+   * knows *which* service cleared but not what it quoted, and the DTI fee is
+   * not the documentary stamp's.
+   */
+  amount?: string;
   onOpen: () => void;
-  reference: string;
+  service: PaymentServiceType | null;
   state: IslandState;
 }) {
   if (state === "idle") return null;
   const paid = state === "paid";
+  const label = service ? PAID_SERVICE_LABELS[service] : "filing fee";
   return (
     <button
       aria-live="polite"
@@ -1518,14 +1538,14 @@ function PaymentIsland({
         </span>
         <span className="flex min-w-0 flex-col gap-0.5">
           <strong className="truncate text-copy -tracking-[.2px]">
-            {paid ? "Payment received" : "Paying the filing fee"}
+            {paid ? "Payment received" : `Paying the ${label}`}
           </strong>
           <span className="truncate text-meta text-gray-500">
-            {paid ? reference : "eGovPay · secure checkout"}
+            {paid ? `${label} · recorded` : "eGovPay · secure checkout"}
           </span>
         </span>
         <span className="flex flex-none flex-col items-end gap-0.5">
-          <strong className="text-base tabular-nums -tracking-[.3px]">{amount}</strong>
+          {amount && <strong className="text-base tabular-nums -tracking-[.3px]">{amount}</strong>}
           <span
             className={cn(
               "text-xs font-extrabold",
@@ -1943,22 +1963,11 @@ export function BusinessChatScreen({
     sendMessage,
   ]);
 
-  // What the field editor asks the agent for. Free text because that is the one
-  // interface the agent has for a correction — the Edit chip is a shortcut to
-  // saying it, not a second write path around the tool that owns the form.
-  const editDraftField = (label: string, value: string) => {
-    setFieldEdits((current) => ({ ...current, [label]: currentFieldValues.current[label] ?? "" }));
-    void sendMessage({ text: `Change the ${label.toLowerCase()} to “${value}”.` });
-  };
-  // A field counts as edited once the value differs from what it held when the
-  // citizen pressed save, which is the only evidence the agent applied it.
-  const currentFieldValues = useRef<Record<string, string>>({});
-  const editedFields = useMemo(() => {
-    const applied = new Set<string>();
-    for (const [label, previous] of Object.entries(fieldEdits))
-      if ((currentFieldValues.current[label] ?? previous) !== previous) applied.add(label);
-    return applied;
-  }, [fieldEdits, visibleMessages]);
+  // The draft the citizen is looking at, and the value each editable row holds.
+  // Derived from the thread rather than kept in a ref: a ref written during
+  // render is read by the memo below on the render *before* the one that set it,
+  // so the "Edited" note would only appear if some later render happened to
+  // arrive — which, at the end of a stream, it does not.
   const latestDtiForm = useMemo(() => {
     for (const message of [...visibleMessages].reverse())
       for (const part of [...message.parts].reverse())
@@ -1966,14 +1975,32 @@ export function BusinessChatScreen({
           if (part.output.form) return part.output.form;
     return null;
   }, [visibleMessages]);
-  if (latestDtiForm)
-    currentFieldValues.current = {
-      "Business activity": latestDtiForm.businessActivity,
-      "Business address": latestDtiForm.businessAddress,
-      Owner: latestDtiForm.ownerName,
-      "Proposed business name": latestDtiForm.proposedName,
-      "Territorial scope": latestDtiForm.territorialScope,
-    };
+  const draftFieldValues = useMemo(() => {
+    const values: Record<string, string> = {};
+    if (!latestDtiForm) return values;
+    values["Business activity"] = latestDtiForm.businessActivity;
+    values["Business address"] = latestDtiForm.businessAddress;
+    values.Owner = latestDtiForm.ownerName;
+    values["Proposed business name"] = latestDtiForm.proposedName;
+    values["Territorial scope"] = latestDtiForm.territorialScope;
+    return values;
+  }, [latestDtiForm]);
+  // A field counts as edited once its value differs from what it held when the
+  // citizen pressed save — the only evidence the agent actually applied it.
+  // Saying so on submit would be a claim about a change not yet made.
+  const editedFields = useMemo(() => {
+    const applied = new Set<string>();
+    for (const [label, previous] of Object.entries(fieldEdits))
+      if ((draftFieldValues[label] ?? previous) !== previous) applied.add(label);
+    return applied;
+  }, [draftFieldValues, fieldEdits]);
+  // What the field editor asks the agent for. Free text because that is the one
+  // interface the agent has for a correction — the Edit chip is a shortcut to
+  // saying it, not a second write path around the tool that owns the form.
+  const editDraftField = (label: string, value: string) => {
+    setFieldEdits((current) => ({ ...current, [label]: draftFieldValues[label] ?? "" }));
+    void sendMessage({ text: `Change the ${label.toLowerCase()} to “${value}”.` });
+  };
 
   const questionCount = pending?.questions.length ?? 0;
   const lastQuestion = questionIndex === questionCount - 1;
@@ -1982,9 +2009,11 @@ export function BusinessChatScreen({
     <div className={cn("screen agent-chat-screen", management && "management-chat")}>
       <StatusBar />
       <PaymentIsland
-        amount={paymentRequest?.feeLabel ?? latestDtiForm?.feeLabel ?? ""}
+        amount={island === "paying" ? paymentRequest?.feeLabel : undefined}
         onOpen={() => setIsland("idle")}
-        reference={`${conversation.title} · filed`}
+        service={
+          island === "paying" ? (paymentRequest?.serviceType ?? null) : (paymentService ?? null)
+        }
         state={island}
       />
       <div className="min-h-0">
@@ -2223,7 +2252,7 @@ export function BusinessChatScreen({
           <div className="payment-return success">
             <CheckCircle weight="fill" />
             <span>
-              <strong>Filed with DTI · {conversation.title}</strong>
+              <strong>Payment confirmed</strong>
               <small>
                 The certificate lands in Your businesses once the agent finishes this step.
               </small>
@@ -2347,7 +2376,11 @@ export function BusinessChatScreen({
         {!management && paymentRequest && (
           <PaymentSheet
             conversationId={conversation.id}
-            onClose={() => setPaymentRequest(null)}
+            onCheckoutFailed={() => setIsland("idle")}
+            onClose={() => {
+              setPaymentRequest(null);
+              setIsland("idle");
+            }}
             onOpeningCheckout={() => setIsland("paying")}
             payment={paymentRequest}
           />
