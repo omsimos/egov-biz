@@ -2,6 +2,7 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 import { decodePDFRawStream, PDFArray, PDFDocument, PDFRawStream } from "pdf-lib";
 import { completeBir1901Fixture, completeBir1905Fixture } from "@/lib/bir-form/all-fields-fixture";
+import { dateCellLayout } from "@/lib/bir-form/date-cells";
 import { generateBir1905Pdf } from "@/lib/bir-form/generator-1905";
 import { generateBir1901Pdf } from "@/lib/bir-form/generator";
 
@@ -34,6 +35,16 @@ async function drawnText(bytes: Uint8Array) {
   };
 }
 
+describe("dateCellLayout", () => {
+  test("maps a valid date into eight evenly spaced digit cells", () => {
+    const cells = dateCellLayout("2026-07-29", { maxWidth: 80, x: 10 });
+
+    expect(cells.map(({ text }) => text).join("")).toBe("07292026");
+    expect(cells.map(({ x }) => x)).toEqual([10, 20, 30, 40, 50, 60, 70, 80]);
+    expect(cells.every(({ maxWidth }) => maxWidth === 10)).toBe(true);
+  });
+});
+
 describe("generateBir1901Pdf", () => {
   test("renders a valid four-page PDF from optional Form 1901 data", async () => {
     const result = await generateBir1901Pdf(
@@ -61,6 +72,22 @@ describe("generateBir1901Pdf", () => {
     const pdf = await PDFDocument.load(result.bytes);
     expect(pdf.getPageCount()).toBe(4);
     expect(pdf.getTitle()).toBe("BIR Form 1901 - Prefilled Draft");
+  });
+
+  test("renders valid registration and relationship dates into the printed date cells", async () => {
+    const result = await generateBir1901Pdf(
+      {
+        registration: { birRegistrationDate: "2026-07-29" },
+        authorizedRepresentative: { relationshipDate: "2024-01-30" },
+      },
+      template1901Path,
+    );
+
+    const rendered = await drawnText(result.bytes);
+    expect(rendered.compact).toContain("07292026");
+    expect(rendered.compact).toContain("01302024");
+    expect(rendered.compact).not.toContain("07/29/2026");
+    expect(rendered.compact).not.toContain("01/30/2024");
   });
 
   test("renders every Form 1901 schema field from the complete fixture", async () => {
@@ -127,6 +154,27 @@ describe("generateBir1905Pdf", () => {
     const pdf = await PDFDocument.load(result.bytes);
     expect(pdf.getPageCount()).toBe(4);
     expect(pdf.getTitle()).toBe("BIR Form 1905 - Prefilled Draft");
+  });
+
+  test("renders valid Form 1905 dates into the printed date cells", async () => {
+    const result = await generateBir1905Pdf(
+      {
+        registrationInformationUpdate: {
+          registeredActivity: {
+            effectivityDate: "2026-07-29",
+            selected: true,
+          },
+        },
+        otherUpdateOrCorrection: { effectivityDate: "2024-01-30" },
+      },
+      template1905Path,
+    );
+
+    const rendered = await drawnText(result.bytes);
+    expect(rendered.compact).toContain("07292026");
+    expect(rendered.compact).toContain("01302024");
+    expect(rendered.compact).not.toContain("07/29/2026");
+    expect(rendered.compact).not.toContain("01/30/2024");
   });
 
   test("renders every Form 1905 schema field from the complete fixture", async () => {
