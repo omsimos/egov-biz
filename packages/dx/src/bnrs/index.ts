@@ -14,6 +14,7 @@ export { bnrsDatabaseTables, createDrizzleBnrsRepository } from "./drizzle-repos
 export {
   mapEgovSsoProfileToBnrsOwnerInformation,
   mapEgovSsoProfileToBnrsResidentialAddress,
+  mapEgovSsoProfileToBnrsResidentialAddressPrefill,
 } from "./profile.js";
 export type {
   BnrsApplicationPatch,

@@ -2,9 +2,10 @@ import { createMCPClient } from "@ai-sdk/mcp";
 import type { EgovSsoCitizenProfile } from "egov.js";
 import {
   BnrsError,
-  mapEgovSsoProfileToBnrsResidentialAddress,
+  mapEgovSsoProfileToBnrsResidentialAddressPrefill,
   type BnrsCertificate,
   type BnrsBusinessAddressInput,
+  type BnrsResidentialAddressPrefill,
 } from "@repo/dx/bnrs";
 import {
   convertToModelMessages,
@@ -49,8 +50,11 @@ import {
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import {
   availableUserInfoFields,
+  missingStructuredBusinessAddressQuestionIds,
   profileAddressPreference,
+  resolveStructuredBusinessAddress,
   shouldCollectStructuredBusinessAddress,
+  type StructuredBusinessAddressAnswers,
 } from "@/lib/form-prefill";
 import {
   extractExplicitSmsMessage,
@@ -367,6 +371,7 @@ function questionsForIncompleteDtiForm(
   form: DtiBusinessNameForm,
   answers: IntakeAnswer[],
   catalog: BnrsCatalog,
+  residentialAddressPrefill: BnrsResidentialAddressPrefill | null,
 ) {
   const answered = new Set(answers.map((answer) => answer.questionId));
   const questions: IntakeQuestion[] = [];
@@ -379,7 +384,7 @@ function questionsForIncompleteDtiForm(
   if (!form.termsAccepted) questions.push(termsQuestion(catalog));
   if (!form.businessAddressDetails)
     questions.push(
-      ...structuredAddressQuestions("Sole proprietor").filter(({ id }) => !answered.has(id)),
+      ...pendingStructuredAddressQuestions("Sole proprietor", answers, residentialAddressPrefill),
     );
   return questions;
 }
@@ -673,6 +678,33 @@ function structuredAddressQuestions(
   ];
 }
 
+function structuredAddressAnswers(answers: IntakeAnswer[]): StructuredBusinessAddressAnswers {
+  return {
+    "business-address-line-1": answerValue(answers, "business-address-line-1"),
+    "business-barangay": answerValue(answers, "business-barangay"),
+    "business-city-municipality": answerValue(answers, "business-city-municipality"),
+    "business-province": answerValue(answers, "business-province"),
+    "business-region": answerValue(answers, "business-region"),
+    "business-postal-code": answerValue(answers, "business-postal-code"),
+  };
+}
+
+function pendingStructuredAddressQuestions(
+  registrationType: BusinessPlan["registrationType"],
+  answers: IntakeAnswer[],
+  residentialAddressPrefill: BnrsResidentialAddressPrefill | null,
+) {
+  const preference = addressPreference(answers);
+  const missing = new Set(
+    missingStructuredBusinessAddressQuestionIds(
+      preference,
+      residentialAddressPrefill,
+      structuredAddressAnswers(answers),
+    ),
+  );
+  return structuredAddressQuestions(registrationType).filter(({ id }) => missing.has(id as never));
+}
+
 function promptHasWorkSetup(prompt: string) {
   return /\b(home[- ]based|from home|at home|online|remote(?:ly)?|virtual|storefront|shop|office|clinic|commercial (?:space|unit|kitchen)|physical (?:shop|location|premises))\b/i.test(
     prompt,
@@ -690,7 +722,7 @@ function intakeBatch(
   profile: CitizenProfile | null,
   answers: IntakeAnswer[],
   catalog: BnrsCatalog,
-  residentialAddress: BnrsBusinessAddressInput | null,
+  residentialAddressPrefill: BnrsResidentialAddressPrefill | null,
 ) {
   const answered = new Set(answers.map((answer) => answer.questionId));
   const location = resolveBusinessLocation(prompt, profile?.city ?? "Philippines", answers);
@@ -712,11 +744,11 @@ function intakeBatch(
     shouldCollectStructuredBusinessAddress(
       preference,
       registrationType,
-      Boolean(residentialAddress),
+      Boolean(businessAddressFromAnswers(answers, residentialAddressPrefill)),
     )
   )
     questions.push(
-      ...structuredAddressQuestions(registrationType).filter(({ id }) => !answered.has(id)),
+      ...pendingStructuredAddressQuestions(registrationType, answers, residentialAddressPrefill),
     );
   if (registrationType === "Sole proprietor") {
     if (!answered.has("bnrs-terms-accepted")) questions.push(termsQuestion(catalog));
@@ -1048,33 +1080,13 @@ function answerValue(answers: IntakeAnswer[], questionId: string) {
 
 function businessAddressFromAnswers(
   answers: IntakeAnswer[],
-  residentialAddress: BnrsBusinessAddressInput | null,
+  residentialAddressPrefill: BnrsResidentialAddressPrefill | null,
 ): BnrsBusinessAddressInput | null {
-  if (addressPreference(answers) === "profile" && residentialAddress) return residentialAddress;
-  const addressLine1 = answerValue(answers, "business-address-line-1");
-  const barangay = answerValue(answers, "business-barangay");
-  const cityMunicipality = answerValue(answers, "business-city-municipality");
-  const province = answerValue(answers, "business-province");
-  const region = answerValue(answers, "business-region");
-  const postalCode = answerValue(answers, "business-postal-code");
-  if (
-    !addressLine1 ||
-    !barangay ||
-    !cityMunicipality ||
-    !province ||
-    !region ||
-    !/^\d{4}$/.test(postalCode)
-  )
-    return null;
-  return {
-    source: "USER_PROVIDED",
-    addressLine1,
-    barangay,
-    cityMunicipality,
-    province,
-    region,
-    postalCode,
-  };
+  return resolveStructuredBusinessAddress(
+    addressPreference(answers),
+    residentialAddressPrefill,
+    structuredAddressAnswers(answers),
+  );
 }
 
 function businessAddressLabel(address: BnrsBusinessAddressInput | null) {
@@ -1144,7 +1156,7 @@ function makeDtiForm(
   answers: IntakeAnswer[],
   plan: BusinessPlan,
   catalog: BnrsCatalog,
-  residentialAddress: BnrsBusinessAddressInput | null,
+  residentialAddressPrefill: BnrsResidentialAddressPrefill | null,
 ): DtiBusinessNameForm {
   const rawDominantName = answerValue(answers, "business-dominant-name");
   const dominantName = isMeaningfulBusinessName(rawDominantName) ? rawDominantName : "";
@@ -1152,7 +1164,7 @@ function makeDtiForm(
   const descriptor = catalog.nameRequirements.descriptors.find(({ id }) => id === descriptorId);
   const scopeId = answerValue(answers, "business-territorial-scope");
   const scope = catalog.scopes.find(({ id }) => id === scopeId);
-  const businessAddressDetails = businessAddressFromAnswers(answers, residentialAddress);
+  const businessAddressDetails = businessAddressFromAnswers(answers, residentialAddressPrefill);
   const businessAddress = businessAddressLabel(businessAddressDetails);
   const termsAccepted = answerValue(answers, "bnrs-terms-accepted") === "accept";
   const missingFields = [
@@ -1197,14 +1209,19 @@ function deterministicNext(
   profile: CitizenProfile | null,
   answers: IntakeAnswer[],
   catalog: BnrsCatalog,
-  residentialAddress: BnrsBusinessAddressInput | null,
+  residentialAddressPrefill: BnrsResidentialAddressPrefill | null,
 ) {
-  const questions = intakeBatch(prompt, profile, answers, catalog, residentialAddress);
+  const questions = intakeBatch(prompt, profile, answers, catalog, residentialAddressPrefill);
   if (questions.length) return { questions };
   const plan = makePlan(prompt, profile, answers);
   if (plan.registrationType !== "Sole proprietor") return { plan };
-  const form = makeDtiForm(prompt, profile, answers, plan, catalog, residentialAddress);
-  const missingQuestions = questionsForIncompleteDtiForm(form, answers, catalog);
+  const form = makeDtiForm(prompt, profile, answers, plan, catalog, residentialAddressPrefill);
+  const missingQuestions = questionsForIncompleteDtiForm(
+    form,
+    answers,
+    catalog,
+    residentialAddressPrefill,
+  );
   if (missingQuestions.length) return { questions: missingQuestions };
   return { plan, form };
 }
@@ -1783,8 +1800,10 @@ export async function POST(request: Request) {
     legacyBirFormConsentValue === "yes" && !hasCompletedTool(messages, "tool-generate_bir_form");
   const initialLocation = resolveBusinessLocation(prompt, profile?.city ?? "Philippines", answers);
   const preference = addressPreference(answers);
-  const residentialAddress = mapEgovSsoProfileToBnrsResidentialAddress(session.rawProfile);
-  const bnrsAddress = businessAddressFromAnswers(answers, residentialAddress);
+  const residentialAddressPrefill = mapEgovSsoProfileToBnrsResidentialAddressPrefill(
+    session.rawProfile,
+  );
+  const bnrsAddress = businessAddressFromAnswers(answers, residentialAddressPrefill);
   const termsAccepted = answerValue(answers, "bnrs-terms-accepted") === "accept";
   const existingPlan = lastRegistrationPlan(messages);
   const hasSearched = messages.some((message) =>
@@ -2086,7 +2105,7 @@ export async function POST(request: Request) {
     (firstTurn && describesBusinessIdea(latestPrompt));
 
   if (!lastForm && continuingIntake) {
-    const questions = intakeBatch(prompt, profile, answers, bnrsCatalog, residentialAddress);
+    const questions = intakeBatch(prompt, profile, answers, bnrsCatalog, residentialAddressPrefill);
     if (questions.length) {
       const intakeRegistrationType = makePlan(prompt, profile, answers).registrationType;
       const currentPlan = planForAnswers(
@@ -2230,7 +2249,13 @@ export async function POST(request: Request) {
         });
         writer.write({ type: "text-end", id: textId });
       });
-    const next = deterministicNext(prompt, profile, answers, bnrsCatalog, residentialAddress);
+    const next = deterministicNext(
+      prompt,
+      profile,
+      answers,
+      bnrsCatalog,
+      residentialAddressPrefill,
+    );
     return manualResponse(actor.egovUserId, conversation.id, messages, async (writer) => {
       const textId = crypto.randomUUID();
       writer.write({ type: "text-start", id: textId });
@@ -2313,9 +2338,14 @@ export async function POST(request: Request) {
       answers,
       businessPlan,
       bnrsCatalog,
-      residentialAddress,
+      residentialAddressPrefill,
     );
-    const missingQuestions = questionsForIncompleteDtiForm(form, answers, bnrsCatalog);
+    const missingQuestions = questionsForIncompleteDtiForm(
+      form,
+      answers,
+      bnrsCatalog,
+      residentialAddressPrefill,
+    );
     if (missingQuestions.length)
       return manualResponse(actor.egovUserId, conversation.id, messages, (writer) => {
         const textId = crypto.randomUUID();

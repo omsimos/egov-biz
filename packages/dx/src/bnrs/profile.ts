@@ -1,6 +1,10 @@
 import type { EgovSsoCitizenProfile } from "egov.js";
 
-import type { BnrsBusinessAddressInput, BnrsOwnerInformationInput } from "./types.js";
+import type {
+  BnrsBusinessAddressInput,
+  BnrsOwnerInformationInput,
+  BnrsResidentialAddressPrefill,
+} from "./types.js";
 
 function normalizedString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -40,32 +44,45 @@ export function mapEgovSsoProfileToBnrsOwnerInformation(
   };
 }
 
-export function mapEgovSsoProfileToBnrsResidentialAddress(
+export function mapEgovSsoProfileToBnrsResidentialAddressPrefill(
   profile: EgovSsoCitizenProfile,
-): BnrsBusinessAddressInput | null {
-  const addressLine1 = normalizedString(profile.address) ?? normalizedString(profile.street);
+): BnrsResidentialAddressPrefill {
+  // `address` is commonly the full formatted address, while `street` is the
+  // BNRS address-line-1 value. Prefer the structured field when both exist.
+  const addressLine1 = normalizedString(profile.street) ?? normalizedString(profile.address);
   const addressLine2 = normalizedString(profile.address_line_2);
   const barangay = normalizedString(profile.barangay);
   const cityMunicipality = normalizedString(profile.municipality);
   const province = normalizedString(profile.province);
   const region = normalizedString(profile.region);
-  const postalCode = normalizedString(profile.postal);
+  const rawPostalCode = normalizedString(profile.postal);
+  const postalCode = rawPostalCode && /^\d{4}$/.test(rawPostalCode) ? rawPostalCode : undefined;
 
-  if (
-    !addressLine1 ||
-    !barangay ||
-    !cityMunicipality ||
-    !province ||
-    !region ||
-    !postalCode ||
-    !/^\d{4}$/.test(postalCode)
-  )
+  return {
+    source: "EGOV_RESIDENTIAL",
+    ...(addressLine1 === undefined ? {} : { addressLine1 }),
+    ...(addressLine2 === undefined ? {} : { addressLine2 }),
+    ...(barangay === undefined ? {} : { barangay }),
+    ...(cityMunicipality === undefined ? {} : { cityMunicipality }),
+    ...(province === undefined ? {} : { province }),
+    ...(region === undefined ? {} : { region }),
+    ...(postalCode === undefined ? {} : { postalCode }),
+  };
+}
+
+export function mapEgovSsoProfileToBnrsResidentialAddress(
+  profile: EgovSsoCitizenProfile,
+): BnrsBusinessAddressInput | null {
+  const prefill = mapEgovSsoProfileToBnrsResidentialAddressPrefill(profile);
+  const { addressLine1, barangay, cityMunicipality, province, region, postalCode } = prefill;
+
+  if (!addressLine1 || !barangay || !cityMunicipality || !province || !region || !postalCode)
     return null;
 
   return {
     source: "EGOV_RESIDENTIAL",
     addressLine1,
-    ...(addressLine2 === undefined ? {} : { addressLine2 }),
+    ...(prefill.addressLine2 === undefined ? {} : { addressLine2: prefill.addressLine2 }),
     barangay,
     cityMunicipality,
     province,

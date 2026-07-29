@@ -25,6 +25,17 @@ export type BnrsBusinessAddressInput = {
   postalCode: string;
 };
 
+export type BnrsResidentialAddressPrefill = {
+  source: "EGOV_RESIDENTIAL";
+  addressLine1?: string;
+  addressLine2?: string;
+  barangay?: string;
+  cityMunicipality?: string;
+  province?: string;
+  region?: string;
+  postalCode?: string;
+};
+
 export type BnrsBusinessAddressDetails = Omit<BnrsBusinessAddressInput, "source">;
 
 export type BnrsDescriptor = {

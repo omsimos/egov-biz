@@ -3,8 +3,10 @@ import type { CitizenProfile } from "@/lib/citizen-profile";
 import {
   availableUserInfoFields,
   extractExplicitBusinessAddress,
+  missingStructuredBusinessAddressQuestionIds,
   profileAddressPreference,
   resolveBusinessFormAddress,
+  resolveStructuredBusinessAddress,
   shouldCollectStructuredBusinessAddress,
 } from "@/lib/form-prefill";
 
@@ -54,6 +56,52 @@ describe("resolveBusinessFormAddress", () => {
     expect(shouldCollectStructuredBusinessAddress("profile", "Self-employed", false)).toBe(false);
     expect(shouldCollectStructuredBusinessAddress("profile", "Sole proprietor", false)).toBe(true);
     expect(shouldCollectStructuredBusinessAddress("profile", "Sole proprietor", true)).toBe(false);
+  });
+
+  test("asks only for profile address fields that BNRS is missing", () => {
+    const prefill = {
+      source: "EGOV_RESIDENTIAL" as const,
+      addressLine1: "1 Example Street",
+      barangay: "San Isidro",
+      cityMunicipality: "Quezon City",
+      province: "Metro Manila",
+      region: "National Capital Region",
+    };
+
+    expect(missingStructuredBusinessAddressQuestionIds("profile", prefill, {})).toEqual([
+      "business-postal-code",
+    ]);
+    expect(
+      resolveStructuredBusinessAddress("profile", prefill, {
+        "business-postal-code": "1100",
+      }),
+    ).toEqual({
+      source: "USER_PROVIDED",
+      addressLine1: "1 Example Street",
+      barangay: "San Isidro",
+      cityMunicipality: "Quezon City",
+      province: "Metro Manila",
+      region: "National Capital Region",
+      postalCode: "1100",
+    });
+  });
+
+  test("uses a complete SSO address without asking for structured fields", () => {
+    const prefill = {
+      source: "EGOV_RESIDENTIAL" as const,
+      addressLine1: "1 Example Street",
+      barangay: "San Isidro",
+      cityMunicipality: "Quezon City",
+      province: "Metro Manila",
+      region: "National Capital Region",
+      postalCode: "1100",
+    };
+
+    expect(missingStructuredBusinessAddressQuestionIds("profile", prefill, {})).toEqual([]);
+    expect(resolveStructuredBusinessAddress("profile", prefill, {})).toMatchObject({
+      source: "EGOV_RESIDENTIAL",
+      postalCode: "1100",
+    });
   });
 
   test("extracts the latest address correction directly from user text", () => {

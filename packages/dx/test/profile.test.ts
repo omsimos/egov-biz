@@ -4,6 +4,7 @@ import type { EgovSsoCitizenProfile } from "egov.js";
 import {
   mapEgovSsoProfileToBnrsOwnerInformation,
   mapEgovSsoProfileToBnrsResidentialAddress,
+  mapEgovSsoProfileToBnrsResidentialAddressPrefill,
 } from "../src/bnrs/index.js";
 
 describe("BNRS owner profile mapping", () => {
@@ -90,5 +91,26 @@ describe("BNRS residential-address profile mapping", () => {
         postal: "invalid",
       }),
     ).toBeNull();
+  });
+
+  test("preserves available structured fields when the SSO address is incomplete", () => {
+    expect(
+      mapEgovSsoProfileToBnrsResidentialAddressPrefill({
+        address: "12 Acacia Street, Poblacion, Makati City",
+        street: "12 Acacia Street",
+        barangay: "Poblacion",
+        municipality: "Makati City",
+        province: "Metro Manila",
+        region: "National Capital Region",
+        postal: "",
+      }),
+    ).toEqual({
+      source: "EGOV_RESIDENTIAL",
+      addressLine1: "12 Acacia Street",
+      barangay: "Poblacion",
+      cityMunicipality: "Makati City",
+      province: "Metro Manila",
+      region: "National Capital Region",
+    });
   });
 });
