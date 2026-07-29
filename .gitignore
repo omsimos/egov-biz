@@ -3,6 +3,7 @@
 .env.*
 !.env.sample
 .tmp/
+.scratch/
 .turbo/
 node_modules/
 dist/

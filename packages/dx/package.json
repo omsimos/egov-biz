@@ -1,0 +1,36 @@
+{
+  "name": "@repo/dx",
+  "version": "0.0.0",
+  "private": true,
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./bnrs": {
+      "types": "./dist/bnrs/index.d.ts",
+      "import": "./dist/bnrs/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check-types": "tsc --noEmit -p tsconfig.json",
+    "format": "oxfmt src test README.md package.json tsconfig.json",
+    "format:check": "oxfmt --check src test README.md package.json tsconfig.json",
+    "lint": "oxlint src test",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@repo/db": "workspace:*",
+    "@repo/egov": "workspace:*",
+    "drizzle-orm": "0.45.2"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2"
+  }
+}
