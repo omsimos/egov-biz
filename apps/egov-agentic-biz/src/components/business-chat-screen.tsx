@@ -69,7 +69,7 @@ import {
   type RegistrationPlan,
 } from "@/lib/business-chat";
 import type { CitizenProfile } from "@/lib/citizen-profile";
-import type { IntakeQuestion } from "@/lib/questions";
+import { initialIntakeQuestionValue, type IntakeQuestion } from "@/lib/questions";
 import type { RegisteredBusiness } from "@/lib/registered-business";
 
 type AskUserPart = Extract<BusinessChatMessage["parts"][number], { type: "tool-askUser" }>;
@@ -440,10 +440,11 @@ function QuestionCard({
 }) {
   const [values, setValues] = useState<Record<string, string | string[]>>(() =>
     Object.fromEntries(
-      pending.questions.map((question) => [question.id, question.type === "multi" ? [] : ""]),
+      pending.questions.map((question) => [question.id, initialIntakeQuestionValue(question)]),
     ),
   );
   const [custom, setCustom] = useState<Record<string, string>>({});
+  const [expandedOptionLists, setExpandedOptionLists] = useState<Record<string, boolean>>({});
   const question = pending.questions[index];
   const complete = (question: IntakeQuestion) => {
     const value = values[question.id];
@@ -513,6 +514,20 @@ function QuestionCard({
           },
         ]
       : savedOptions;
+  const isDescriptorQuestion = question.id === "business-descriptor";
+  const orderedOptions =
+    isDescriptorQuestion && question.suggestedOptionId
+      ? [
+          ...options.filter((option) => option.id === question.suggestedOptionId),
+          ...options.filter((option) => option.id !== question.suggestedOptionId),
+        ]
+      : options;
+  const hasMoreDescriptorOptions = isDescriptorQuestion && orderedOptions.length > 4;
+  const descriptorOptionsExpanded = Boolean(expandedOptionLists[question.id]);
+  const displayedOptions =
+    hasMoreDescriptorOptions && !descriptorOptionsExpanded
+      ? orderedOptions.slice(0, 4)
+      : orderedOptions;
 
   // 56px min-height and a 1.5px border, because these rows are the single
   // most-tapped control in the product — every answer the agent needs comes
@@ -560,12 +575,13 @@ function QuestionCard({
               <RadioGroup
                 aria-label={question.title}
                 className="gap-2"
+                id={hasMoreDescriptorOptions ? "business-descriptor-options" : undefined}
                 onValueChange={(next) =>
                   setValues((current) => ({ ...current, [question.id]: String(next) }))
                 }
                 value={typeof value === "string" ? value : ""}
               >
-                {options.map((option) => (
+                {displayedOptions.map((option) => (
                   <label
                     className={optionRow(value === option.id)}
                     data-cuelume-toggle="toggle"
@@ -583,6 +599,29 @@ function QuestionCard({
                   </label>
                 ))}
               </RadioGroup>
+              {hasMoreDescriptorOptions && (
+                <Button
+                  aria-controls="business-descriptor-options"
+                  aria-expanded={descriptorOptionsExpanded}
+                  className="h-11 w-full rounded-[12px] text-[15px] text-primary"
+                  data-cuelume-toggle={descriptorOptionsExpanded ? "droplet" : "bloom"}
+                  onClick={() =>
+                    setExpandedOptionLists((current) => ({
+                      ...current,
+                      [question.id]: !descriptorOptionsExpanded,
+                    }))
+                  }
+                  type="button"
+                  variant="ghost"
+                >
+                  {descriptorOptionsExpanded ? "Show fewer options" : "More options"}
+                  {descriptorOptionsExpanded ? (
+                    <CaretUpIcon weight="bold" />
+                  ) : (
+                    <CaretDownIcon weight="bold" />
+                  )}
+                </Button>
+              )}
               {value === "__other__" && (
                 <Input
                   aria-label="Your answer"

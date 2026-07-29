@@ -64,7 +64,19 @@ export type IntakeQuestion = {
   suffix?: string;
   minimum?: number;
   maximum?: number;
+  suggestedOptionId?: string;
 };
+
+export function initialIntakeQuestionValue(question: IntakeQuestion): string | string[] {
+  if (question.type === "multi") return [];
+  if (
+    question.type === "single" &&
+    question.suggestedOptionId &&
+    question.options?.some((option) => option.id === question.suggestedOptionId)
+  )
+    return question.suggestedOptionId;
+  return "";
+}
 
 export const deterministicQuestions: IntakeQuestion[] = [
   {
