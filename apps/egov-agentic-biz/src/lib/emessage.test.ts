@@ -58,6 +58,16 @@ describe("eMessage chat tools", () => {
     expect(smsNumberMention("Simulate a tax reminder with 9171234567 as the reference")).toEqual({
       kind: "none",
     });
+    expect(smsNumberMention("Let's simulate the reminder for 0947 214 5415")).toEqual({
+      kind: "valid",
+      number: "+639472145415",
+      value: "0947 214 5415",
+    });
+    expect(smsNumberMention("Run a reminder simulation 0917 123 4567")).toEqual({
+      kind: "valid",
+      number: "+639171234567",
+      value: "0917 123 4567",
+    });
     expect(smsNumberMention('Send an SMS that says "Pay to 9171234567" to 0947 214 5415')).toEqual({
       kind: "valid",
       number: "+639472145415",
@@ -125,6 +135,15 @@ describe("eMessage chat tools", () => {
     });
   });
 
+  test("uses a number supplied with the simulated reminder instead of the SSO number", async () => {
+    const requests: EMessageSmsRequest[] = [];
+    await simulateTaxPaymentReminder({ number: "0947 214 5415" }, "+639170000000", {
+      client: recordingClient(requests),
+    });
+
+    expect(requests[0]?.number).toBe("+639472145415");
+  });
+
   test("rejects invalid reminder dates before sending", async () => {
     const requests: EMessageSmsRequest[] = [];
     await expect(
@@ -177,13 +196,17 @@ describe("eMessage chat tools", () => {
     ).rejects.toBeDefined();
   });
 
-  test("only treats affirmative simulation requests as the reminder trigger", () => {
+  test("accepts natural affirmative simulation requests as the reminder trigger", () => {
     expect(isTaxPaymentReminderSimulationRequest("Simulate the tax payment reminder")).toBe(true);
     expect(isTaxPaymentReminderSimulationRequest("Send a simulated tax reminder SMS")).toBe(true);
     expect(isTaxPaymentReminderSimulationRequest("Simulate my BIR Form 1701Q reminder")).toBe(true);
     expect(isTaxPaymentReminderSimulationRequest("Can you simulate my tax payment reminder?")).toBe(
       true,
     );
+    expect(isTaxPaymentReminderSimulationRequest("Simulate the reminder")).toBe(true);
+    expect(isTaxPaymentReminderSimulationRequest("Let's do a reminder simulation")).toBe(true);
+    expect(isTaxPaymentReminderSimulationRequest("Can we test the reminder?")).toBe(true);
+    expect(isTaxPaymentReminderSimulationRequest("Run a demo reminder for me")).toBe(true);
     expect(isTaxPaymentReminderSimulationRequest("When is my next tax payment?")).toBe(false);
     expect(isTaxPaymentReminderSimulationRequest("Remind me about tax")).toBe(false);
     expect(isTaxPaymentReminderSimulationRequest("Do not simulate the tax payment reminder")).toBe(
@@ -225,6 +248,10 @@ describe("eMessage chat tools", () => {
     expect(isExplicitSmsSendRequest('Send an SMS that says "Hello"\nActually, not now.')).toBe(
       false,
     );
+    expect(isTaxPaymentReminderSimulationRequest("How does a reminder simulation work?")).toBe(
+      false,
+    );
+    expect(isTaxPaymentReminderSimulationRequest("Don't test the reminder")).toBe(false);
     expect(isExplicitSmsSendRequest(`Send an SMS that says "${"A".repeat(300)}" but not now`)).toBe(
       false,
     );

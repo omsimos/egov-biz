@@ -159,23 +159,34 @@ function withoutQuotedSegments(text: string): string {
 
 export function smsNumberMention(text: string): SmsNumberMention {
   const searchableText = withoutQuotedSegments(text);
+  const reminderSimulationRequest = isTaxPaymentReminderSimulationRequest(text);
   const recipientMatches: RegExpMatchArray[] = [];
   for (const match of searchableText.matchAll(
     /(?<!\d)(?:\+?63|0063|0)?[\s().-]*9(?:[\s().-]*\d){6,14}(?!\d)/g,
   )) {
     const index = match.index ?? 0;
     const prefix = searchableText.slice(Math.max(0, index - 48), index);
+    const suffix = searchableText.slice(index + match[0].length, index + match[0].length + 48);
     const previous = recipientMatches.at(-1);
     const hasRecipientContext =
       /\b(?:(?:send|text|to|at|use|using)\s*(?:the\s+)?(?:(?:recipient|mobile|phone)\s+)?(?:number\s*)?|(?:recipient|mobile|phone)\s*(?:number\s*)?|(?:try|retry)\s+with\s*)(?:is\s*)?[:=-]?\s*$/i.test(
         prefix,
+      );
+    const hasReminderContext =
+      reminderSimulationRequest &&
+      !/\b(?:reference|confirmation|transaction|form)\s+(?:number|code)\s*[:=#-]?\s*$/i.test(
+        prefix,
+      ) &&
+      !/^\s*(?:as\s+)?(?:the\s+)?(?:reference|confirmation|transaction|form)(?:\s+(?:number|code))?\b/i.test(
+        suffix,
       );
     const continuesRecipientList =
       previous &&
       /^\s*(?:,|\/|or|and)\s*$/i.test(
         searchableText.slice((previous.index ?? 0) + previous[0].length, index),
       );
-    if (hasRecipientContext || continuesRecipientList) recipientMatches.push(match);
+    if (hasRecipientContext || hasReminderContext || continuesRecipientList)
+      recipientMatches.push(match);
   }
   const values = recipientMatches.map((match) =>
     text.slice(match.index, (match.index ?? 0) + match[0].length).trim(),
@@ -370,22 +381,23 @@ export async function simulateTaxPaymentReminder(
 export function isTaxPaymentReminderSimulationRequest(text: string): boolean {
   const commandText = withoutQuotedSegments(text);
   if (hasNegatedSendIntent(commandText)) return false;
-  const command =
-    /^\s*(?:please\s+)?(?:simulate|send)\b/i.test(commandText) ||
-    /^\s*(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:simulate|send)\b/i.test(commandText) ||
-    /^\s*i(?:'d| would)?\s+like\s+(?:you\s+)?to\s+(?:simulate|send)\b/i.test(commandText) ||
-    /^\s*i\s+(?:want|need)\s+(?:you\s+)?to\s+(?:simulate|send)\b/i.test(commandText);
-  return (
-    command &&
-    /\bsimulat(?:e|ed|es|ing|ion)\b/i.test(commandText) &&
+  const simulation = /\b(?:simulat(?:e|ed|es|ing|ion)|mock(?:ed|ing)?|demo|test(?:ed|ing)?)\b/i;
+  const reminder = /\b(?:remind(?:er|ing)?|notification|notice)\b/i;
+  const taxMessage =
     (/\btax(?:es)?\b/i.test(commandText) || /\bBIR\s+Form\s+[0-9A-Z-]+\b/i.test(commandText)) &&
-    /\b(?:payment|remind(?:er|ing)?|notification|notice|sms|message)\b/i.test(commandText)
+    /\b(?:payment|sms|message)\b/i.test(commandText);
+  if (!simulation.test(commandText) || (!reminder.test(commandText) && !taxMessage)) return false;
+
+  return !(
+    /^\s*(?:what|why|how|when|where|who)\b/i.test(commandText) ||
+    /^\s*(?:explain|describe|tell\s+me\s+about)\b/i.test(commandText) ||
+    /^\s*(?:is|are)\b.*\b(?:available|possible|supported)\b/i.test(commandText)
   );
 }
 
 function hasNegatedSendIntent(text: string): boolean {
   const normalized = text.replace(/\s+/g, " ").trim();
-  const action = String.raw`\b(?:send(?:ing|s|ed)?|text(?:ing|s|ed)?|simulat(?:e|es|ed|ing|ion)|try|retry|use)\b`;
+  const action = String.raw`\b(?:send(?:ing|s|ed)?|text(?:ing|s|ed)?|simulat(?:e|es|ed|ing|ion)|mock(?:ed|ing)?|demo|test(?:ed|ing)?|try|retry|use)\b`;
   const negationBeforeAction = new RegExp(
     String.raw`\b(?:do\s+not|don't|dont|never|stop|avoid)\b.{0,120}${action}`,
     "i",

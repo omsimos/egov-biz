@@ -533,7 +533,7 @@ async function managementResponse(
 
 Treat the record as the only source of truth about this business. Never start or continue a new-business registration workflow. Never invent a filing, status, deadline, reference number, document, or completed government action. Say clearly when the record does not contain an answer. Records come from the BNRS, LGU, and BIR DX modules; distinguish that sandbox service state from actions the citizen must confirm with BIR, the LGU, BFP, or another responsible agency. Prefer short paragraphs and lists; use a table only when comparing three or more records.
 
-Use send_sms_message only when the citizen explicitly asks to send an SMS. Pass a recipient number only when the citizen supplied one in chat; otherwise omit it so the authenticated eGov SSO number is used. Use simulate_tax_payment_reminder only when the citizen explicitly asks to simulate sending a tax payment reminder. Never send a reminder for an ordinary question about tax dates or obligations.
+Use send_sms_message only when the citizen explicitly asks to send an SMS. Pass a recipient number only when the citizen supplied one in chat; otherwise omit it so the authenticated eGov SSO number is used. Use simulate_tax_payment_reminder when the citizen asks to simulate, test, or demo a reminder, even if they use informal wording or omit "tax payment." Always pass a recipient number they supplied; otherwise omit it so the authenticated eGov SSO number is used. Never send a reminder for an ordinary question about tax dates or obligations.
 
 Saved business record:
 ${JSON.stringify(businessManagementContext(business))}`,
@@ -1307,7 +1307,7 @@ function emessageTools({
     }),
     simulate_tax_payment_reminder: tool({
       description:
-        "Simulate a tax payment reminder by sending a clearly labeled SMS through eMessage. Invoke only when the citizen's latest message explicitly asks to simulate the tax payment reminder. Omit number to use the authenticated eGov SSO mobile number.",
+        "Simulate a tax reminder by sending a clearly labeled SMS through eMessage. Invoke when the citizen's latest message asks to simulate, test, or demo a reminder, including informal wording that omits 'tax payment.' Pass a recipient number when the citizen supplied one; otherwise omit it to use the authenticated eGov SSO mobile number.",
       inputSchema: simulateTaxPaymentReminderInputSchema,
       execute: (input, { abortSignal }) => {
         const authorized =
@@ -2481,7 +2481,7 @@ generate_bir_form creates a BIR PDF artifact from a discriminated input. Use typ
 
 send_sms_message sends an SMS through eMessage. Invoke it only when the citizen's latest message explicitly asks to send an SMS or text message. Pass number only when the citizen supplied a recipient number in chat; otherwise omit number so the server uses the authenticated eGov SSO mobile number. Provider acceptance does not prove handset delivery.
 
-simulate_tax_payment_reminder sends a clearly labeled simulated tax reminder through eMessage. Invoke it only when the citizen's latest message explicitly asks to simulate the tax payment reminder. Never invoke it for an ordinary question about tax dates, deadlines, filings, or obligations. Use saved business tax details when available; do not invent a tax form or due date.
+simulate_tax_payment_reminder sends a clearly labeled simulated tax reminder through eMessage. Invoke it when the citizen asks to simulate, test, or demo a reminder, including informal wording that omits "tax payment." Always pass a recipient number supplied in the latest message; otherwise omit it so the authenticated eGov SSO number is used. Never invoke it for an ordinary question about tax dates, deadlines, filings, or obligations. Use saved business tax details when available; do not invent a tax form or due date.
 
 The resolved business city is ${location.city}. Explicit locations override the profile. Reuse every fact the citizen has already stated and never ask for it again. Do not force registration steps when the latest request is unrelated or exploratory; answer that request directly and only return to the saved plan when the citizen asks. The resolved route is ${JSON.stringify(businessPlan)}.
 
