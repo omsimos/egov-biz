@@ -32,7 +32,6 @@ import {
   SparkleIcon,
   Storefront,
   StopCircle,
-  Plus,
   CaretDown,
   CaretDownIcon,
   CaretUpIcon,
@@ -1644,7 +1643,6 @@ export function BusinessChatScreen({
   paymentStatus,
   paymentService,
   onBack,
-  onNewConversation,
   onOpenBusiness,
   onSelectConversation,
   onDeleteConversation,
@@ -1656,7 +1654,6 @@ export function BusinessChatScreen({
   paymentStatus?: string | null;
   paymentService?: PaymentServiceType | null;
   onBack: () => void;
-  onNewConversation: () => void;
   onOpenBusiness: (businessId: string) => void;
   onSelectConversation: (id: string) => void;
   onDeleteConversation: (conversation: ConversationSummary) => void;
@@ -2062,17 +2059,12 @@ export function BusinessChatScreen({
               />
             )}
           </button>
-          <IconButton
-            aria-label={
-              management ? "Create a new business chat" : "Create a new registration plan"
-            }
-            className="size-[34px]"
-            data-cuelume-toggle="page"
-            onClick={onNewConversation}
-            variant="primary"
-          >
-            <Plus className="size-[17px]" weight="bold" />
-          </IconButton>
+          {/* Empty, and the same width as the back button, so the plan title
+              stays optically centred. Starting a plan belongs to the Business
+              home's composer and a business chat to the record's own controls;
+              a second entry point here was one the citizen had no reason to
+              reach for mid-conversation. */}
+          <span />
           {/* The one job motion is here for: this menu is a conditional render, so
               before AnimatePresence it could fade in but never out — it vanished
               in a single frame while its own trigger was still animating. The

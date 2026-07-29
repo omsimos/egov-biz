@@ -1440,7 +1440,17 @@ export function EgaphBusinessApp({
                 initial={false}
                 transition={LANDING}
               >
-                <HomeScreen onBusiness={noop} onLogout={noop} profile={PREVIEW_PROFILE} />
+                {/* Business is live even here: it is the one thing on the
+                    launcher this product does, and tapping it before signing in
+                    means the same thing as pressing Get started. The screen
+                    stays aria-hidden — Get started is the labelled path, and
+                    this is a picture of where you land. Logging out of a
+                    session that does not exist stays a no-op. */}
+                <HomeScreen
+                  onBusiness={() => setSigningIn(true)}
+                  onLogout={noop}
+                  profile={PREVIEW_PROFILE}
+                />
               </motion.div>
               <motion.div
                 animate={{ x: wide && !signingIn ? "100%" : "0%" }}
@@ -1556,11 +1566,6 @@ export function EgaphBusinessApp({
                     paymentStatus={paymentStatus}
                     paymentService={paymentService}
                     onBack={leaveChat}
-                    onNewConversation={() => {
-                      if (conversation.purpose === "management" && conversation.businessId)
-                        void startBusinessChat(conversation.businessId);
-                      else leaveChat();
-                    }}
                     onOpenBusiness={openBusiness}
                     onSelectConversation={(id) => void openConversation(id)}
                     onDeleteConversation={setPendingDelete}
@@ -1569,30 +1574,34 @@ export function EgaphBusinessApp({
               </motion.div>
             </AnimatePresence>
           )}
+          {/* Inside the phone, not the page: DialogContent positions itself
+              against its nearest positioned ancestor, and above the screens
+              that is .phone-shell. At the .landing-stage level its sheet spanned
+              the whole viewport. */}
+          <ConfirmDialog
+            confirmLabel={pendingDelete?.purpose === "management" ? "Delete chat" : "Delete plan"}
+            description={
+              pendingDelete
+                ? pendingDelete.purpose === "management"
+                  ? `“${pendingDelete.title}” and its messages will be permanently removed. This cannot be undone.`
+                  : `“${pendingDelete.title}” and its messages and payment history will be permanently removed. This cannot be undone.`
+                : ""
+            }
+            onConfirm={() => {
+              if (pendingDelete) void deleteSession(pendingDelete);
+            }}
+            onOpenChange={(next) => {
+              if (!next) setPendingDelete(null);
+            }}
+            open={pendingDelete !== null}
+            title={
+              pendingDelete?.purpose === "management"
+                ? "Delete this business chat?"
+                : "Delete this registration plan?"
+            }
+          />
         </motion.div>
       </div>
-      <ConfirmDialog
-        confirmLabel={pendingDelete?.purpose === "management" ? "Delete chat" : "Delete plan"}
-        description={
-          pendingDelete
-            ? pendingDelete.purpose === "management"
-              ? `“${pendingDelete.title}” and its messages will be permanently removed. This cannot be undone.`
-              : `“${pendingDelete.title}” and its messages and payment history will be permanently removed. This cannot be undone.`
-            : ""
-        }
-        onConfirm={() => {
-          if (pendingDelete) void deleteSession(pendingDelete);
-        }}
-        onOpenChange={(next) => {
-          if (!next) setPendingDelete(null);
-        }}
-        open={pendingDelete !== null}
-        title={
-          pendingDelete?.purpose === "management"
-            ? "Delete this business chat?"
-            : "Delete this registration plan?"
-        }
-      />
     </div>
   );
 }

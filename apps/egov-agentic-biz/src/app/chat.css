@@ -1104,7 +1104,7 @@
 .chat-header {
   position: relative;
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) 34px;
+  grid-template-columns: 38px minmax(0, 1fr) 38px;
   align-items: center;
   gap: 8px;
   padding: 4px 16px 10px;
