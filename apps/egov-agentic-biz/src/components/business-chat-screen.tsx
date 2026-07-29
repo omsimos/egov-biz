@@ -89,6 +89,12 @@ export type PaymentRequest = {
   territorialScope?: DtiBusinessNameForm["territorialScope"];
 };
 
+function birFormArtifactLabel(artifact: BirFormArtifact) {
+  const formType =
+    artifact.formType === "1905" || artifact.filename === "BIR-Form-1905.pdf" ? "1905" : "1901";
+  return `BIR Form ${formType}`;
+}
+
 function textOf(message: BusinessChatMessage) {
   return message.parts
     .filter((part) => part.type === "text")
@@ -954,6 +960,7 @@ function BirFormArtifactCard({
   artifact: BirFormArtifact;
   onPreview: () => void;
 }) {
+  const formLabel = birFormArtifactLabel(artifact);
   return (
     <button
       className="pdf-artifact-card"
@@ -966,7 +973,7 @@ function BirFormArtifactCard({
       </span>
       <span className="pdf-artifact-copy">
         <small>PDF artifact</small>
-        <strong>BIR Form 1901</strong>
+        <strong>{formLabel}</strong>
         <span>
           {artifact.pageCount} pages · {Math.max(1, Math.round(artifact.size / 1024))} KB
         </span>
@@ -1028,11 +1035,19 @@ function ToolPart({
           <FilePdf />
         </div>
       );
+    const formType =
+      "input" in part &&
+      part.input &&
+      typeof part.input === "object" &&
+      "type" in part.input &&
+      part.input.type === "1905"
+        ? "1905"
+        : "1901";
     return (
       <div className="chat-tool-row active">
         <CircleNotch className="spin" />
         <div>
-          <small>Generating BIR Form 1901</small>
+          <small>Generating BIR Form {formType}</small>
           <span className="chat-shimmer">Prefilling the authenticated profile</span>
         </div>
         <FilePdf />
@@ -1337,6 +1352,7 @@ function PdfPreviewDialog({
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const formLabel = birFormArtifactLabel(artifact);
   useEffect(() => {
     dialogRef.current?.focus();
     const close = (event: KeyboardEvent) => {
@@ -1379,7 +1395,7 @@ function PdfPreviewDialog({
           </span>
           <div>
             <small>PDF preview</small>
-            <h2 id="pdf-preview-title">BIR Form 1901</h2>
+            <h2 id="pdf-preview-title">{formLabel}</h2>
           </div>
           <button
             className="chat-dialog-close"
@@ -1390,7 +1406,7 @@ function PdfPreviewDialog({
             <X />
           </button>
         </header>
-        <iframe src={artifact.url} title="BIR Form 1901 PDF preview" />
+        <iframe src={artifact.url} title={`${formLabel} PDF preview`} />
         <footer>
           <a data-cuelume-toggle="success" href={artifact.url} download={artifact.filename}>
             <DownloadSimple weight="bold" /> Download PDF

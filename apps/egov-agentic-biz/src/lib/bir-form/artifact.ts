@@ -1,12 +1,15 @@
 import type { EgovSsoCitizenProfile } from "@repo/egov/eGovSso";
-import { storeSessionArtifact } from "@/lib/auth/session";
+import { birFormArtifactOwnerId, readSession } from "@/lib/auth/session";
+import { bir1905TemplatePath, generateBir1905Pdf } from "@/lib/bir-form/generator-1905";
 import { bir1901TemplatePath, generateBir1901Pdf } from "@/lib/bir-form/generator";
-import { mapEgovProfileToBir1901 } from "@/lib/bir-form/profile";
-import type { Bir1901Data, GenerateBirFormInput } from "@/lib/bir-form/schema";
+import { mapEgovProfileToBir1901, mapEgovProfileToBir1905 } from "@/lib/bir-form/profile";
+import type { Bir1901Data, Bir1905Data, GenerateBirFormInput } from "@/lib/bir-form/schema";
+import { uploadBirForm } from "@/server/r2";
 
 export type BirFormArtifact = {
   artifactId: string;
-  filename: "BIR-Form-1901.pdf";
+  filename: "BIR-Form-1901.pdf" | "BIR-Form-1905.pdf";
+  formType: "1901" | "1905";
   mediaType: "application/pdf";
   pageCount: number;
   size: number;
@@ -33,13 +36,17 @@ export function mergeBir1901Data(profileData: Bir1901Data, inputData: Bir1901Dat
   return mergeDefined<Bir1901Data>(profileData, inputData);
 }
 
+export function mergeBir1905Data(profileData: Bir1905Data, inputData: Bir1905Data) {
+  return mergeDefined<Bir1905Data>(profileData, inputData);
+}
+
 export async function createBirFormArtifact(
   request: Request,
   profile: EgovSsoCitizenProfile,
   input: GenerateBirFormInput = { type: "1901", data: {} },
 ): Promise<BirFormArtifact> {
-  let generated: Awaited<ReturnType<typeof generateBir1901Pdf>>;
-  let filename: "BIR-Form-1901.pdf";
+  let generated: { bytes: Uint8Array; pageCount: number; size: number };
+  let filename: BirFormArtifact["filename"];
   switch (input.type) {
     case "1901": {
       const profileData = mapEgovProfileToBir1901(profile);
@@ -48,18 +55,28 @@ export async function createBirFormArtifact(
       filename = "BIR-Form-1901.pdf";
       break;
     }
+    case "1905": {
+      const profileData = mapEgovProfileToBir1905(profile);
+      const data = mergeBir1905Data(profileData, input.data);
+      generated = await generateBir1905Pdf(data, bir1905TemplatePath());
+      filename = "BIR-Form-1905.pdf";
+      break;
+    }
   }
   const mediaType = "application/pdf" as const;
-  const artifactId = storeSessionArtifact(request, {
-    bytes: generated.bytes,
-    filename,
-    mediaType,
+  const session = readSession(request);
+  if (!session) throw new Error("The authenticated session is no longer available");
+  const ownerId = birFormArtifactOwnerId(session);
+
+  const artifactId = crypto.randomUUID();
+  await uploadBirForm(ownerId, artifactId, input.type, generated.bytes, {
+    signal: request.signal,
   });
-  if (!artifactId) throw new Error("The authenticated session is no longer available");
 
   return {
     artifactId,
     filename,
+    formType: input.type,
     mediaType,
     pageCount: generated.pageCount,
     size: generated.size,

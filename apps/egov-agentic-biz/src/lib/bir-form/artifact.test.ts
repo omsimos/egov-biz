@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mergeBir1901Data } from "@/lib/bir-form/artifact";
+import { mergeBir1901Data, mergeBir1905Data } from "@/lib/bir-form/artifact";
 
 describe("mergeBir1901Data", () => {
   test("lets supplied form data override profile defaults without losing sibling values", () => {
@@ -38,6 +38,37 @@ describe("mergeBir1901Data", () => {
           email: "profile@example.test",
           preferredTypes: ["landline", "mobile"],
         },
+      },
+    });
+  });
+});
+
+describe("mergeBir1905Data", () => {
+  test("lets supplied Form 1905 data override profile defaults", () => {
+    const merged = mergeBir1905Data(
+      {
+        taxpayerInformation: {
+          tin: "123456789",
+          registeredName: "Profile Name",
+        },
+      },
+      {
+        taxpayerInformation: {
+          registeredName: "Corrected Name",
+        },
+        otherUpdates: {
+          changeOfCivilStatus: true,
+        },
+      },
+    );
+
+    expect(merged).toEqual({
+      taxpayerInformation: {
+        tin: "123456789",
+        registeredName: "Corrected Name",
+      },
+      otherUpdates: {
+        changeOfCivilStatus: true,
       },
     });
   });

@@ -10,16 +10,9 @@ import {
 
 export const AUTH_COOKIE_NAME = "egov_agentic_biz_session";
 
-export type SessionArtifact = {
-  bytes: Uint8Array;
-  createdAt: number;
-  filename: string;
-  mediaType: "application/pdf";
-};
-
 export type AuthenticatedSession = {
-  artifacts: Map<string, SessionArtifact>;
   expiresAt: number;
+  id: string;
   profile: CitizenProfile;
   rawProfile: EgovSsoCitizenProfile;
 };
@@ -74,8 +67,8 @@ export function createSession(rawProfile: EgovSsoCitizenProfile) {
   const sessionId = crypto.randomUUID();
   const maxAge = sessionTtlSeconds();
   const session: AuthenticatedSession = {
-    artifacts: new Map(),
     expiresAt: Date.now() + maxAge * 1_000,
+    id: sessionId,
     profile: mapEgovCitizenProfile(rawProfile),
     rawProfile,
   };
@@ -93,8 +86,8 @@ export function readSession(request: Request): AuthenticatedSession | undefined 
     const storedSession = readStoredAuthSession(sessionId);
     if (!storedSession) return undefined;
     session = {
-      artifacts: new Map(),
       expiresAt: storedSession.expiresAt,
+      id: sessionId,
       profile: mapEgovCitizenProfile(storedSession.rawProfile),
       rawProfile: storedSession.rawProfile,
     };
@@ -117,26 +110,8 @@ export function deleteSession(request: Request) {
   }
 }
 
-export function storeSessionArtifact(
-  request: Request,
-  artifact: Omit<SessionArtifact, "createdAt">,
-) {
-  const session = readSession(request);
-  if (!session) return undefined;
-
-  while (session.artifacts.size >= 5) {
-    const oldest = session.artifacts.keys().next().value;
-    if (typeof oldest !== "string") break;
-    session.artifacts.delete(oldest);
-  }
-
-  const artifactId = crypto.randomUUID();
-  session.artifacts.set(artifactId, { ...artifact, createdAt: Date.now() });
-  return artifactId;
-}
-
-export function readSessionArtifact(request: Request, artifactId: string) {
-  return readSession(request)?.artifacts.get(artifactId);
+export function birFormArtifactOwnerId(session: AuthenticatedSession) {
+  return session.profile.id ? `citizen:${session.profile.id}` : `session:${session.id}`;
 }
 
 export function sessionCookieOptions(request: Request, maxAge: number) {
