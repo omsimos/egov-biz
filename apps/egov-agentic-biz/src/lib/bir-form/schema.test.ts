@@ -6,6 +6,34 @@ import {
   type GenerateBirFormInput,
 } from "@/lib/bir-form/schema";
 
+function propertiesMissingDescriptions(value: unknown, path = "schema"): string[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const schema = value as Record<string, unknown>;
+  const missing: string[] = [];
+  const properties = schema.properties;
+  if (properties && typeof properties === "object" && !Array.isArray(properties)) {
+    for (const [name, property] of Object.entries(properties)) {
+      const propertyPath = `${path}.${name}`;
+      if (
+        !property ||
+        typeof property !== "object" ||
+        Array.isArray(property) ||
+        typeof (property as Record<string, unknown>).description !== "string"
+      )
+        missing.push(propertyPath);
+      missing.push(...propertiesMissingDescriptions(property, propertyPath));
+    }
+  }
+  if (schema.items) missing.push(...propertiesMissingDescriptions(schema.items, `${path}[]`));
+  for (const keyword of ["oneOf", "anyOf", "allOf"] as const) {
+    const branches = schema[keyword];
+    if (Array.isArray(branches))
+      for (const [index, branch] of branches.entries())
+        missing.push(...propertiesMissingDescriptions(branch, `${path}.${keyword}[${index}]`));
+  }
+  return missing;
+}
+
 describe("generateBirFormInputSchema", () => {
   test("narrows Form 1901 data from the required discriminator", () => {
     const input: GenerateBirFormInput = {
@@ -40,31 +68,40 @@ describe("generateBirFormInputSchema", () => {
   });
 
   test("serializes the discriminator and form data as a tool-compatible JSON Schema", () => {
-    expect(z.toJSONSchema(generateBirFormInputSchema)).toMatchObject({
+    const jsonSchema = z.toJSONSchema(generateBirFormInputSchema);
+    expect(jsonSchema).toMatchObject({
+      description: "Generate-BIR-form input selected by its form type discriminator.",
       oneOf: [
         {
           properties: {
-            type: { const: "1901" },
-            data: { type: "object" },
+            type: {
+              const: "1901",
+              description: 'BIR form discriminator. Use "1901".',
+            },
+            data: {
+              description: "Form-specific values for BIR Form 1901. Every field is optional.",
+              type: "object",
+            },
           },
           required: ["type", "data"],
           type: "object",
         },
       ],
     });
+    expect(propertiesMissingDescriptions(jsonSchema)).toEqual([]);
   });
 
-  test("rejects unsupported form discriminators and unknown fields", () => {
+  test("rejects unsupported form discriminators while tolerating extra object fields", () => {
     expect(generateBirFormInputSchema.safeParse({ type: "2303", data: {} }).success).toBe(false);
     expect(
-      bir1901DataSchema.safeParse({
+      bir1901DataSchema.parse({
         taxpayerInformation: { inventedField: "not on the PDF" },
-      }).success,
-    ).toBe(false);
+      }),
+    ).toEqual({ taxpayerInformation: {} });
   });
 
-  test("validates dates, contact values, TINs, ZIP codes, and numeric fields", () => {
-    const invalid = bir1901DataSchema.safeParse({
+  test("accepts loosely formatted field values without format or range enforcement", () => {
+    const result = bir1901DataSchema.safeParse({
       taxpayerInformation: {
         tin: "1234",
         birthOrOrganizationDate: "01/23/1990",
@@ -76,8 +113,7 @@ describe("generateBirFormInputSchema", () => {
       },
     });
 
-    expect(invalid.success).toBe(false);
-    if (!invalid.success) expect(invalid.error.issues.length).toBeGreaterThanOrEqual(6);
+    expect(result.success).toBe(true);
   });
 
   test("accepts data from every page of the supplied Form 1901", () => {
