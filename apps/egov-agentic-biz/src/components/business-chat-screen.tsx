@@ -83,10 +83,8 @@ export type PaymentRequest = {
   serviceType: PaymentServiceType;
   serviceLabel: string;
   proposedName: string;
-  ownerName: string;
   feeLabel: string;
   serviceReference?: string;
-  territorialScope?: DtiBusinessNameForm["territorialScope"];
 };
 
 function birFormArtifactLabel(artifact: BirFormArtifact) {
@@ -255,7 +253,6 @@ export function BarangayClearanceCard({
                 serviceType: "barangay-clearance",
                 serviceLabel: "Barangay Business Clearance",
                 proposedName: clearance.businessName,
-                ownerName: clearance.ownerName,
                 feeLabel: clearance.feeLabel,
                 serviceReference: clearance.referenceNumber,
               })
@@ -350,7 +347,6 @@ export function EbplsPermitCard({
                 serviceType: "ebpls-business-permit",
                 serviceLabel: "EBPLS Mayor’s / Business Permit",
                 proposedName: receipt.businessName,
-                ownerName: receipt.ownerName,
                 feeLabel: receipt.feeLabel,
                 serviceReference: receipt.referenceNumber,
               })
@@ -576,7 +572,7 @@ function QuestionComposer({
           ? value.join(" ")
           : (value?.trim() ?? "");
     if (!text) return false;
-    if (question.id === "proposed-business-name") return text.length >= 3;
+    if (question.id === "business-dominant-name") return text.length >= 3;
     if (question.id !== "business-address") return true;
     const hasAddressMarker =
       /\b(?:\d{1,5}|unit|room|floor|block|lot|house|street|st\.?|road|rd\.?|avenue|ave\.?|drive|highway|building|bldg\.?|plaza|village|subdivision|purok|sitio|poblacion|barangay|brgy\.?)\b/i.test(
@@ -649,7 +645,7 @@ function QuestionComposer({
         const selected = Array.isArray(value) ? value : value ? [value] : [];
         const enteredText = typeof value === "string" ? value.trim() : "";
         const options =
-          question.type === "single"
+          question.type === "single" && question.allowOther !== false
             ? [
                 ...(question.options ?? []),
                 {
@@ -779,7 +775,7 @@ function QuestionComposer({
                   <FieldHint error role="alert" className="mt-0">
                     {question.id === "business-address"
                       ? "Enter the full street, building, or unit and barangay."
-                      : "Enter the complete proposed business name."}
+                      : "Enter a distinctive dominant business name."}
                   </FieldHint>
                 )}
               </div>
@@ -888,6 +884,8 @@ export function DtiFormCard({
   onSubmitPay: () => void;
 }) {
   const rows = [
+    ...(form.dominantName ? [["Dominant name", form.dominantName]] : []),
+    ...(form.descriptorLabel ? [["Descriptor", form.descriptorLabel]] : []),
     ["Proposed business name", form.proposedName || "Needs your answer"],
     ["Business activity", form.businessActivity],
     ["Territorial scope", form.territorialScope],
@@ -944,6 +942,21 @@ export function DtiFormCard({
             : "To change anything, type it below. For example: “Use the name Reyes Coffee Club.”"}
         </span>
       </div>
+      {form.termsAndConditions && (
+        <details className="mx-[13px] mb-3 rounded-md border border-line-soft bg-muted px-3 py-2 text-xs">
+          <summary className="cursor-pointer font-extrabold">
+            BNRS terms and name requirements
+          </summary>
+          <p className="mt-2 leading-[1.45] text-gray-800">{form.termsAndConditions}</p>
+          {form.businessNameRequirements?.length ? (
+            <ul className="mt-2 list-disc space-y-1 pl-4 text-gray-800">
+              {form.businessNameRequirements.map((requirement) => (
+                <li key={requirement}>{requirement}</li>
+              ))}
+            </ul>
+          ) : null}
+        </details>
+      )}
       <div className="grid gap-[9px] border-t border-gray-200 px-[13px] pt-[11px] pb-[13px]">
         <div className="flex items-center justify-between gap-2.5">
           <small className="text-2xs font-extrabold text-muted-foreground">Payment</small>
@@ -1243,24 +1256,24 @@ function ToolPart({
   if (part.type === "tool-webSearch") return <SearchTool part={part} />;
   if (part.type === "tool-updatePlan") return null;
   if (part.type === "tool-editDtiBusinessNameForm") {
-    if (part.state === "output-available")
+    if (part.state === "output-available" && part.output.form) {
+      const form = part.output.form;
       return (
         <DtiFormCard
-          form={part.output.form}
+          form={form}
           note={part.input.note}
           paid={paidServices.has("dti-business-name")}
           onSubmitPay={() =>
             onSubmitPay({
               serviceType: "dti-business-name",
               serviceLabel: "DTI Business Name Registration",
-              proposedName: part.output.form.proposedName,
-              ownerName: part.output.form.ownerName,
-              feeLabel: part.output.form.feeLabel,
-              territorialScope: part.output.form.territorialScope,
+              proposedName: form.proposedName,
+              feeLabel: form.feeLabel,
             })
           }
         />
       );
+    }
     return (
       <div className="chat-tool-row active">
         <CircleNotch className="spin" />
@@ -1349,13 +1362,16 @@ export function PaymentDialog({
       const response = await fetch("/api/payments/egovpay", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          conversationId,
-          serviceType: payment.serviceType,
-          proposedName: payment.proposedName,
-          ...(payment.territorialScope ? { territorialScope: payment.territorialScope } : {}),
-          ...(payment.serviceReference ? { serviceReference: payment.serviceReference } : {}),
-        }),
+        body: JSON.stringify(
+          payment.serviceType === "dti-business-name"
+            ? { conversationId, serviceType: payment.serviceType }
+            : {
+                conversationId,
+                serviceType: payment.serviceType,
+                proposedName: payment.proposedName,
+                serviceReference: payment.serviceReference,
+              },
+        ),
       });
       const result = (await response.json()) as {
         checkoutUrl?: string;
@@ -1382,8 +1398,8 @@ export function PaymentDialog({
           <span className="text-xs font-bold text-primary">eGovPay</span>
           <DialogTitle className="mt-1 mb-1">Continue to secure payment</DialogTitle>
           <DialogDescription>
-            You’ll continue to eGovPay in this tab. This demo will mark the fee paid while webhook
-            support is being completed.
+            You’ll continue to eGovPay in this tab. Payment is completed only after the server
+            verifies the provider transaction.
           </DialogDescription>
         </div>
         <div className="my-4 flex items-center justify-between gap-3 border-y border-border py-3">

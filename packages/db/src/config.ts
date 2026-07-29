@@ -16,8 +16,11 @@ export type TursoConfig = {
 };
 
 const REMOTE_PROTOCOLS = new Set(["libsql:", "https:", "wss:"]);
-export const DEFAULT_DX_DATABASE_URL = `file:${fileURLToPath(
-  new URL("../data/egov-dx.sqlite", import.meta.url),
+export const DEFAULT_DX_DATABASE_URL = `file:${path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "data",
+  "egov-dx.sqlite",
 )}`;
 
 export function getTursoConfig(environment: DatabaseEnvironment = process.env): TursoConfig {

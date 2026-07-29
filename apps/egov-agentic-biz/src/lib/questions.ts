@@ -59,6 +59,7 @@ export type IntakeQuestion = {
   helpText: string;
   type: "single" | "multi" | "number" | "text";
   options?: QuestionOption[];
+  allowOther?: boolean;
   placeholder?: string;
   suffix?: string;
   minimum?: number;

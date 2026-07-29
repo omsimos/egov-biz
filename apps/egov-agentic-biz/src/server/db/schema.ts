@@ -1,5 +1,12 @@
 import { relations, sql } from "drizzle-orm";
-import { check, index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  check,
+  index,
+  integer,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 import type { UIMessage } from "ai";
 import type { ConversationPurpose, PaymentServiceType } from "@/lib/business-chat";
 import type { RegisteredBusiness } from "@/lib/registered-business";
@@ -19,14 +26,22 @@ export const conversations = sqliteTable(
     id: text("id").primaryKey(),
     title: text("title").notNull(),
     initialPrompt: text("initial_prompt").notNull(),
+    ownerEgovUserId: text("owner_egov_user_id"),
     purpose: text("purpose").$type<ConversationPurpose>().notNull().default("registration"),
     businessId: text("business_id"),
+    bnrsApplicationId: text("bnrs_application_id"),
+    bnrsTransactionUuid: text("bnrs_transaction_uuid"),
+    bnrsCertificateNumber: text("bnrs_certificate_number"),
     activeStreamId: text("active_stream_id"),
     createdAt: isoTimestamp("created_at"),
     updatedAt: isoTimestamp("updated_at"),
   },
   (table) => [
     index("idx_conversations_updated").on(table.updatedAt),
+    index("idx_conversations_owner_updated").on(table.ownerEgovUserId, table.updatedAt),
+    uniqueIndex("idx_conversations_bnrs_application").on(table.bnrsApplicationId),
+    uniqueIndex("idx_conversations_bnrs_transaction").on(table.bnrsTransactionUuid),
+    uniqueIndex("idx_conversations_bnrs_certificate").on(table.bnrsCertificateNumber),
     index("idx_conversations_business_updated").on(table.businessId, table.updatedAt),
   ],
 );

@@ -992,10 +992,11 @@ export function EgaphBusinessApp({
       let status: string | null = null;
       let serviceType: PaymentServiceType | null = null;
       const transactionId = url.searchParams.get("transactionId");
-      if (paymentReturn && transactionId) {
-        const paymentResponse = await fetch(
-          `/api/payments/egovpay/status?transactionId=${encodeURIComponent(transactionId)}`,
-        );
+      if (paymentReturn) {
+        const statusQuery = transactionId
+          ? `transactionId=${encodeURIComponent(transactionId)}`
+          : `conversationId=${encodeURIComponent(id)}`;
+        const paymentResponse = await fetch(`/api/payments/egovpay/status?${statusQuery}`);
         if (paymentResponse.ok) {
           const payment = (
             (await paymentResponse.json()) as {

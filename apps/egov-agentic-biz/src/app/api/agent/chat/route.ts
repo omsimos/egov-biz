@@ -1,6 +1,12 @@
 import { createMCPClient } from "@ai-sdk/mcp";
 import type { EgovSsoCitizenProfile } from "@repo/egov/eGovSso";
 import {
+  BnrsError,
+  mapEgovSsoProfileToBnrsResidentialAddress,
+  type BnrsCertificate,
+  type BnrsBusinessAddressInput,
+} from "@repo/dx/bnrs";
+import {
   convertToModelMessages,
   createGateway,
   createUIMessageStream,
@@ -39,13 +45,11 @@ import {
   initialRegistrationPlan,
   normalizeRegistrationPlan,
 } from "@/lib/registration-plan";
-import { dtiRegistrationFee, formatPeso } from "@/lib/dti-fees";
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import {
   availableUserInfoFields,
   extractExplicitBusinessAddress,
   profileAddressPreference,
-  resolveBusinessFormAddress,
 } from "@/lib/form-prefill";
 import {
   extractExplicitSmsMessage,
@@ -66,7 +70,6 @@ import {
 import type { BusinessPlan, IntakeAnswer, IntakeQuestion } from "@/lib/questions";
 import { isValidChoiceAnswer } from "@/lib/intake-validation";
 import {
-  buildFinalBusiness,
   buildFinalSelfEmployedBusiness,
   buildMockCompliance,
   buildSelfEmployedMockCompliance,
@@ -77,14 +80,22 @@ import {
   deterministicBusinessManagementResponse,
 } from "@/lib/business-management";
 import type { RegisteredBusiness } from "@/lib/registered-business";
-import { getConversation, saveMessages, setActiveStream } from "@/server/conversations";
+import { getBusiness } from "@/server/businesses";
 import {
-  getLatestPaymentForConversation,
-  getLatestPaymentForService,
-  isPaidStatus,
-} from "@/server/payments";
+  getBnrsConversationLink,
+  getConversation,
+  saveMessages,
+  setActiveStream,
+} from "@/server/conversations";
+import { bnrsActorFromProfile, getBnrs } from "@/server/dx/bnrs";
+import {
+  getBnrsCertificateForConversation,
+  prepareBnrsApplication,
+  syncBnrsPaymentForConversation,
+} from "@/server/dx/bnrs-applications";
+import { getLatestPaymentForService, isPaidStatus } from "@/server/payments";
 import { getResumableContext } from "@/server/resumable";
-import { getRegisteredBusiness, upsertRegisteredBusiness } from "@/server/registered-businesses";
+import { upsertRegisteredBusiness } from "@/server/registered-businesses";
 import {
   dispatchSmsOnce,
   SmsDispatchRateLimitError,
@@ -98,6 +109,25 @@ export const maxDuration = 120;
 const BARANGAY_CLEARANCE_MOCK_DELAY_MS = 2_000;
 const EBPLS_PERMIT_MOCK_DELAY_MS = 5_000;
 const COMPLIANCE_MOCK_DELAY_MS = 900;
+
+function readBnrsCatalog() {
+  const bnrs = getBnrs();
+  return {
+    nameRequirements: bnrs.getBusinessNameRequirements(),
+    scopes: bnrs.getBusinessScopes(),
+    termsAndConditions: bnrs.getTermsAndConditions(),
+  };
+}
+
+type BnrsCatalog = ReturnType<typeof readBnrsCatalog>;
+
+function formatPeso(amount: number) {
+  return new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+    minimumFractionDigits: 0,
+  }).format(amount);
+}
 
 const PLACEHOLDER_ANSWER =
   /^(?:a+s+s+|asdf+|test(?:ing)?|sample|placeholder|none|n\/?a|not sure|unknown|idk|tbd|xxx+|-+)$/i;
@@ -152,12 +182,13 @@ function isCompleteBusinessAddress(value: string) {
 }
 
 function isUsableIntakeAnswer(answer: IntakeAnswer, question?: IntakeQuestion) {
+  if (answer.questionId === "bnrs-terms-accepted") return answer.value === "accept";
   if (question?.type === "single" || question?.type === "multi")
     return isValidChoiceAnswer(question, answer.value);
   const text = normalizedAnswerText(answer.value);
   if (!text || PLACEHOLDER_ANSWER.test(text)) return false;
   if (answer.questionId === "business-address") return isCompleteBusinessAddress(text);
-  if (answer.questionId === "proposed-business-name") return isMeaningfulBusinessName(text);
+  if (answer.questionId === "business-dominant-name") return isMeaningfulBusinessName(text);
   return true;
 }
 
@@ -175,9 +206,10 @@ const questionSchema = z
       .max(60),
     eyebrow: z.string().min(1).max(30),
     title: z.string().min(1).max(120),
-    helpText: z.string().max(180),
+    helpText: z.string().max(2_000),
     type: z.enum(["single", "multi", "number", "text"]),
-    options: z.array(optionSchema).max(8).optional(),
+    options: z.array(optionSchema).max(40).optional(),
+    allowOther: z.boolean().optional(),
     placeholder: z.string().max(100).optional(),
     suffix: z.string().max(30).optional(),
     minimum: z.number().optional(),
@@ -194,24 +226,35 @@ const questionSchema = z
         path: ["options"],
       });
   });
-const dtiFormSchema = z.object({
-  applicationType: z.literal("New registration"),
-  status: z.enum(["Ready to submit", "Submitted"]),
-  proposedName: z
-    .string()
-    .trim()
-    .refine(isMeaningfulBusinessName, "A complete proposed business name is required"),
-  businessActivity: z.string().trim().min(1),
-  territorialScope: z.enum(["Barangay", "City / municipality", "Regional", "National"]),
-  ownerName: z.string().trim().min(1),
-  businessAddress: z
-    .string()
-    .trim()
-    .refine(isCompleteBusinessAddress, "A complete business address is required"),
-  city: z.string().trim().min(1),
-  feeLabel: z.string().trim().min(1),
-  missingFields: z.array(z.string()).max(0),
-});
+function dtiFormSchema(catalog: BnrsCatalog) {
+  const descriptorIds = new Set<string>(catalog.nameRequirements.descriptors.map(({ id }) => id));
+  const scopeIds = new Set<string>(catalog.scopes.map(({ id }) => id));
+  return z.object({
+    applicationType: z.literal("New registration"),
+    status: z.enum(["Ready to submit", "Submitted"]),
+    dominantName: z
+      .string()
+      .trim()
+      .refine(isMeaningfulBusinessName, "A dominant business name is required"),
+    descriptorId: z.string().refine((id) => descriptorIds.has(id), "Select a BNRS descriptor"),
+    businessActivity: z.string().trim().min(1),
+    territorialScopeId: z
+      .enum(["CITY_MUNICIPALITY", "REGIONAL", "NATIONAL"])
+      .refine((id) => scopeIds.has(id), "Select a BNRS scope"),
+    ownerName: z.string().trim().min(1),
+    businessAddress: z
+      .string()
+      .trim()
+      .refine(isCompleteBusinessAddress, "A complete business address is required"),
+    city: z.string().trim().min(1),
+    missingFields: z.array(z.string()).max(0),
+  });
+}
+type EditDtiFormInput = {
+  form: z.infer<ReturnType<typeof dtiFormSchema>>;
+  note: string;
+};
+type EditDtiFormOutput = { applicationId: string; form: DtiBusinessNameForm };
 const barangayClearanceApplicationSchema = z.object({
   businessName: z.string(),
   ownerName: z.string(),
@@ -342,17 +385,20 @@ function planAfterPermitIssued(plan: RegistrationPlan): RegistrationPlan {
 
 function questionsForIncompleteDtiForm(
   form: DtiBusinessNameForm,
-  profile: CitizenProfile | null,
   answers: IntakeAnswer[],
+  catalog: BnrsCatalog,
 ) {
   const answered = new Set(answers.map((answer) => answer.questionId));
   const questions: IntakeQuestion[] = [];
-  if (!isMeaningfulBusinessName(form.proposedName) && !answered.has("proposed-business-name"))
-    questions.push(proposedNameQuestion());
-  if (!isCompleteBusinessAddress(form.businessAddress) && !answered.has("business-address"))
-    questions.push(
-      businessAddressQuestion(form.city || profile?.city || "your city or municipality"),
-    );
+  if (!form.dominantName && !answered.has("business-dominant-name"))
+    questions.push(dominantNameQuestion(catalog));
+  if (!form.descriptorId && !answered.has("business-descriptor"))
+    questions.push(descriptorQuestion(catalog));
+  if (!form.territorialScopeId && !answered.has("business-territorial-scope"))
+    questions.push(territorialScopeQuestion(catalog));
+  if (!form.termsAccepted) questions.push(termsQuestion(catalog));
+  if (!form.businessAddressDetails)
+    questions.push(...structuredAddressQuestions().filter(({ id }) => !answered.has(id)));
   return questions;
 }
 
@@ -434,23 +480,28 @@ function mockReference(prefix: string) {
   return `${prefix}-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 }
 
-function mockBarangayClearance(
-  payment: NonNullable<Awaited<ReturnType<typeof getLatestPaymentForConversation>>>,
-  form: DtiBusinessNameForm | null,
-  profile: CitizenProfile | null,
-): BarangayClearance {
+function mockBarangayClearance(certificate: BnrsCertificate): BarangayClearance {
   const submittedAt = new Date();
-  const barangay = profile?.barangay || "Business-address barangay";
-  const city = form?.city || profile?.city || "Local government unit";
+  const address = certificate.businessAddress;
+  const businessAddress = [
+    address.addressLine1,
+    address.addressLine2,
+    address.barangay,
+    address.cityMunicipality,
+    address.province,
+    address.region,
+    address.postalCode,
+  ]
+    .filter(Boolean)
+    .join(", ");
   return {
-    businessName: payment.proposedName,
-    ownerName: payment.ownerName || profile?.fullName || "Registered owner",
-    businessActivity: form?.businessActivity || "Business activity on registration record",
-    businessAddress:
-      form?.businessAddress || profile?.address || "Business address on registration record",
-    barangay,
-    city,
-    registrationDocument: `DTI Business Name Certificate — ${payment.proposedName}`,
+    businessName: certificate.businessName,
+    ownerName: certificate.ownerName,
+    businessActivity: certificate.descriptor,
+    businessAddress,
+    barangay: address.barangay,
+    city: address.cityMunicipality,
+    registrationDocument: `DTI Business Name Certificate ${certificate.certificateNumber}`,
     supportingDocuments: [
       "DTI Business Name Certificate",
       "Government-issued ID",
@@ -541,20 +592,21 @@ function planAfterPayment(plan: RegistrationPlan | null): RegistrationPlan {
   });
 }
 
-function resumableConsumer(conversationId: string) {
+function resumableConsumer(ownerEgovUserId: string, conversationId: string) {
   return async ({ stream }: { stream: ReadableStream<string> }) => {
     const streamId = crypto.randomUUID();
-    await setActiveStream(conversationId, streamId);
+    await setActiveStream(ownerEgovUserId, conversationId, streamId);
     try {
       await getResumableContext().createNewResumableStream(streamId, () => stream);
     } catch (error) {
-      await setActiveStream(conversationId, null);
+      await setActiveStream(ownerEgovUserId, conversationId, null);
       console.error("Business chat resumable stream failed", error);
     }
   };
 }
 
 function manualResponse(
+  ownerEgovUserId: string,
   conversationId: string,
   messages: BusinessChatMessage[],
   execute: (writer: UIMessageStreamWriter<BusinessChatMessage>) => Promise<void> | void,
@@ -564,17 +616,20 @@ function manualResponse(
     originalMessages: messages,
     execute: ({ writer }) => execute(writer),
     onEnd: async ({ messages: completeMessages }) => {
-      await saveMessages(conversationId, completeMessages);
-      await setActiveStream(conversationId, null);
+      await saveMessages(ownerEgovUserId, conversationId, completeMessages);
+      await setActiveStream(ownerEgovUserId, conversationId, null);
     },
   });
   return createUIMessageStreamResponse({
     stream,
-    ...(options.resumable === false ? {} : { consumeSseStream: resumableConsumer(conversationId) }),
+    ...(options.resumable === false
+      ? {}
+      : { consumeSseStream: resumableConsumer(ownerEgovUserId, conversationId) }),
   });
 }
 
 async function managementResponse(
+  ownerEgovUserId: string,
   conversationId: string,
   business: RegisteredBusiness,
   messages: BusinessChatMessage[],
@@ -585,6 +640,7 @@ async function managementResponse(
   const latestPrompt = latestUser?.text ?? "";
   if (!process.env.AI_GATEWAY_API_KEY)
     return manualResponse(
+      ownerEgovUserId,
       conversationId,
       messages,
       (writer) => {
@@ -648,8 +704,8 @@ ${JSON.stringify(businessManagementContext(business))}`,
       generateMessageId: () => responseMessageId,
       sendReasoning: false,
       onEnd: async ({ messages: completeMessages }) => {
-        await saveMessages(conversationId, completeMessages);
-        await setActiveStream(conversationId, null);
+        await saveMessages(ownerEgovUserId, conversationId, completeMessages);
+        await setActiveStream(ownerEgovUserId, conversationId, null);
       },
     })
     .pipeTo(new WritableStream())
@@ -663,15 +719,111 @@ ${JSON.stringify(businessManagementContext(business))}`,
   });
 }
 
-function proposedNameQuestion(): IntakeQuestion {
+function dominantNameQuestion(catalog: BnrsCatalog): IntakeQuestion {
   return {
-    id: "proposed-business-name",
+    id: "business-dominant-name",
     eyebrow: "Business identity",
-    title: "What business name do you want to register?",
-    helpText: "Enter the complete proposed name. You can still revise it before payment.",
+    title: "What distinctive name do you want to register?",
+    helpText: `Enter only the dominant name; choose the business descriptor separately. ${catalog.nameRequirements.reminders[4]}`,
     type: "text",
-    placeholder: "Proposed trade name",
+    placeholder: "For example, Molar Bear",
   };
+}
+
+function descriptorQuestion(catalog: BnrsCatalog): IntakeQuestion {
+  return {
+    id: "business-descriptor",
+    eyebrow: "Business identity",
+    title: "Which BNRS descriptor best matches the business?",
+    helpText: "Choose an official descriptor. It will be kept separate from the dominant name.",
+    type: "single",
+    allowOther: false,
+    options: catalog.nameRequirements.descriptors.map(({ id, label }) => ({ id, label })),
+  };
+}
+
+function territorialScopeQuestion(catalog: BnrsCatalog): IntakeQuestion {
+  return {
+    id: "business-territorial-scope",
+    eyebrow: "Registration scope",
+    title: "Where should the business name be protected?",
+    helpText: "Each total includes the documentary stamp tax.",
+    type: "single",
+    allowOther: false,
+    options: catalog.scopes.map((scope) => ({
+      id: scope.id,
+      label: scope.label === "City/Municipality" ? "City / municipality" : scope.label,
+      description: `${formatPeso(scope.totalFee)} total`,
+    })),
+  };
+}
+
+function termsQuestion(catalog: BnrsCatalog): IntakeQuestion {
+  return {
+    id: "bnrs-terms-accepted",
+    eyebrow: "BNRS terms",
+    title: "Do you accept the BNRS terms and conditions?",
+    helpText: catalog.termsAndConditions,
+    type: "single",
+    allowOther: false,
+    options: [
+      { id: "accept", label: "I accept", description: "Continue the BNRS application" },
+      { id: "decline", label: "I do not accept", description: "Do not create the application" },
+    ],
+  };
+}
+
+function structuredAddressQuestions(): IntakeQuestion[] {
+  return [
+    {
+      id: "business-address-line-1",
+      eyebrow: "Business address",
+      title: "What is the street, building, or unit for the business?",
+      helpText: "Enter address line 1 only.",
+      type: "text",
+      placeholder: "Unit, building, street",
+    },
+    {
+      id: "business-barangay",
+      eyebrow: "Business address",
+      title: "What barangay is the business in?",
+      helpText: "Enter the official barangay name.",
+      type: "text",
+      placeholder: "Barangay",
+    },
+    {
+      id: "business-city-municipality",
+      eyebrow: "Business address",
+      title: "What city or municipality is the business in?",
+      helpText: "Enter the official city or municipality name.",
+      type: "text",
+      placeholder: "City or municipality",
+    },
+    {
+      id: "business-province",
+      eyebrow: "Business address",
+      title: "What province is the business in?",
+      helpText: "For Metro Manila addresses, enter Metro Manila.",
+      type: "text",
+      placeholder: "Province",
+    },
+    {
+      id: "business-region",
+      eyebrow: "Business address",
+      title: "What region is the business in?",
+      helpText: "Enter the official region name.",
+      type: "text",
+      placeholder: "Region",
+    },
+    {
+      id: "business-postal-code",
+      eyebrow: "Business address",
+      title: "What is the four-digit postal code?",
+      helpText: "BNRS requires a complete postal code.",
+      type: "text",
+      placeholder: "1234",
+    },
+  ];
 }
 
 function promptHasWorkSetup(prompt: string) {
@@ -686,7 +838,13 @@ function promptHasStaffing(prompt: string) {
   );
 }
 
-function intakeBatch(prompt: string, profile: CitizenProfile | null, answers: IntakeAnswer[]) {
+function intakeBatch(
+  prompt: string,
+  profile: CitizenProfile | null,
+  answers: IntakeAnswer[],
+  catalog: BnrsCatalog,
+  residentialAddress: BnrsBusinessAddressInput | null,
+) {
   const answered = new Set(answers.map((answer) => answer.questionId));
   const location = resolveBusinessLocation(prompt, profile?.city ?? "Philippines", answers);
   const questions: IntakeQuestion[] = [];
@@ -700,41 +858,19 @@ function intakeBatch(prompt: string, profile: CitizenProfile | null, answers: In
     questions.push(activityQuestion);
   if (!answered.has("workers") && !promptHasStaffing(prompt))
     questions.push(fallbackQuestionFor(prompt, 1));
-  const explicitAddress = extractExplicitBusinessAddress(prompt);
   const preference = addressPreference(answers);
-  if (!explicitAddress && !preference && profile?.address.trim())
-    questions.push(profileAddressQuestion());
-  if (
-    !explicitAddress &&
-    !answered.has("business-address") &&
-    (!profile?.address.trim() || preference === "different")
-  )
-    questions.push(businessAddressQuestion(location.city));
-  const promptName =
-    prompt
-      .match(
-        /(?:called|named|name is|business name(?: is|:)?|trade name(?: is|:)?)\s+[“"]?([^.”"\n]+)/i,
-      )?.[1]
-      ?.trim() ?? "";
+  if (!preference && residentialAddress) questions.push(profileAddressQuestion());
+  if (preference !== "profile" || !residentialAddress)
+    questions.push(...structuredAddressQuestions().filter(({ id }) => !answered.has(id)));
   const registrationType = makePlan(prompt, profile, answers).registrationType;
-  if (
-    registrationType !== "Self-employed" &&
-    !answered.has("proposed-business-name") &&
-    !isMeaningfulBusinessName(promptName)
-  )
-    questions.push(proposedNameQuestion());
-  return questions;
-}
-
-function businessAddressQuestion(city: string): IntakeQuestion {
-  return {
-    id: "business-address",
-    eyebrow: "Location",
-    title: `What is the complete business address in ${city}?`,
-    helpText: "Include the house, unit, street, or building and the barangay—not just the city.",
-    type: "text",
-    placeholder: `Street or building, barangay, ${city}`,
-  };
+  if (registrationType === "Sole proprietor") {
+    if (!answered.has("bnrs-terms-accepted")) questions.push(termsQuestion(catalog));
+    if (!answered.has("business-dominant-name")) questions.push(dominantNameQuestion(catalog));
+    if (!answered.has("business-descriptor")) questions.push(descriptorQuestion(catalog));
+    if (!answered.has("business-territorial-scope"))
+      questions.push(territorialScopeQuestion(catalog));
+  }
+  return questions.slice(0, 6);
 }
 
 function toolAnswers(messages: UIMessage[]): IntakeAnswer[] {
@@ -978,50 +1114,109 @@ function answerText(answers: IntakeAnswer[], pattern: RegExp) {
   );
 }
 
+function answerValue(answers: IntakeAnswer[], questionId: string) {
+  const value = answers.find((answer) => answer.questionId === questionId)?.value;
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function businessAddressFromAnswers(
+  answers: IntakeAnswer[],
+  residentialAddress: BnrsBusinessAddressInput | null,
+): BnrsBusinessAddressInput | null {
+  if (addressPreference(answers) === "profile" && residentialAddress) return residentialAddress;
+  const addressLine1 = answerValue(answers, "business-address-line-1");
+  const barangay = answerValue(answers, "business-barangay");
+  const cityMunicipality = answerValue(answers, "business-city-municipality");
+  const province = answerValue(answers, "business-province");
+  const region = answerValue(answers, "business-region");
+  const postalCode = answerValue(answers, "business-postal-code");
+  if (
+    !addressLine1 ||
+    !barangay ||
+    !cityMunicipality ||
+    !province ||
+    !region ||
+    !/^\d{4}$/.test(postalCode)
+  )
+    return null;
+  return {
+    source: "USER_PROVIDED",
+    addressLine1,
+    barangay,
+    cityMunicipality,
+    province,
+    region,
+    postalCode,
+  };
+}
+
+function businessAddressLabel(address: BnrsBusinessAddressInput | null) {
+  if (!address) return "";
+  return [
+    address.addressLine1,
+    address.addressLine2,
+    address.barangay,
+    address.cityMunicipality,
+    address.province,
+    address.region,
+    address.postalCode,
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
+function appScopeLabel(
+  scope: BnrsCatalog["scopes"][number],
+): DtiBusinessNameForm["territorialScope"] {
+  return scope.label === "City/Municipality" ? "City / municipality" : scope.label;
+}
+
+function composeProposedName(dominantName: string, descriptorLabel: string) {
+  return [dominantName.trim(), descriptorLabel].filter(Boolean).join(" ");
+}
+
 function makeDtiForm(
   description: string,
-  prompt: string,
   profile: CitizenProfile | null,
   answers: IntakeAnswer[],
   plan: BusinessPlan,
-  usesProfileAddress: boolean,
+  catalog: BnrsCatalog,
+  residentialAddress: BnrsBusinessAddressInput | null,
 ): DtiBusinessNameForm {
-  const proposedNameMatch = prompt.match(
-    /(?:called|named|name is|business name(?: is|:)?|trade name(?: is|:)?)\s+[“"]?([^.”"\n]+)/i,
-  );
-  const rawProposedName =
-    answerText(answers, /proposed.*name|business.*name|trade.*name/i) ||
-    proposedNameMatch?.[1]?.trim() ||
-    "";
-  const proposedName = isMeaningfulBusinessName(rawProposedName) ? rawProposedName : "";
-  const rawBusinessAddress = resolveBusinessFormAddress(
-    extractExplicitBusinessAddress(prompt) ||
-      answerText(answers, /business.*address|operating.*address|exact.*address/i),
-    profile,
-    usesProfileAddress,
-  );
-  const businessAddress = isCompleteBusinessAddress(rawBusinessAddress) ? rawBusinessAddress : "";
-  const scope: DtiBusinessNameForm["territorialScope"] = /nationwide|national/i.test(prompt)
-    ? "National"
-    : /region(?:al|wide)/i.test(prompt)
-      ? "Regional"
-      : /barangay only|within (?:the )?barangay/i.test(prompt)
-        ? "Barangay"
-        : "City / municipality";
+  const rawDominantName = answerValue(answers, "business-dominant-name");
+  const dominantName = isMeaningfulBusinessName(rawDominantName) ? rawDominantName : "";
+  const descriptorId = answerValue(answers, "business-descriptor");
+  const descriptor = catalog.nameRequirements.descriptors.find(({ id }) => id === descriptorId);
+  const scopeId = answerValue(answers, "business-territorial-scope");
+  const scope = catalog.scopes.find(({ id }) => id === scopeId);
+  const businessAddressDetails = businessAddressFromAnswers(answers, residentialAddress);
+  const businessAddress = businessAddressLabel(businessAddressDetails);
+  const termsAccepted = answerValue(answers, "bnrs-terms-accepted") === "accept";
   const missingFields = [
-    ...(!proposedName ? ["Proposed business name"] : []),
-    ...(!businessAddress ? ["Business address"] : []),
+    ...(!dominantName ? ["Dominant business name"] : []),
+    ...(!descriptor ? ["Business descriptor"] : []),
+    ...(!scope ? ["Territorial scope"] : []),
+    ...(!termsAccepted ? ["BNRS terms acceptance"] : []),
+    ...(!businessAddressDetails ? ["Business address"] : []),
   ];
   return {
     applicationType: "New registration",
     status: missingFields.length ? "Draft" : "Ready to submit",
-    proposedName,
+    dominantName,
+    descriptorId: descriptor?.id ?? "",
+    descriptorLabel: descriptor?.label ?? "",
+    proposedName: composeProposedName(dominantName, descriptor?.label ?? ""),
     businessActivity: description.slice(0, 160),
-    territorialScope: scope,
+    territorialScope: scope ? appScopeLabel(scope) : "City / municipality",
+    territorialScopeId: scope?.id,
     ownerName: profile?.fullName ?? "",
     businessAddress,
+    ...(businessAddressDetails ? { businessAddressDetails } : {}),
     city: plan.city,
-    feeLabel: formatPeso(dtiRegistrationFee(scope)),
+    feeLabel: scope ? formatPeso(scope.totalFee) : "",
+    termsAndConditions: catalog.termsAndConditions,
+    businessNameRequirements: catalog.nameRequirements.reminders,
+    termsAccepted,
     missingFields,
   };
 }
@@ -1030,20 +1225,15 @@ function deterministicNext(
   prompt: string,
   profile: CitizenProfile | null,
   answers: IntakeAnswer[],
+  catalog: BnrsCatalog,
+  residentialAddress: BnrsBusinessAddressInput | null,
 ) {
-  const questions = intakeBatch(prompt, profile, answers);
+  const questions = intakeBatch(prompt, profile, answers, catalog, residentialAddress);
   if (questions.length) return { questions };
   const plan = makePlan(prompt, profile, answers);
   if (plan.registrationType !== "Sole proprietor") return { plan };
-  const form = makeDtiForm(
-    prompt,
-    prompt,
-    profile,
-    answers,
-    plan,
-    addressPreference(answers) === "profile",
-  );
-  const missingQuestions = questionsForIncompleteDtiForm(form, profile, answers);
+  const form = makeDtiForm(prompt, profile, answers, plan, catalog, residentialAddress);
+  const missingQuestions = questionsForIncompleteDtiForm(form, answers, catalog);
   if (missingQuestions.length) return { questions: missingQuestions };
   return { plan, form };
 }
@@ -1171,8 +1361,11 @@ function agentTools(
   allowTaxReminderRetry: boolean,
   dispatchKey: Omit<SmsDispatchKey, "recipient" | "toolName">,
   businessCity: string,
-  usesProfileAddress: boolean,
-  confirmedBusinessAddress: string,
+  actor: ReturnType<typeof bnrsActorFromProfile>,
+  bnrsAddress: BnrsBusinessAddressInput | null,
+  catalog: BnrsCatalog,
+  conversationId: string,
+  termsAccepted: boolean,
 ) {
   let userInfoReady = hasUserInfo;
   return {
@@ -1225,32 +1418,47 @@ function agentTools(
       }),
       execute: ({ query, numResults }) => searchOfficialWeb(query, numResults),
     }),
-    editDtiBusinessNameForm: tool({
+    editDtiBusinessNameForm: tool<EditDtiFormInput, EditDtiFormOutput, Record<string, unknown>>({
       description:
-        "Create or revise a complete DTI Business Name Registration form. Never call with blank or missing fields; use askUser first for every unresolved required field.",
-      inputSchema: z.object({ form: dtiFormSchema, note: z.string().max(180) }),
-      execute: ({ form }) => {
-        const businessAddress = resolveBusinessFormAddress(
-          confirmedBusinessAddress || form.businessAddress,
-          profile,
-          usesProfileAddress,
+        "Create or revise a complete DTI Business Name Registration form. Keep the dominant name separate from an exact descriptor and territorial-scope ID in the supplied BNRS catalog. Never call with blank or missing fields; use askUser first for every unresolved required field.",
+      inputSchema: z.object({ form: dtiFormSchema(catalog), note: z.string().max(180) }),
+      execute: async ({ form }) => {
+        if (!bnrsAddress)
+          throw new Error("Ask for the complete structured business address before continuing.");
+        const descriptor = catalog.nameRequirements.descriptors.find(
+          ({ id }) => id === form.descriptorId,
         );
-        if (!isCompleteBusinessAddress(businessAddress))
-          throw new Error(
-            "Ask the user for the complete business address before creating the DTI form.",
-          );
-        return {
-          form: {
-            ...form,
-            ownerName: profile.fullName,
-            businessActivity: prompt.slice(0, 160),
-            businessAddress,
-            city: businessCity,
-            feeLabel: formatPeso(dtiRegistrationFee(form.territorialScope)),
-            missingFields: [],
-            status: "Ready to submit" as const,
-          },
+        const scope = catalog.scopes.find(({ id }) => id === form.territorialScopeId);
+        if (!descriptor) throw new Error("Select an exact descriptor from the BNRS catalog.");
+        if (!scope) throw new Error("Select an exact territorial scope from the BNRS catalog.");
+        const application = await prepareBnrsApplication({
+          actor,
+          address: bnrsAddress,
+          conversationId,
+          descriptorId: descriptor.id,
+          dominantName: form.dominantName,
+          ownerProfile: rawProfile,
+          scopeId: scope.id,
+          termsAccepted,
+        });
+        const completeForm: DtiBusinessNameForm = {
+          ...form,
+          descriptorLabel: descriptor.label,
+          proposedName: composeProposedName(form.dominantName, descriptor.label),
+          territorialScope: appScopeLabel(scope),
+          ownerName: profile.fullName,
+          businessActivity: prompt.slice(0, 160),
+          businessAddress: businessAddressLabel(bnrsAddress),
+          businessAddressDetails: bnrsAddress,
+          city: businessCity,
+          feeLabel: formatPeso(scope.totalFee),
+          termsAndConditions: catalog.termsAndConditions,
+          businessNameRequirements: [...catalog.nameRequirements.reminders],
+          termsAccepted,
+          missingFields: [],
+          status: "Ready to submit",
         };
+        return { applicationId: application.applicationId, form: completeForm };
       },
       toModelOutput: ({ output }) => ({
         type: "json",
@@ -1259,6 +1467,7 @@ function agentTools(
             ...output.form,
             ownerName: "[server-prefilled verified name]",
             businessAddress: "[server-confirmed business address]",
+            businessNameRequirements: [...(output.form.businessNameRequirements ?? [])],
           },
         },
       }),
@@ -1295,20 +1504,22 @@ function agentTools(
 export async function POST(request: Request) {
   const session = await readSession(request);
   if (!session) return Response.json({ error: "Authentication required" }, { status: 401 });
+  const actor = bnrsActorFromProfile(session.rawProfile);
 
   const parsed = requestSchema.safeParse(await request.json());
   if (!parsed.success) return Response.json({ error: "Invalid chat request" }, { status: 400 });
-  const conversation = await getConversation(parsed.data.id);
+  const conversation = await getConversation(actor.egovUserId, parsed.data.id);
   if (!conversation) return Response.json({ error: "Chat session not found" }, { status: 404 });
   const managementBusiness =
     conversation.purpose === "management" && conversation.businessId
-      ? await getRegisteredBusiness(session.profile.id, conversation.businessId)
+      ? await getBusiness({ actor, legacyProfileId: session.profile.id }, conversation.businessId)
       : null;
   if (conversation.purpose === "management" && !managementBusiness)
     return Response.json({ error: "Chat session not found" }, { status: 404 });
   const messages = uniqueMessagesById(parsed.data.messages as BusinessChatMessage[]);
-  await saveMessages(conversation.id, messages);
-  await setActiveStream(conversation.id, null);
+  await saveMessages(actor.egovUserId, conversation.id, messages);
+  await setActiveStream(actor.egovUserId, conversation.id, null);
+  const bnrsCatalog = readBnrsCatalog();
   const profile = session.profile;
   const latestUser = latestUserMessage(messages);
   const latestPrompt = latestUser?.text || parsed.data.initialPrompt;
@@ -1582,6 +1793,7 @@ export async function POST(request: Request) {
   }
   if (managementBusiness)
     return managementResponse(
+      actor.egovUserId,
       conversation.id,
       managementBusiness,
       messages,
@@ -1605,6 +1817,9 @@ export async function POST(request: Request) {
   const shouldGenerateBirForm = birFormConsentValue === "yes";
   const initialLocation = resolveBusinessLocation(prompt, profile?.city ?? "Philippines", answers);
   const preference = addressPreference(answers);
+  const residentialAddress = mapEgovSsoProfileToBnrsResidentialAddress(session.rawProfile);
+  const bnrsAddress = businessAddressFromAnswers(answers, residentialAddress);
+  const termsAccepted = answerValue(answers, "bnrs-terms-accepted") === "accept";
   const confirmedBusinessAddress =
     extractExplicitBusinessAddress(prompt) ||
     answerText(answers, /business.*address|operating.*address|exact.*address/i);
@@ -1635,8 +1850,11 @@ export async function POST(request: Request) {
       userMessageId: latestUser?.message.id ?? conversation.id,
     },
     initialLocation.city,
-    preference === "profile",
-    confirmedBusinessAddress,
+    actor,
+    bnrsAddress,
+    bnrsCatalog,
+    conversation.id,
+    termsAccepted,
   );
   const previousClearance = lastBarangayClearance(messages);
   const previousEbplsReceipt = lastEbplsReceipt(messages);
@@ -1644,6 +1862,83 @@ export async function POST(request: Request) {
 
   if (parsed.data.event === "payment-completed") {
     const paymentService: PaymentServiceType = parsed.data.paymentService ?? "dti-business-name";
+    if (paymentService === "dti-business-name") {
+      let certificate: BnrsCertificate | null;
+      try {
+        const result = await syncBnrsPaymentForConversation({
+          actor,
+          conversationId: conversation.id,
+        });
+        if (!result.registration)
+          return Response.json({ error: "Payment has not been marked paid." }, { status: 409 });
+        certificate = await getBnrsCertificateForConversation({
+          actor,
+          conversationId: conversation.id,
+        });
+      } catch (error) {
+        if (error instanceof BnrsError)
+          return Response.json({ error: error.message, code: error.code }, { status: 409 });
+        throw error;
+      }
+      if (!certificate)
+        return Response.json({ error: "BNRS certificate not found." }, { status: 409 });
+
+      const paidPlan = planAfterPayment(existingPlan);
+      const clearance = mockBarangayClearance(certificate);
+      return manualResponse(actor.egovUserId, conversation.id, messages, async (writer) => {
+        emitTool(
+          writer,
+          "updatePlan",
+          {
+            ...paidPlan,
+            note: "BNRS payment verified and certificate issued. Moving to local clearances.",
+          },
+          { plan: paidPlan },
+        );
+        const textId = crypto.randomUUID();
+        writer.write({ type: "text-start", id: textId });
+        writer.write({
+          type: "text-delta",
+          id: textId,
+          delta: `BNRS issued certificate **${certificate.certificateNumber}** for **${certificate.businessName}**. Next, I’m submitting the barangay business-clearance request using the freshly fetched certificate and registered address.`,
+        });
+        writer.write({ type: "text-end", id: textId });
+        const barangayId = crypto.randomUUID();
+        writer.write({
+          type: "tool-input-available",
+          toolCallId: barangayId,
+          toolName: "submitBarangayClearance",
+          input: {
+            application: {
+              businessName: clearance.businessName,
+              ownerName: clearance.ownerName,
+              businessActivity: clearance.businessActivity,
+              businessAddress: clearance.businessAddress,
+              barangay: clearance.barangay,
+              city: clearance.city,
+              registrationDocument: clearance.registrationDocument,
+              supportingDocuments: clearance.supportingDocuments,
+            },
+          },
+        });
+        await wait(BARANGAY_CLEARANCE_MOCK_DELAY_MS);
+        writer.write({
+          type: "tool-output-available",
+          toolCallId: barangayId,
+          output: { clearance },
+        });
+        emitTool(
+          writer,
+          "updatePlan",
+          {
+            ...paidPlan,
+            note: "Barangay clearance assessed. Payment is required before approval.",
+          },
+          { plan: paidPlan },
+        );
+      });
+    }
+
     const payment = await getLatestPaymentForService(conversation.id, paymentService);
     if (!payment || !isPaidStatus(payment.status))
       return Response.json({ error: "Payment has not been marked paid." }, { status: 409 });
@@ -1653,9 +1948,25 @@ export async function POST(request: Request) {
           { error: "Barangay clearance assessment not found." },
           { status: 409 },
         );
-      const clearance = approveBarangayClearance(previousClearance);
+      const certificate = await getBnrsCertificateForConversation({
+        actor,
+        conversationId: conversation.id,
+      });
+      if (!certificate)
+        return Response.json({ error: "BNRS certificate not found." }, { status: 409 });
+      const freshCredential = mockBarangayClearance(certificate);
+      const clearance = approveBarangayClearance({
+        ...previousClearance,
+        businessName: freshCredential.businessName,
+        ownerName: freshCredential.ownerName,
+        businessActivity: freshCredential.businessActivity,
+        businessAddress: freshCredential.businessAddress,
+        barangay: freshCredential.barangay,
+        city: freshCredential.city,
+        registrationDocument: freshCredential.registrationDocument,
+      });
       const permitPlan = planAfterBarangayClearance(existingPlan ?? planAfterPayment(null));
-      return manualResponse(conversation.id, messages, async (writer) => {
+      return manualResponse(actor.egovUserId, conversation.id, messages, async (writer) => {
         const barangayId = crypto.randomUUID();
         writer.write({
           type: "tool-input-available",
@@ -1759,19 +2070,18 @@ export async function POST(request: Request) {
         employer: employerRequired,
         sectorPermits: sectorRequired,
       });
-      const business = await upsertRegisteredBusiness(
-        profile.id,
-        buildFinalBusiness({
-          conversationId: conversation.id,
-          profile,
-          plan: businessPlan,
-          dtiForm: lastForm,
-          clearance: previousClearance,
-          receipt,
-          compliance,
-        }),
-      );
-      return manualResponse(conversation.id, messages, async (writer) => {
+      const [certificate, bnrsLink] = await Promise.all([
+        getBnrsCertificateForConversation({ actor, conversationId: conversation.id }),
+        getBnrsConversationLink(actor.egovUserId, conversation.id),
+      ]);
+      if (!certificate || !bnrsLink?.applicationId)
+        return Response.json({ error: "BNRS certificate not found." }, { status: 409 });
+      const business = {
+        id: bnrsLink.applicationId,
+        name: certificate.businessName,
+        status: "Active",
+      } as const;
+      return manualResponse(actor.egovUserId, conversation.id, messages, async (writer) => {
         const ebplsId = crypto.randomUUID();
         writer.write({
           type: "tool-input-available",
@@ -1840,7 +2150,7 @@ export async function POST(request: Request) {
           "updatePlan",
           {
             ...completedPlan,
-            note: "Demo compliance setup complete and business record saved.",
+            note: "Demo compliance setup complete; BNRS remains the business-name record.",
           },
           { plan: completedPlan },
         );
@@ -1859,69 +2169,16 @@ export async function POST(request: Request) {
         writer.write({
           type: "text-delta",
           id: textId,
-          delta: `**All set up.** The demo registration for **${business.name}** is complete, including books, invoices, recurring tax reminders, permits, and employer checks. I saved everything to your linked business record. Every generated reference is marked as a mock and is not an official government record.`,
+          delta: `**All set up.** The downstream demo setup for **${business.name}** is complete, including books, invoices, recurring tax reminders, permits, and employer checks. BNRS remains the authoritative business-name record. Every downstream generated reference is marked as a mock and is not an official government record.`,
         });
         writer.write({ type: "text-end", id: textId });
       });
     }
-    const paidPlan = planAfterPayment(existingPlan);
-    return manualResponse(conversation.id, messages, async (writer) => {
-      emitTool(
-        writer,
-        "updatePlan",
-        {
-          ...paidPlan,
-          note: "Payment recorded. Moving to local clearance requirements.",
-        },
-        { plan: paidPlan },
-      );
-      const textId = crypto.randomUUID();
-      writer.write({ type: "text-start", id: textId });
-      writer.write({
-        type: "text-delta",
-        id: textId,
-        delta: `Payment is marked paid for **${payment.proposedName}**. Next, I’m submitting the barangay business-clearance request electronically using the registration and address details already on file.`,
-      });
-      writer.write({ type: "text-end", id: textId });
-      const clearance = mockBarangayClearance(payment, lastForm, profile);
-      const barangayId = crypto.randomUUID();
-      writer.write({
-        type: "tool-input-available",
-        toolCallId: barangayId,
-        toolName: "submitBarangayClearance",
-        input: {
-          application: {
-            businessName: clearance.businessName,
-            ownerName: clearance.ownerName,
-            businessActivity: clearance.businessActivity,
-            businessAddress: clearance.businessAddress,
-            barangay: clearance.barangay,
-            city: clearance.city,
-            registrationDocument: clearance.registrationDocument,
-            supportingDocuments: clearance.supportingDocuments,
-          },
-        },
-      });
-      await wait(BARANGAY_CLEARANCE_MOCK_DELAY_MS);
-      writer.write({
-        type: "tool-output-available",
-        toolCallId: barangayId,
-        output: { clearance },
-      });
-      emitTool(
-        writer,
-        "updatePlan",
-        {
-          ...paidPlan,
-          note: "Barangay clearance assessed. Payment is required before approval.",
-        },
-        { plan: paidPlan },
-      );
-    });
+    return Response.json({ error: "Unsupported payment service." }, { status: 400 });
   }
 
   if (shouldGenerateBirForm)
-    return manualResponse(conversation.id, messages, async (writer) => {
+    return manualResponse(actor.egovUserId, conversation.id, messages, async (writer) => {
       if (!hasUserInfo) emitTool(writer, "user_info", {}, userInfoOutput);
       const toolCallId = crypto.randomUUID();
       writer.write({
@@ -2149,7 +2406,7 @@ export async function POST(request: Request) {
     (firstTurn && describesBusinessIdea(latestPrompt));
 
   if (!lastForm && continuingIntake) {
-    const questions = intakeBatch(prompt, profile, answers);
+    const questions = intakeBatch(prompt, profile, answers, bnrsCatalog, residentialAddress);
     if (questions.length) {
       const intakeRegistrationType = makePlan(prompt, profile, answers).registrationType;
       const currentPlan = planForAnswers(
@@ -2159,7 +2416,7 @@ export async function POST(request: Request) {
         false,
         intakeRegistrationType,
       );
-      return manualResponse(conversation.id, messages, (writer) => {
+      return manualResponse(actor.egovUserId, conversation.id, messages, (writer) => {
         if (!existingPlan || JSON.stringify(existingPlan) !== JSON.stringify(currentPlan))
           emitTool(
             writer,
@@ -2207,7 +2464,7 @@ export async function POST(request: Request) {
     businessPlan.registrationType === "Self-employed" &&
     !hasCompletedTool(messages, "tool-prepareSelfEmployedRegistration")
   )
-    return manualResponse(conversation.id, messages, (writer) => {
+    return manualResponse(actor.egovUserId, conversation.id, messages, (writer) => {
       const preparedPlan = normalizeRegistrationPlan({
         ...currentPlan,
         steps: currentPlan.steps.map((step) => ({
@@ -2286,7 +2543,7 @@ export async function POST(request: Request) {
     hasCompletedTool(messages, "tool-prepareSelfEmployedRegistration") &&
     birFormConsentValue === "no"
   )
-    return manualResponse(conversation.id, messages, (writer) => {
+    return manualResponse(actor.egovUserId, conversation.id, messages, (writer) => {
       const textId = crypto.randomUUID();
       writer.write({ type: "text-start", id: textId });
       writer.write({
@@ -2300,7 +2557,7 @@ export async function POST(request: Request) {
 
   if (!process.env.AI_GATEWAY_API_KEY) {
     if (!continuingIntake && !lastForm)
-      return manualResponse(conversation.id, messages, (writer) => {
+      return manualResponse(actor.egovUserId, conversation.id, messages, (writer) => {
         const textId = crypto.randomUUID();
         writer.write({ type: "text-start", id: textId });
         writer.write({
@@ -2311,8 +2568,8 @@ export async function POST(request: Request) {
         });
         writer.write({ type: "text-end", id: textId });
       });
-    const next = deterministicNext(prompt, profile, answers);
-    return manualResponse(conversation.id, messages, (writer) => {
+    const next = deterministicNext(prompt, profile, answers, bnrsCatalog, residentialAddress);
+    return manualResponse(actor.egovUserId, conversation.id, messages, async (writer) => {
       const textId = crypto.randomUUID();
       writer.write({ type: "text-start", id: textId });
       const text =
@@ -2330,6 +2587,22 @@ export async function POST(request: Request) {
         });
       else {
         if (next.form) {
+          if (
+            !next.form.businessAddressDetails ||
+            !next.form.descriptorId ||
+            !next.form.territorialScopeId
+          )
+            throw new Error("The BNRS application details are incomplete.");
+          const application = await prepareBnrsApplication({
+            actor,
+            address: next.form.businessAddressDetails,
+            conversationId: conversation.id,
+            descriptorId: next.form.descriptorId,
+            dominantName: next.form.dominantName ?? "",
+            ownerProfile: session.rawProfile,
+            scopeId: next.form.territorialScopeId,
+            termsAccepted: next.form.termsAccepted === true,
+          });
           emitTool(writer, "user_info", {}, userInfoOutput);
           const id = crypto.randomUUID();
           writer.write({
@@ -2338,13 +2611,14 @@ export async function POST(request: Request) {
             toolName: "editDtiBusinessNameForm",
             input: {
               form: next.form,
+              applicationId: application.applicationId,
               note: "Prepared from your profile and conversation.",
             },
           });
           writer.write({
             type: "tool-output-available",
             toolCallId: id,
-            output: { form: next.form },
+            output: { applicationId: application.applicationId, form: next.form },
           });
         }
         writer.write({
@@ -2373,15 +2647,15 @@ export async function POST(request: Request) {
   ) {
     const form = makeDtiForm(
       parsed.data.initialPrompt,
-      prompt,
       profile,
       answers,
       businessPlan,
-      preference === "profile",
+      bnrsCatalog,
+      residentialAddress,
     );
-    const missingQuestions = questionsForIncompleteDtiForm(form, profile, answers);
+    const missingQuestions = questionsForIncompleteDtiForm(form, answers, bnrsCatalog);
     if (missingQuestions.length)
-      return manualResponse(conversation.id, messages, (writer) => {
+      return manualResponse(actor.egovUserId, conversation.id, messages, (writer) => {
         const textId = crypto.randomUUID();
         writer.write({ type: "text-start", id: textId });
         writer.write({
@@ -2400,7 +2674,7 @@ export async function POST(request: Request) {
           input: { questions: missingQuestions },
         });
       });
-    return manualResponse(conversation.id, messages, async (writer) => {
+    return manualResponse(actor.egovUserId, conversation.id, messages, async (writer) => {
       emitTool(
         writer,
         "updatePlan",
@@ -2431,6 +2705,18 @@ export async function POST(request: Request) {
         },
         { plan: afterSearch },
       );
+      if (!form.businessAddressDetails || !form.descriptorId || !form.territorialScopeId)
+        throw new Error("The BNRS application details are incomplete.");
+      const application = await prepareBnrsApplication({
+        actor,
+        address: form.businessAddressDetails,
+        conversationId: conversation.id,
+        descriptorId: form.descriptorId,
+        dominantName: form.dominantName ?? "",
+        ownerProfile: session.rawProfile,
+        scopeId: form.territorialScopeId,
+        termsAccepted: form.termsAccepted === true,
+      });
       const formId = crypto.randomUUID();
       emitTool(writer, "user_info", {}, userInfoOutput);
       writer.write({
@@ -2439,13 +2725,14 @@ export async function POST(request: Request) {
         toolName: "editDtiBusinessNameForm",
         input: {
           form,
+          applicationId: application.applicationId,
           note: "Prepared from your profile and confirmed answers.",
         },
       });
       writer.write({
         type: "tool-output-available",
         toolCallId: formId,
-        output: { form },
+        output: { applicationId: application.applicationId, form },
       });
       writer.write({
         type: "data-plan",
@@ -2506,7 +2793,9 @@ simulate_tax_payment_reminder sends a clearly labeled simulated tax reminder thr
 
 The resolved business city is ${location.city}. Explicit locations override the profile. Reuse every fact the citizen has already stated and never ask for it again. Do not force registration steps when the latest request is unrelated or exploratory; answer that request directly and only return to the saved plan when the citizen asks. The resolved route is ${JSON.stringify(businessPlan)}.
 
-For a sole proprietor, call user_info before creating or updating a DTI Business Name Registration draft with editDtiBusinessNameForm. Verified profile values stay server-side and the registered address may be used only after explicit consent. DTI handles sole-proprietor business-name registration; do not call it a BIR form. Preserve known fields and copy the exact profile owner name. Never invent an address or fee. If the business city differs from the profile city and no full business address was supplied, leave the address blank and list Business address under missingFields. Use the official DTI territorial-scope fee plus documentary stamp supplied by the application; never invent a fee. The citizen may correct any field in ordinary chat; apply the correction by calling editDtiBusinessNameForm with the full revised form. Current form: ${JSON.stringify(lastForm ? { ...lastForm, ownerName: lastForm.ownerName ? "[server-prefilled verified name]" : "", businessAddress: lastForm.businessAddress ? "[server-confirmed business address]" : "" } : null)}.
+The server-provided BNRS catalog is ${JSON.stringify(bnrsCatalog)}. Treat its terms, naming reminders, descriptor IDs, scopes, and fees as authoritative. Never create a descriptor or scope ID. Keep the citizen's dominant name separate from the selected descriptor; never split a complete proposed name heuristically.
+
+For a sole proprietor, call user_info before creating or updating a DTI Business Name Registration draft with editDtiBusinessNameForm. Verified profile values stay server-side and the registered address may be used only after explicit consent. DTI handles sole-proprietor business-name registration; do not call it a BIR form. Preserve known fields and copy the exact profile owner name. Never invent an address or fee. If the business city differs from the profile city and no full business address was supplied, leave the address blank and list Business address under missingFields. Use only the exact BNRS descriptor and territorial-scope IDs already selected during intake. The citizen may correct any field in ordinary chat; apply the correction by calling editDtiBusinessNameForm with the full revised form. Current form: ${JSON.stringify(lastForm ? { ...lastForm, ownerName: lastForm.ownerName ? "[server-prefilled verified name]" : "", businessAddress: lastForm.businessAddress ? "[server-confirmed business address]" : "" } : null)}.
 
 Use webSearch only when new current evidence is useful. Cite only returned official links. Never expose private reasoning. Do not claim submission or payment occurred. After every completed checkpoint, explicitly state the next concrete step.`,
     messages: await convertToModelMessages(messages, {
@@ -2519,9 +2808,9 @@ Use webSearch only when new current evidence is useful. Cite only returned offic
     originalMessages: messages,
     sendReasoning: false,
     onEnd: async ({ messages: completeMessages }) => {
-      await saveMessages(conversation.id, completeMessages);
-      await setActiveStream(conversation.id, null);
+      await saveMessages(actor.egovUserId, conversation.id, completeMessages);
+      await setActiveStream(actor.egovUserId, conversation.id, null);
     },
-    consumeSseStream: resumableConsumer(conversation.id),
+    consumeSseStream: resumableConsumer(actor.egovUserId, conversation.id),
   });
 }

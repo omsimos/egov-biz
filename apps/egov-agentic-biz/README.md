@@ -17,6 +17,14 @@ With the default `TURSO_DATABASE_URL=file:./data/egov-agentic-biz.sqlite` there
 is nothing else to start: the file is created on demand and pending migrations
 are applied on the first query.
 
+BNRS state is owned by the shared DX database. It defaults to the isolated
+`packages/db/data/egov-dx.sqlite`; initialize it once before using the BNRS
+application flow:
+
+```sh
+bun --env-file=.env --filter @repo/db db:migrate
+```
+
 ### Running against a local libSQL server
 
 A `file:` URL goes through the same Drizzle code path but not the same wire
@@ -56,6 +64,8 @@ Set these in the project (all server-side):
 | ----------------------------------------------- | ------------------------------------------------------------------------------- |
 | `TURSO_DATABASE_URL`                            | `turso db show --url <database>`                                                |
 | `TURSO_AUTH_TOKEN`                              | `turso db tokens create <database>`                                             |
+| `DX_TURSO_DATABASE_URL`                         | URL for the separately provisioned DX database                                  |
+| `DX_TURSO_AUTH_TOKEN`                           | Token for the DX database                                                       |
 | `REDIS_URL`                                     | Upstash — the `rediss://` TCP URL                                               |
 | `R2_BASE_URL`, `R2_ACCESS_KEY`, `R2_SECRET_KEY` | Cloudflare R2                                                                   |
 | `EMESSAGE_BASE_URL`, `EMESSAGE_ACCESS_TOKEN`    | eMessage SMS provider                                                           |
@@ -68,6 +78,10 @@ releasing:
 turso db create egov-agentic-biz
 bun --filter egov-agentic-biz run db:migrate
 ```
+
+Provision and migrate the DX database separately with the migration command in
+`packages/db`. The application never creates or migrates remote DX
+infrastructure at runtime.
 
 Two things worth knowing:
 
@@ -91,8 +105,10 @@ drizzle/      # generated migrations (committed)
 ```
 
 Repositories in `src/server/` (`conversations`, `payments`,
-`registered-businesses`, `auth-sessions`) are the only callers of `getDatabase`.
-They are all async — libSQL is a network client even when pointed at a file.
+`registered-businesses`, `auth-sessions`) are the only callers of the app's
+`getDatabase`. The server-only DX composition root uses `@repo/db` separately
+for BNRS applications, payments, and certificates. All repositories are async
+— libSQL is a network client even when pointed at a file.
 
 One thing that will surprise you: **Turso enforces foreign keys off by default**,
 and `PRAGMA foreign_keys = ON` is scoped to a connection, so it does not survive
