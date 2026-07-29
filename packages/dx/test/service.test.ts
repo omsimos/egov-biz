@@ -23,6 +23,70 @@ async function expectBnrsError(action: () => Promise<unknown>, code: BnrsError["
 }
 
 describe("BNRS registration workflow", () => {
+  test("lists only the authenticated user's completed business-name registrations", async () => {
+    const { actor, repository, service } = setup();
+    const older = await service.startOrResumeApplication({ actor });
+    Object.assign(repository.applications.get(older.applicationId)!, {
+      state: "COMPLETED" as const,
+      dominantName: "Molar Bear",
+      descriptorId: "DENTAL_CLINIC",
+      descriptorLabel: "DENTAL CLINIC",
+      proposedBusinessName: "Molar Bear Dental Clinic",
+      normalizedBusinessName: "MOLAR BEAR DENTAL CLINIC",
+      scope: "NATIONAL" as const,
+      referenceCode: "BNRS-20260601-AAAAAAAA",
+      issuedAt: new Date("2026-06-01T08:00:00.000Z"),
+      createdAt: new Date("2026-07-20T07:00:00.000Z"),
+    });
+
+    const newer = await service.startOrResumeApplication({ actor });
+    Object.assign(repository.applications.get(newer.applicationId)!, {
+      state: "COMPLETED" as const,
+      dominantName: "Daily Grind",
+      descriptorId: "COFFEE_SHOP",
+      descriptorLabel: "COFFEE SHOP",
+      proposedBusinessName: "Daily Grind Coffee Shop",
+      normalizedBusinessName: "DAILY GRIND COFFEE SHOP",
+      scope: "CITY_MUNICIPALITY" as const,
+      referenceCode: "BNRS-20260701-BBBBBBBB",
+      issuedAt: new Date("2026-07-01T08:00:00.000Z"),
+      createdAt: new Date("2026-05-01T07:00:00.000Z"),
+    });
+
+    await service.startOrResumeApplication({ actor });
+    const otherUser = await service.startOrResumeApplication({
+      actor: { egovUserId: "egov-user-2" },
+    });
+    Object.assign(repository.applications.get(otherUser.applicationId)!, {
+      state: "COMPLETED" as const,
+      proposedBusinessName: "Someone Else Online Shop",
+      descriptorLabel: "ONLINE SHOP",
+      scope: "REGIONAL" as const,
+      referenceCode: "BNRS-20260715-CCCCCCCC",
+      issuedAt: new Date("2026-07-15T08:00:00.000Z"),
+      createdAt: new Date("2026-07-15T07:00:00.000Z"),
+    });
+
+    await expect(service.listRegisteredBusinesses({ actor })).resolves.toEqual([
+      {
+        applicationId: newer.applicationId,
+        referenceCode: "BNRS-20260701-BBBBBBBB",
+        businessName: "Daily Grind Coffee Shop",
+        descriptor: "COFFEE SHOP",
+        scope: "CITY_MUNICIPALITY",
+        issuedAt: "2026-07-01T08:00:00.000Z",
+      },
+      {
+        applicationId: older.applicationId,
+        referenceCode: "BNRS-20260601-AAAAAAAA",
+        businessName: "Molar Bear Dental Clinic",
+        descriptor: "DENTAL CLINIC",
+        scope: "NATIONAL",
+        issuedAt: "2026-06-01T08:00:00.000Z",
+      },
+    ]);
+  });
+
   test("starts or resumes the single active application", async () => {
     const { actor, service } = setup();
     const first = await service.startOrResumeApplication({ actor });

@@ -85,6 +85,7 @@ export class BnrsRepositoryConflict extends Error {
 export interface BnrsRepository {
   startOrResumeApplication(egovUserId: string, now: Date): Promise<BnrsApplicationRecord>;
   getApplication(applicationId: string): Promise<BnrsApplicationRecord | null>;
+  listCompletedApplications(egovUserId: string): Promise<BnrsApplicationRecord[]>;
   hasOwnerInformation(applicationId: string): Promise<boolean>;
   getOwnerInformation(applicationId: string): Promise<BnrsOwnerInformationInput | null>;
   updateApplication(input: {

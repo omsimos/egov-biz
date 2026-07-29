@@ -84,6 +84,8 @@ If checkout creation is interrupted, retries keep the same provider transaction 
 
 After verified payment, DX generates a `BNRS-YYYYMMDD-XXXXXXXX` reference and returns the business name, descriptor, scope, owner display name, issue time, and total paid.
 
+Use `listRegisteredBusinesses({ actor })` to retrieve the authenticated user's completed BNRS registrations, newest first. Each result includes the application ID, BNRS reference, business name, descriptor, scope, and issue time. Incomplete and abandoned applications are not returned.
+
 ## Catalog and fees
 
 The package contains 40 stable descriptor IDs selected from the official BNRS descriptor list. It intentionally exposes descriptors only, not section/division/group/class/subclass classification. Sources: [BNRS descriptor file](https://dtibnrs.s3-ap-southeast-1.amazonaws.com/files/20260701/vl4wphmb3j0835.xlsx) and [DTI BNRS FAQ](https://bnrs.dti.gov.ph/faq).

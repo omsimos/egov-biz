@@ -124,14 +124,21 @@ export interface BnrsPaymentProvider {
   voidTransaction(transactionUuid: string): Promise<void>;
 }
 
-export type BnrsRegistrationResult = {
+export type BnrsRegistrationSummary = {
   referenceCode: string;
   businessName: string;
   descriptor: string;
   scope: BnrsBusinessScopeId;
-  ownerDisplayName: string;
   issuedAt: string;
+};
+
+export type BnrsRegistrationResult = BnrsRegistrationSummary & {
+  ownerDisplayName: string;
   totalPaid: number;
+};
+
+export type BnrsRegisteredBusiness = BnrsRegistrationSummary & {
+  applicationId: string;
 };
 
 export type BnrsPaymentSyncResult = {

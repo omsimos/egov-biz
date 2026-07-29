@@ -25,6 +25,7 @@ import type {
   BnrsPaymentProvider,
   BnrsPaymentProviderSnapshot,
   BnrsPaymentSyncResult,
+  BnrsRegisteredBusiness,
   BnrsRegistrationResult,
 } from "./types.js";
 
@@ -197,6 +198,28 @@ function projectStatus(
         : null,
     createdAt: application.createdAt.toISOString(),
     updatedAt: application.updatedAt.toISOString(),
+  };
+}
+
+function projectRegisteredBusiness(
+  application: BnrsApplicationRecord,
+): BnrsRegisteredBusiness | null {
+  if (
+    application.state !== "COMPLETED" ||
+    !application.referenceCode ||
+    !application.proposedBusinessName ||
+    !application.descriptorLabel ||
+    !application.scope ||
+    !application.issuedAt
+  )
+    return null;
+  return {
+    applicationId: application.id,
+    referenceCode: application.referenceCode,
+    businessName: application.proposedBusinessName,
+    descriptor: application.descriptorLabel,
+    scope: application.scope,
+    issuedAt: application.issuedAt.toISOString(),
   };
 }
 
@@ -421,6 +444,14 @@ export function createBnrsService(options: BnrsServiceOptions) {
     },
     getBusinessNameRequirements,
     getBusinessScopes,
+    async listRegisteredBusinesses(input: { actor: BnrsActor }) {
+      const applications = await options.repository.listCompletedApplications(
+        validateActor(input.actor),
+      );
+      return applications
+        .map(projectRegisteredBusiness)
+        .filter((registration): registration is BnrsRegisteredBusiness => registration !== null);
+    },
     async startOrResumeApplication(input: { actor: BnrsActor }) {
       const application = await options.repository.startOrResumeApplication(
         validateActor(input.actor),

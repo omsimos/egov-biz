@@ -106,6 +106,16 @@ export function createDrizzleBnrsRepository(database: Database): BnrsRepository 
         .limit(1);
       return application ? applicationRecord(application) : null;
     },
+    async listCompletedApplications(egovUserId) {
+      const applications = await database
+        .select()
+        .from(bnrsApplications)
+        .where(
+          and(eq(bnrsApplications.egovUserId, egovUserId), eq(bnrsApplications.state, "COMPLETED")),
+        )
+        .orderBy(desc(bnrsApplications.issuedAt), desc(bnrsApplications.createdAt));
+      return applications.map(applicationRecord);
+    },
     async hasOwnerInformation(applicationId) {
       const [owner] = await database
         .select({ applicationId: bnrsOwnerInformation.applicationId })

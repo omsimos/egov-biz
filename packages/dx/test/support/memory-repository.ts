@@ -50,6 +50,19 @@ export class MemoryBnrsRepository implements BnrsRepository {
     return application ? structuredClone(application) : null;
   }
 
+  async listCompletedApplications(egovUserId: string) {
+    return [...this.applications.values()]
+      .filter(
+        (application) => application.egovUserId === egovUserId && application.state === "COMPLETED",
+      )
+      .sort(
+        (left, right) =>
+          (right.issuedAt?.getTime() ?? 0) - (left.issuedAt?.getTime() ?? 0) ||
+          right.createdAt.getTime() - left.createdAt.getTime(),
+      )
+      .map((application) => structuredClone(application));
+  }
+
   async hasOwnerInformation(applicationId: string) {
     return this.owners.has(applicationId);
   }
