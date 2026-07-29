@@ -33,7 +33,7 @@ import {
 } from "@/lib/business-chat";
 import { readSession } from "@/lib/auth/session";
 import { createBirFormArtifact } from "@/lib/bir-form/artifact";
-import { isExplicitBirFormRequest } from "@/lib/bir-form/request";
+import { generateBirFormInputSchema } from "@/lib/bir-form/schema";
 import {
   completeRegistrationPlan,
   initialRegistrationPlan,
@@ -928,13 +928,13 @@ function agentTools(
     }),
     generate_bir_form: tool({
       description:
-        "Generate a prefilled BIR Form 1901 PDF artifact from the authenticated eGov SSO profile. Invoke only when the citizen explicitly asks to generate, create, prepare, fill, or prefill the BIR form. Never invoke proactively or for questions about the form. user_info must complete first.",
-      inputSchema: z.object({}),
-      execute: async () => {
+        "Generate a BIR PDF artifact. Select the supported form with type and provide any known form-specific fields under data; omitted values may be prefilled from the authenticated eGov SSO profile. Invoke only when the citizen explicitly asks to generate, create, prepare, fill, or prefill the BIR form. Never invoke proactively or for questions about the form. user_info must complete first.",
+      inputSchema: generateBirFormInputSchema,
+      execute: async (input) => {
         if (!userInfoReady) throw new Error("Call user_info before generate_bir_form");
         return {
-          artifact: await createBirFormArtifact(request, rawProfile),
-          source: "Authenticated eGov SSO profile" as const,
+          artifact: await createBirFormArtifact(request, rawProfile, input),
+          source: "BIR tool input merged with authenticated eGov SSO profile" as const,
         };
       },
       toModelOutput: ({ output }) => ({
@@ -1043,8 +1043,7 @@ export async function POST(request: Request) {
   const birFormConsentValue = birFormConsent
     ? normalizedAnswerText(birFormConsent.value).toLowerCase()
     : null;
-  const shouldGenerateBirForm =
-    isExplicitBirFormRequest(latestPrompt) || birFormConsentValue === "yes";
+  const shouldGenerateBirForm = birFormConsentValue === "yes";
   const initialLocation = resolveBusinessLocation(prompt, profile?.city ?? "Philippines", answers);
   const preference = addressPreference(answers);
   const confirmedBusinessAddress =
@@ -1343,13 +1342,16 @@ export async function POST(request: Request) {
         type: "tool-input-available",
         toolCallId,
         toolName: "generate_bir_form",
-        input: {},
+        input: { type: "1901", data: {} },
       });
 
       try {
         const output = {
-          artifact: await createBirFormArtifact(request, session.rawProfile),
-          source: "Authenticated eGov SSO profile" as const,
+          artifact: await createBirFormArtifact(request, session.rawProfile, {
+            type: "1901",
+            data: {},
+          }),
+          source: "BIR tool input merged with authenticated eGov SSO profile" as const,
         };
 
         const plan = makePlan(prompt, profile, answers);
@@ -1877,7 +1879,7 @@ Use updatePlan whenever registration progress changes. Keep the comprehensive 8â
 
 The user_info tool reports which authenticated eGov SSO fields are available for server-side form prefilling; it never returns their values to the model. It is ${hasUserInfo ? "already loaded in this conversation" : "not loaded yet"}. Call it before a government form tool when it has not already completed.
 
-generate_bir_form creates a prefilled BIR Form 1901 PDF artifact. Invoke it only when the citizen's latest message explicitly asks to generate, create, prepare, fill, or prefill that BIR form. Never invoke it proactively, for informational questions, or merely because BIR registration is part of the plan. Call user_info in an earlier tool step first when needed. The tool takes no citizen data as input and applies authenticated profile values server-side.
+generate_bir_form creates a BIR PDF artifact from a discriminated input. Use type "1901" for the currently supported form and put known Form 1901 values under data; every data field is optional and omitted values may be prefilled from the authenticated profile. Invoke it only when the citizen's latest message explicitly asks to generate, create, prepare, fill, or prefill that BIR form. Never invoke it proactively, for informational questions, or merely because BIR registration is part of the plan. Call user_info in an earlier tool step first when needed.
 
 The resolved business city is ${location.city}. Explicit locations override the profile. Reuse every fact the citizen has already stated and never ask for it again. Do not force registration steps when the latest request is unrelated or exploratory; answer that request directly and only return to the saved plan when the citizen asks. The resolved route is ${JSON.stringify(businessPlan)}.
 

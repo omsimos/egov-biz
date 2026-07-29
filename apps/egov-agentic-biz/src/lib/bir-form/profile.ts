@@ -1,37 +1,6 @@
 import type { EgovSsoCitizenProfile } from "@repo/egov/eGovSso";
+import type { Bir1901Data } from "@/lib/bir-form/schema";
 import { normalizeTin } from "@/lib/tin";
-
-export interface Bir1901ProfileInput {
-  address: string;
-  addressLine2: string;
-  barangay: string;
-  birthDate: string;
-  birthPlace: string;
-  city: string;
-  civilStatus: string;
-  email: string;
-  fatherName: string;
-  firstName: string;
-  foreignAddress: string;
-  fullName: string;
-  gender: string;
-  lastName: string;
-  middleName: string;
-  mobile: string;
-  motherMaidenName: string;
-  nationalIdPcn: string;
-  nationality: string;
-  passportExpiryDate: string;
-  passportIssuedDate: string;
-  passportNumber: string;
-  passportPlaceIssued: string;
-  postal: string;
-  province: string;
-  signatureSource: string;
-  street: string;
-  suffix: string;
-  tin: string;
-}
 
 const syntheticSignature =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQQAAABGCAYAAAAq7+rZAAADFklEQVR42u3dS24iMRCAYYNml0tkkRvlnNwoI3EJ1swKaYQI/Sq/v1/KJiIkMeXfLnd19el+vycASCmlsyEAQAgACAEAIQAgBACEAIAQABACAEIAQAgACAEAIQAgBACEAIAQABACgMb4YwgwEh+f34sdf27Xy8lI2SGADDa9jhCAwWVACu856amIEUXwKi149Vrpw6RCEAxzy0AcEMKmbaGgGF8GpDCxEPbkiCWC4vnvEoh1dnukMJEQ3sngdr2clmQRHRhr5SQgy0qVnCcQwlbzL8mj5A5FYJafxKQwsBD2bgMjpRB1OYsUyk1eUkjjVSoeyQkfr3v1Ho/vLb3XkQq5334vKagbsENo4JLi2skdXSbroCv2asLe3zPzmA8phIgP9OiKFHXQNXOAlpIBKQwkhNz531Yx5JBRD8EZfThbWgakMIAQakycUit4L1KIrveoJQIHjMntzy2f/j+fUbR2yHgkpaqx60Ka625HQdNOevD46vFzVYewMmVoLbeaJddrbQsbfQ9BqxNz1rOEXUKoPVCzfVitSGG2KyAzSuHcW7GIAhW3jyuMakAIW6rsMFZeqzbCGUKzATLzdeIa/7udQRtjXmqh2F2HUCNQVJKVHQM7g7Jj3sIdsudetrFkUD9dm3Xc//+/c4z5x+f3/ej7RrzH4UPF5wDJFaDOKVzuHFXEa2s61tZ3HP3bztGrhslbdpXOtWKRQV4pvFvRlyZ+dPFX9krFnAYVnHmlQOj506W9Ioj6mexCWNsDnwxc8pxdxLlu3oraNYTe7Zi7UYng1F+w1yKt2ndxVkkZIncKgrNs6mC886QBS2cFaYZ+CEd3CoKz7ERWb9BPR61uG6REdkAWnPmkYLz766jVbcekiGckCM58UjDe5aTQy7hmb6G2NugEJ/li8TP+uV0vX933VGz1OYszdinu6YDryMRJ4x4kfw3RZNWTmJs97Ppr4qBK1+Wec61RVx0TB1mFYLs27rMSkLRht+ooO4YdAoDkuQwACAEACAEAIQAgBACEAIAQABACAEIAQAgACAEAIQAgBABF+Adh2vV68Zl3IQAAAABJRU5ErkJggg==";
@@ -152,6 +121,19 @@ function joinNonEmpty(parts: ReadonlyArray<unknown>, separator = " ") {
   return parts.map(stringValue).filter(Boolean).join(separator);
 }
 
+function optionalString(value: unknown) {
+  return stringValue(value) || undefined;
+}
+
+function splitStreet(value: unknown) {
+  const street = stringValue(value);
+  const match = /^(\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?)\s+(.+)$/.exec(street);
+  return {
+    lotBlockPhaseHouseNo: match?.[1] || undefined,
+    streetName: match?.[2] || street || undefined,
+  };
+}
+
 function foreignAddressFromUnknown(value: unknown): string {
   if (typeof value === "string") return value.trim();
   if (!value || typeof value !== "object" || Array.isArray(value)) return "";
@@ -170,7 +152,7 @@ function foreignAddressFromUnknown(value: unknown): string {
   return [...new Set(parts.filter(Boolean))].join(", ");
 }
 
-export function mapEgovProfileToBir1901(profile: unknown): Bir1901ProfileInput {
+export function mapEgovProfileToBir1901(profile: unknown): Bir1901Data {
   const rawProfile = recordValue(profile);
   const additional = recordValue(rawProfile.additional_information);
   const birthPlace = recordValue(additional.birth_place);
@@ -179,64 +161,92 @@ export function mapEgovProfileToBir1901(profile: unknown): Bir1901ProfileInput {
   const otherPersonalInformation = recordValue(additional.other_personal_information);
   const nationalId = recordValue(rawProfile.national_id);
   const passport = recordValue(rawProfile.passport);
-  const address =
-    stringValue(rawProfile.address) ||
-    joinNonEmpty(
-      [
-        rawProfile.address_line_2,
-        rawProfile.street,
-        rawProfile.barangay,
-        rawProfile.municipality,
-        rawProfile.province,
-        rawProfile.postal,
-      ],
-      ", ",
-    );
+  const fullName = joinNonEmpty([
+    rawProfile.first_name,
+    rawProfile.middle_name,
+    rawProfile.last_name,
+    rawProfile.suffix,
+  ]);
+  const birthPlaceText = joinNonEmpty(
+    [birthPlace.birth_municipality, birthPlace.birth_province, birthPlace.birth_country],
+    ", ",
+  );
+  const fatherName = joinNonEmpty([father.father_firstname, father.father_lastname]);
+  const motherMaidenName = joinNonEmpty([
+    mother.mother_maiden_firstname,
+    mother.mother_maiden_middlename,
+    mother.mother_maiden_lastname,
+  ]);
+  const foreignAddress = foreignAddressFromUnknown(rawProfile.foreign_address);
+  const signatureSource = [rawProfile.signature, nationalId.signature, rawProfile.signature_url]
+    .map(stringValue)
+    .find(Boolean);
+  const tin = normalizeTin(rawProfile.tin_id) || undefined;
+  const gender = /^male$/i.test(stringValue(rawProfile.gender))
+    ? ("male" as const)
+    : /^female$/i.test(stringValue(rawProfile.gender))
+      ? ("female" as const)
+      : undefined;
+  const civilStatusValue = stringValue(otherPersonalInformation.marital_status);
+  const civilStatus = /^single$/i.test(civilStatusValue)
+    ? ("single" as const)
+    : /^married$/i.test(civilStatusValue)
+      ? ("married" as const)
+      : /^(?:widow(?:er|ed)?)$/i.test(civilStatusValue)
+        ? ("widowed" as const)
+        : /^(?:legally\s+)?separated$/i.test(civilStatusValue)
+          ? ("legallySeparated" as const)
+          : undefined;
+  const localResidenceAddress = {
+    unitRoomFloorBuildingNo: optionalString(rawProfile.address_line_2),
+    ...splitStreet(optionalString(rawProfile.street) ?? rawProfile.address),
+    barangay: optionalString(rawProfile.barangay),
+    municipalityCity: optionalString(rawProfile.municipality),
+    province: optionalString(rawProfile.province),
+    zipCode: optionalString(rawProfile.postal),
+  };
 
   return {
-    address,
-    addressLine2: stringValue(rawProfile.address_line_2),
-    barangay: stringValue(rawProfile.barangay),
-    birthDate: stringValue(rawProfile.birth_date),
-    birthPlace: joinNonEmpty(
-      [birthPlace.birth_municipality, birthPlace.birth_province, birthPlace.birth_country],
-      ", ",
-    ),
-    city: stringValue(rawProfile.municipality),
-    civilStatus: stringValue(otherPersonalInformation.marital_status),
-    email: stringValue(rawProfile.email),
-    fatherName: joinNonEmpty([father.father_firstname, father.father_lastname]),
-    firstName: stringValue(rawProfile.first_name),
-    foreignAddress: foreignAddressFromUnknown(rawProfile.foreign_address),
-    fullName: joinNonEmpty([
-      rawProfile.first_name,
-      rawProfile.middle_name,
-      rawProfile.last_name,
-      rawProfile.suffix,
-    ]),
-    gender: stringValue(rawProfile.gender),
-    lastName: stringValue(rawProfile.last_name),
-    middleName: stringValue(rawProfile.middle_name),
-    mobile: stringValue(rawProfile.mobile),
-    motherMaidenName: joinNonEmpty([
-      mother.mother_maiden_firstname,
-      mother.mother_maiden_middlename,
-      mother.mother_maiden_lastname,
-    ]),
-    nationalIdPcn: stringValue(nationalId.pcn),
-    nationality: stringValue(rawProfile.nationality),
-    passportExpiryDate: stringValue(passport.expiry_date),
-    passportIssuedDate: stringValue(passport.issued_date),
-    passportNumber: stringValue(passport.passport_number),
-    passportPlaceIssued: stringValue(passport.place_issued),
-    postal: stringValue(rawProfile.postal),
-    province: stringValue(rawProfile.province),
-    signatureSource:
-      [rawProfile.signature, nationalId.signature, rawProfile.signature_url]
-        .map(stringValue)
-        .find(Boolean) ?? "",
-    street: stringValue(rawProfile.street),
-    suffix: stringValue(rawProfile.suffix),
-    tin: normalizeTin(rawProfile.tin_id),
+    registration: {
+      philsysCardNumber: optionalString(nationalId.pcn),
+    },
+    taxpayerInformation: {
+      tin,
+      taxpayerName: {
+        lastName: optionalString(rawProfile.last_name),
+        firstName: optionalString(rawProfile.first_name),
+        middleName: optionalString(rawProfile.middle_name),
+        suffix: optionalString(rawProfile.suffix),
+      },
+      gender,
+      civilStatus,
+      birthOrOrganizationDate: optionalString(rawProfile.birth_date),
+      placeOfBirth: birthPlaceText || undefined,
+      motherMaidenName: motherMaidenName || undefined,
+      fatherName: fatherName || undefined,
+      citizenship: optionalString(rawProfile.nationality),
+      localResidenceAddress,
+      foreignAddress: foreignAddress || undefined,
+      identification: {
+        type: optionalString(passport.passport_number) ? "Passport" : undefined,
+        idNumber: optionalString(passport.passport_number),
+        effectivityDate: optionalString(passport.issued_date),
+        expiryDate: optionalString(passport.expiry_date),
+        placeCountryOfIssue: optionalString(passport.place_issued),
+      },
+      contact: {
+        preferredTypes: optionalString(rawProfile.mobile) ? ["mobile"] : undefined,
+        mobile: optionalString(rawProfile.mobile),
+        email: optionalString(rawProfile.email),
+      },
+    },
+    declaration: {
+      signatureSource,
+      printedName: fullName || undefined,
+    },
+    paymentOrder: {
+      taxpayerTin: tin,
+      taxpayerName: fullName || undefined,
+    },
   };
 }
