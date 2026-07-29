@@ -11,6 +11,7 @@ import type {
   LguActor,
   LguApplicationStatus,
   LguApplicantInformationInput,
+  LguBusinessAddressInput,
   LguBusinessRegistrationCredentialInput,
   LguIssuedDocuments,
   LguPaymentCheckout,
@@ -89,6 +90,73 @@ function normalizeApplicant(input: LguApplicantInformationInput): LguApplicantIn
   };
 }
 
+function normalizeBusinessAddress(input: unknown): LguBusinessAddressInput {
+  if (!input || typeof input !== "object" || Array.isArray(input))
+    throw new LguError(
+      "INVALID_CERTIFICATE",
+      "A structured business address is required in the certificate.",
+    );
+  const address = input as Record<string, unknown>;
+  const addressLine1 = normalizedRequiredString(
+    address.addressLine1,
+    "INVALID_CERTIFICATE",
+    "Business address line 1",
+    300,
+  );
+  const addressLine2 = address.addressLine2
+    ? normalizedRequiredString(
+        address.addressLine2,
+        "INVALID_CERTIFICATE",
+        "Business address line 2",
+        200,
+      )
+    : undefined;
+  const barangay = normalizedRequiredString(
+    address.barangay,
+    "INVALID_CERTIFICATE",
+    "Business barangay",
+    120,
+  );
+  const cityMunicipality = normalizedRequiredString(
+    address.cityMunicipality,
+    "INVALID_CERTIFICATE",
+    "Business city/municipality",
+    120,
+  );
+  const province = normalizedRequiredString(
+    address.province,
+    "INVALID_CERTIFICATE",
+    "Business province",
+    120,
+  );
+  const region = normalizedRequiredString(
+    address.region,
+    "INVALID_CERTIFICATE",
+    "Business region",
+    120,
+  );
+  const postalCode = normalizedRequiredString(
+    address.postalCode,
+    "INVALID_CERTIFICATE",
+    "Business postal code",
+    4,
+  );
+  if (!/^\d{4}$/.test(postalCode))
+    throw new LguError(
+      "INVALID_CERTIFICATE",
+      "Business postal code must contain exactly four digits.",
+    );
+  return {
+    addressLine1,
+    ...(addressLine2 === undefined ? {} : { addressLine2 }),
+    barangay,
+    cityMunicipality,
+    province,
+    region,
+    postalCode,
+  };
+}
+
 function parsedCertificateDate(value: unknown, field: string): Date {
   if (typeof value !== "string" || !value.trim())
     throw new LguError("INVALID_CERTIFICATE", `${field} is required.`);
@@ -154,6 +222,7 @@ function normalizeCertificate(input: LguBusinessRegistrationCredentialInput, now
       240,
     ),
     territorialScope: input.territorialScope,
+    businessAddress: normalizeBusinessAddress(input.businessAddress),
     issuedAt,
     validUntil,
   };
@@ -169,9 +238,24 @@ function certificateFromRecord(
     ownerName: application.certificateOwnerName,
     descriptor: application.certificateDescriptor,
     territorialScope: application.certificateTerritorialScope,
+    businessAddress: businessAddressFromRecord(application),
     issuedAt: application.certificateIssuedAt.toISOString(),
     validUntil: application.certificateValidUntil.toISOString(),
     status: application.certificateStatus,
+  };
+}
+
+function businessAddressFromRecord(application: LguApplicationRecord): LguBusinessAddressInput {
+  return {
+    addressLine1: application.businessAddressLine1,
+    ...(application.businessAddressLine2 === null
+      ? {}
+      : { addressLine2: application.businessAddressLine2 }),
+    barangay: application.businessBarangay,
+    cityMunicipality: application.city,
+    province: application.businessProvince,
+    region: application.businessRegion,
+    postalCode: application.businessPostalCode,
   };
 }
 
@@ -197,6 +281,7 @@ function projectIssuedDocuments(
     ownerName: applicant.ownerName,
     ...(applicant.tin === undefined ? {} : { tin: applicant.tin }),
     businessActivity: application.certificateDescriptor,
+    businessAddress: businessAddressFromRecord(application),
     issuedAt: application.documentsIssuedAt.toISOString(),
     validUntil: application.documentsValidUntil.toISOString(),
   };
@@ -231,6 +316,13 @@ function snapshotsMatch(
 ): boolean {
   return (
     application.normalizedCity === expected.normalizedCity &&
+    application.businessAddressLine1 === expected.certificate.businessAddress.addressLine1 &&
+    application.businessAddressLine2 ===
+      (expected.certificate.businessAddress.addressLine2 ?? null) &&
+    application.businessBarangay === expected.certificate.businessAddress.barangay &&
+    application.businessProvince === expected.certificate.businessAddress.province &&
+    application.businessRegion === expected.certificate.businessAddress.region &&
+    application.businessPostalCode === expected.certificate.businessAddress.postalCode &&
     application.certificateNumber === expected.certificate.certificateNumber &&
     application.certificateIssuingAgency === expected.certificate.issuingAgency &&
     application.certificateStatus === expected.certificate.status &&
@@ -540,7 +632,6 @@ export function createLguService(options: LguServiceOptions) {
       actor: LguActor;
       applicant: LguApplicantInformationInput;
       certificate: LguBusinessRegistrationCredentialInput;
-      city: string;
     }) {
       const currentTime = now();
       const egovUserId = validateActor(input.actor);
@@ -551,7 +642,7 @@ export function createLguService(options: LguServiceOptions) {
           "CERTIFICATE_OWNER_MISMATCH",
           "The business-name certificate belongs to another owner.",
         );
-      const city = normalizedRequiredString(input.city, "INVALID_CITY", "City/municipality", 200);
+      const city = certificate.businessAddress.cityMunicipality;
       const normalizedCity = comparisonKey(city);
       const aggregate = await options.repository.startOrResumeApplication({
         egovUserId,

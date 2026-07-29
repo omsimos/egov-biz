@@ -2,6 +2,7 @@ import type { Database } from "@repo/db";
 import { lguApplicantInformation, lguApplications, lguPayments } from "@repo/db/schema";
 import { and, desc, eq, inArray, ne } from "drizzle-orm";
 
+import { databaseErrorContains } from "../drizzle-errors.js";
 import {
   LguRepositoryConflict,
   type LguApplicationAggregate,
@@ -9,13 +10,6 @@ import {
   type LguApplicantInformationRecord,
   type LguRepository,
 } from "./repository.js";
-
-function constraintName(error: unknown): string | undefined {
-  if (!error || typeof error !== "object") return undefined;
-  const record = error as Record<string, unknown>;
-  const constraint = record.constraint_name ?? record.constraint;
-  return typeof constraint === "string" ? constraint : undefined;
-}
 
 function applicationRecord(row: typeof lguApplications.$inferSelect): LguApplicationRecord {
   return {
@@ -75,22 +69,13 @@ export function createDrizzleLguRepository(database: Database): LguRepository {
       .from(lguApplications)
       .where(eq(lguApplications.id, applicationId))
       .limit(1);
-    if (application?.latestPaymentId) {
-      const [payment] = await database
-        .select()
-        .from(lguPayments)
-        .where(eq(lguPayments.id, application.latestPaymentId))
-        .limit(1);
-      if (payment) return payment;
-    }
-
-    const [legacyPayment] = await database
+    if (!application?.latestPaymentId) return null;
+    const [payment] = await database
       .select()
       .from(lguPayments)
-      .where(eq(lguPayments.applicationId, applicationId))
-      .orderBy(desc(lguPayments.createdAt))
+      .where(eq(lguPayments.id, application.latestPaymentId))
       .limit(1);
-    return legacyPayment ?? null;
+    return payment ?? null;
   }
 
   return {
@@ -111,6 +96,12 @@ export function createDrizzleLguRepository(database: Database): LguRepository {
               egovUserId: input.egovUserId,
               city: input.city,
               normalizedCity: input.normalizedCity,
+              businessAddressLine1: input.certificate.businessAddress.addressLine1,
+              businessAddressLine2: input.certificate.businessAddress.addressLine2,
+              businessBarangay: input.certificate.businessAddress.barangay,
+              businessProvince: input.certificate.businessAddress.province,
+              businessRegion: input.certificate.businessAddress.region,
+              businessPostalCode: input.certificate.businessAddress.postalCode,
               certificateNumber: input.certificate.certificateNumber,
               certificateIssuingAgency: input.certificate.issuingAgency,
               certificateStatus: input.certificate.status,
@@ -143,10 +134,9 @@ export function createDrizzleLguRepository(database: Database): LguRepository {
           };
         });
       } catch (error) {
-        if (constraintName(error) !== "lgu_one_application_per_business_city") throw error;
         const raced = await findMatchingApplication(lookup);
-        if (!raced) throw error;
-        return raced;
+        if (raced) return raced;
+        throw error;
       }
     },
     async getApplication(applicationId) {
@@ -262,7 +252,7 @@ export function createDrizzleLguRepository(database: Database): LguRepository {
           };
         });
       } catch (error) {
-        if (constraintName(error) === "lgu_one_pending_payment_per_application")
+        if (databaseErrorContains(error, "lgu_payments.application_id"))
           throw new LguRepositoryConflict("PAYMENT_IN_PROGRESS");
         throw error;
       }
@@ -278,7 +268,6 @@ export function createDrizzleLguRepository(database: Database): LguRepository {
               eq(lguApplications.state, "PAYMENT_PENDING"),
             ),
           )
-          .for("update")
           .limit(1);
         if (!application) return null;
         const [payment] = await transaction
@@ -312,7 +301,6 @@ export function createDrizzleLguRepository(database: Database): LguRepository {
               eq(lguApplications.state, "PAYMENT_PENDING"),
             ),
           )
-          .for("update")
           .limit(1);
         if (!application) return null;
         const [payment] = await transaction
@@ -358,7 +346,6 @@ export function createDrizzleLguRepository(database: Database): LguRepository {
                   eq(lguApplications.state, "PAYMENT_READY"),
                 ),
               )
-              .for("update")
               .limit(1);
           }
           if (!application) return null;
@@ -421,7 +408,6 @@ export function createDrizzleLguRepository(database: Database): LguRepository {
                   eq(lguApplications.state, "COMPLETED"),
                 ),
               )
-              .for("update")
               .limit(1);
           }
           if (!application) return null;

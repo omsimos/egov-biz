@@ -1,6 +1,7 @@
 import type {
   LguApplicationState,
   LguApplicantInformationInput,
+  LguBusinessAddressInput,
   LguPaymentStatus,
   LguTerritorialScope,
 } from "./types.js";
@@ -11,6 +12,12 @@ export type LguApplicationRecord = {
   state: LguApplicationState;
   city: string;
   normalizedCity: string;
+  businessAddressLine1: string;
+  businessAddressLine2: string | null;
+  businessBarangay: string;
+  businessProvince: string;
+  businessRegion: string;
+  businessPostalCode: string;
   certificateNumber: string;
   certificateIssuingAgency: "DTI-BNRS";
   certificateStatus: "REGISTERED";
@@ -101,6 +108,7 @@ export interface LguRepository {
       ownerName: string;
       descriptor: string;
       territorialScope: LguTerritorialScope;
+      businessAddress: LguBusinessAddressInput;
       issuedAt: Date;
       validUntil: Date;
     };

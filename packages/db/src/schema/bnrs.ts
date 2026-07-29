@@ -1,71 +1,54 @@
+import { randomUUID } from "node:crypto";
 import { relations, sql } from "drizzle-orm";
-import {
-  check,
-  date,
-  index,
-  integer,
-  pgEnum,
-  pgTable,
-  text,
-  timestamp,
-  uniqueIndex,
-  uuid,
-  varchar,
-} from "drizzle-orm/pg-core";
+import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 const timestamps = {
-  createdAt: timestamp("created_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { mode: "date", withTimezone: true }).defaultNow().notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .default(sql`(unixepoch() * 1000)`)
+    .notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .default(sql`(unixepoch() * 1000)`)
+    .notNull(),
 };
 
-export const bnrsApplicationStateEnum = pgEnum("bnrs_application_state", [
+const applicationStates = [
   "TERMS_PENDING",
   "OWNER_INFORMATION_PENDING",
   "BUSINESS_NAME_PENDING",
   "SCOPE_PENDING",
+  "BUSINESS_ADDRESS_PENDING",
   "PAYMENT_READY",
   "PAYMENT_PENDING",
   "COMPLETED",
   "ABANDONED",
-]);
+] as const;
 
-export const bnrsBusinessScopeEnum = pgEnum("bnrs_business_scope", [
-  "CITY_MUNICIPALITY",
-  "REGIONAL",
-  "NATIONAL",
-]);
+const businessScopes = ["CITY_MUNICIPALITY", "REGIONAL", "NATIONAL"] as const;
+const businessAddressSources = ["EGOV_RESIDENTIAL", "USER_PROVIDED"] as const;
+const paymentStatuses = ["CREATING", "PENDING", "PAID", "FAILED", "EXPIRED", "VOIDED"] as const;
 
-export const bnrsPaymentStatusEnum = pgEnum("bnrs_payment_status", [
-  "CREATING",
-  "PENDING",
-  "PAID",
-  "FAILED",
-  "EXPIRED",
-  "VOIDED",
-]);
-
-export const bnrsApplications = pgTable(
+export const bnrsApplications = sqliteTable(
   "bnrs_applications",
   {
-    id: uuid("id").defaultRandom().primaryKey(),
+    id: text("id").$defaultFn(randomUUID).primaryKey(),
     egovUserId: text("egov_user_id").notNull(),
-    state: bnrsApplicationStateEnum("state").default("TERMS_PENDING").notNull(),
-    termsAcceptedAt: timestamp("terms_accepted_at", { mode: "date", withTimezone: true }),
+    state: text("state", { enum: applicationStates }).default("TERMS_PENDING").notNull(),
+    termsAcceptedAt: integer("terms_accepted_at", { mode: "timestamp_ms" }),
     dominantName: text("dominant_name"),
-    descriptorId: varchar("descriptor_id", { length: 100 }),
+    descriptorId: text("descriptor_id"),
     descriptorLabel: text("descriptor_label"),
     proposedBusinessName: text("proposed_business_name"),
     normalizedBusinessName: text("normalized_business_name"),
-    scope: bnrsBusinessScopeEnum("scope"),
+    scope: text("scope", { enum: businessScopes }),
     registrationFee: integer("registration_fee"),
     documentaryStampTax: integer("documentary_stamp_tax"),
     totalFee: integer("total_fee"),
-    latestPaymentId: uuid("latest_payment_id"),
-    referenceCode: varchar("reference_code", { length: 32 }),
-    certificateNumber: varchar("certificate_number", { length: 40 }),
-    issuedAt: timestamp("issued_at", { mode: "date", withTimezone: true }),
-    validUntil: timestamp("valid_until", { mode: "date", withTimezone: true }),
-    abandonedAt: timestamp("abandoned_at", { mode: "date", withTimezone: true }),
+    latestPaymentId: text("latest_payment_id"),
+    referenceCode: text("reference_code"),
+    certificateNumber: text("certificate_number"),
+    issuedAt: integer("issued_at", { mode: "timestamp_ms" }),
+    validUntil: integer("valid_until", { mode: "timestamp_ms" }),
+    abandonedAt: integer("abandoned_at", { mode: "timestamp_ms" }),
     ...timestamps,
   },
   (table) => [
@@ -82,6 +65,14 @@ export const bnrsApplications = pgTable(
       .on(table.certificateNumber)
       .where(sql`${table.certificateNumber} is not null`),
     check(
+      "bnrs_application_state_valid",
+      sql`${table.state} in ('TERMS_PENDING', 'OWNER_INFORMATION_PENDING', 'BUSINESS_NAME_PENDING', 'SCOPE_PENDING', 'BUSINESS_ADDRESS_PENDING', 'PAYMENT_READY', 'PAYMENT_PENDING', 'COMPLETED', 'ABANDONED')`,
+    ),
+    check(
+      "bnrs_business_scope_valid",
+      sql`${table.scope} is null or ${table.scope} in ('CITY_MUNICIPALITY', 'REGIONAL', 'NATIONAL')`,
+    ),
+    check(
       "bnrs_certificate_issuance_complete",
       sql`(${table.certificateNumber} is null and ${table.validUntil} is null) or (${table.certificateNumber} is not null and ${table.validUntil} is not null and ${table.state} = 'COMPLETED')`,
     ),
@@ -89,8 +80,8 @@ export const bnrsApplications = pgTable(
   ],
 );
 
-export const bnrsOwnerInformation = pgTable("bnrs_owner_information", {
-  applicationId: uuid("application_id")
+export const bnrsOwnerInformation = sqliteTable("bnrs_owner_information", {
+  applicationId: text("application_id")
     .primaryKey()
     .references(() => bnrsApplications.id, { onDelete: "cascade" }),
   citizenship: text("citizenship"),
@@ -98,28 +89,52 @@ export const bnrsOwnerInformation = pgTable("bnrs_owner_information", {
   middleName: text("middle_name"),
   lastName: text("last_name"),
   suffix: text("suffix"),
-  birthDate: date("birth_date", { mode: "string" }),
+  birthDate: text("birth_date"),
   gender: text("gender"),
   ...timestamps,
 });
 
-export const bnrsPayments = pgTable(
+export const bnrsBusinessAddresses = sqliteTable(
+  "bnrs_business_addresses",
+  {
+    applicationId: text("application_id")
+      .primaryKey()
+      .references(() => bnrsApplications.id, { onDelete: "cascade" }),
+    source: text("source", { enum: businessAddressSources }).notNull(),
+    addressLine1: text("address_line_1").notNull(),
+    addressLine2: text("address_line_2"),
+    barangay: text("barangay").notNull(),
+    cityMunicipality: text("city_municipality").notNull(),
+    province: text("province").notNull(),
+    region: text("region").notNull(),
+    postalCode: text("postal_code").notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    check(
+      "bnrs_business_address_source_valid",
+      sql`${table.source} in ('EGOV_RESIDENTIAL', 'USER_PROVIDED')`,
+    ),
+  ],
+);
+
+export const bnrsPayments = sqliteTable(
   "bnrs_payments",
   {
-    id: uuid("id").defaultRandom().primaryKey(),
-    applicationId: uuid("application_id")
+    id: text("id").$defaultFn(randomUUID).primaryKey(),
+    applicationId: text("application_id")
       .notNull()
       .references(() => bnrsApplications.id, { onDelete: "cascade" }),
-    provider: varchar("provider", { length: 40 }).default("EGOVPAY").notNull(),
-    status: bnrsPaymentStatusEnum("status").default("CREATING").notNull(),
-    transactionId: varchar("transaction_id", { length: 150 }).notNull(),
-    transactionUuid: uuid("transaction_uuid"),
+    provider: text("provider").default("EGOVPAY").notNull(),
+    status: text("status", { enum: paymentStatuses }).default("CREATING").notNull(),
+    transactionId: text("transaction_id").notNull(),
+    transactionUuid: text("transaction_uuid"),
     checkoutUrl: text("checkout_url"),
     amount: integer("amount").notNull(),
-    currency: varchar("currency", { length: 3 }).default("PHP").notNull(),
+    currency: text("currency").default("PHP").notNull(),
     providerStatus: text("provider_status"),
-    paidAt: timestamp("paid_at", { mode: "date", withTimezone: true }),
-    expiresAt: timestamp("expires_at", { mode: "date", withTimezone: true }),
+    paidAt: integer("paid_at", { mode: "timestamp_ms" }),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }),
     ...timestamps,
   },
   (table) => [
@@ -128,6 +143,10 @@ export const bnrsPayments = pgTable(
       .where(sql`${table.status} in ('CREATING', 'PENDING')`),
     uniqueIndex("bnrs_payment_transaction_uuid_unique").on(table.transactionUuid),
     uniqueIndex("bnrs_payment_transaction_id_unique").on(table.transactionId),
+    check(
+      "bnrs_payment_status_valid",
+      sql`${table.status} in ('CREATING', 'PENDING', 'PAID', 'FAILED', 'EXPIRED', 'VOIDED')`,
+    ),
     index("bnrs_payments_application_history").on(table.applicationId, table.createdAt),
   ],
 );
@@ -137,12 +156,23 @@ export const bnrsApplicationsRelations = relations(bnrsApplications, ({ many, on
     fields: [bnrsApplications.id],
     references: [bnrsOwnerInformation.applicationId],
   }),
+  businessAddress: one(bnrsBusinessAddresses, {
+    fields: [bnrsApplications.id],
+    references: [bnrsBusinessAddresses.applicationId],
+  }),
   payments: many(bnrsPayments),
 }));
 
 export const bnrsOwnerInformationRelations = relations(bnrsOwnerInformation, ({ one }) => ({
   application: one(bnrsApplications, {
     fields: [bnrsOwnerInformation.applicationId],
+    references: [bnrsApplications.id],
+  }),
+}));
+
+export const bnrsBusinessAddressesRelations = relations(bnrsBusinessAddresses, ({ one }) => ({
+  application: one(bnrsApplications, {
+    fields: [bnrsBusinessAddresses.applicationId],
     references: [bnrsApplications.id],
   }),
 }));
@@ -158,5 +188,7 @@ export type BnrsApplicationRow = typeof bnrsApplications.$inferSelect;
 export type NewBnrsApplicationRow = typeof bnrsApplications.$inferInsert;
 export type BnrsOwnerInformationRow = typeof bnrsOwnerInformation.$inferSelect;
 export type NewBnrsOwnerInformationRow = typeof bnrsOwnerInformation.$inferInsert;
+export type BnrsBusinessAddressRow = typeof bnrsBusinessAddresses.$inferSelect;
+export type NewBnrsBusinessAddressRow = typeof bnrsBusinessAddresses.$inferInsert;
 export type BnrsPaymentRow = typeof bnrsPayments.$inferSelect;
 export type NewBnrsPaymentRow = typeof bnrsPayments.$inferInsert;

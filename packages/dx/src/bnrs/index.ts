@@ -11,7 +11,10 @@ export { BnrsError } from "./errors.js";
 export type { BnrsErrorCode } from "./errors.js";
 export { createEgovPayBnrsPaymentProvider, normalizeEgovPayPaymentStatus } from "./egov-pay.js";
 export { bnrsDatabaseTables, createDrizzleBnrsRepository } from "./drizzle-repository.js";
-export { mapEgovSsoProfileToBnrsOwnerInformation } from "./profile.js";
+export {
+  mapEgovSsoProfileToBnrsOwnerInformation,
+  mapEgovSsoProfileToBnrsResidentialAddress,
+} from "./profile.js";
 export type {
   BnrsApplicationPatch,
   BnrsApplicationRecord,

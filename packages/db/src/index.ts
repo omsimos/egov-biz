@@ -1,9 +1,15 @@
 export {
   createDatabase,
   createDatabaseFromEnv,
-  getDatabaseUrl,
+  DX_MIGRATIONS_TABLE,
+  migrateDatabase,
   type Database,
-  type DatabaseEnvironment,
-  type PostgresOptions,
+  type TursoOptions,
 } from "./client.js";
+export {
+  DEFAULT_DX_DATABASE_URL,
+  getTursoConfig,
+  type DatabaseEnvironment,
+  type TursoConfig,
+} from "./config.js";
 export * as schema from "./schema.js";

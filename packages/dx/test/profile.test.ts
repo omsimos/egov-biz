@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { EgovSsoCitizenProfile } from "@repo/egov/eGovSso";
 
-import { mapEgovSsoProfileToBnrsOwnerInformation } from "../src/bnrs/index.js";
+import {
+  mapEgovSsoProfileToBnrsOwnerInformation,
+  mapEgovSsoProfileToBnrsResidentialAddress,
+} from "../src/bnrs/index.js";
 
 describe("BNRS owner profile mapping", () => {
   test("projects only the agreed owner fields", () => {
@@ -43,5 +46,49 @@ describe("BNRS owner profile mapping", () => {
         country_alpha_3_code: "PHL",
       }),
     ).toEqual({ citizenship: "Filipino" });
+  });
+});
+
+describe("BNRS residential-address profile mapping", () => {
+  test("projects a complete SSO residential address for the caller's reuse decision", () => {
+    const profile: EgovSsoCitizenProfile = {
+      address: " 12 Acacia Street ",
+      address_line_2: " Unit 4 ",
+      barangay: "Poblacion",
+      municipality: "Makati City",
+      province: "Metro Manila",
+      region: "National Capital Region",
+      postal: "1210",
+    };
+
+    expect(mapEgovSsoProfileToBnrsResidentialAddress(profile)).toEqual({
+      source: "EGOV_RESIDENTIAL",
+      addressLine1: "12 Acacia Street",
+      addressLine2: "Unit 4",
+      barangay: "Poblacion",
+      cityMunicipality: "Makati City",
+      province: "Metro Manila",
+      region: "National Capital Region",
+      postalCode: "1210",
+    });
+  });
+
+  test("does not offer an incomplete SSO address for confirmation", () => {
+    expect(
+      mapEgovSsoProfileToBnrsResidentialAddress({
+        address: "12 Acacia Street",
+        municipality: "Makati City",
+      }),
+    ).toBeNull();
+    expect(
+      mapEgovSsoProfileToBnrsResidentialAddress({
+        address: "12 Acacia Street",
+        barangay: "Poblacion",
+        municipality: "Makati City",
+        province: "Metro Manila",
+        region: "National Capital Region",
+        postal: "invalid",
+      }),
+    ).toBeNull();
   });
 });

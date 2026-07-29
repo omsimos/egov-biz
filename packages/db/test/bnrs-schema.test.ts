@@ -1,12 +1,18 @@
 import { describe, expect, test } from "bun:test";
-import { getTableConfig } from "drizzle-orm/pg-core";
+import { getTableConfig } from "drizzle-orm/sqlite-core";
 
-import { bnrsApplications, bnrsOwnerInformation, bnrsPayments } from "../src/schema.js";
+import {
+  bnrsApplications,
+  bnrsBusinessAddresses,
+  bnrsOwnerInformation,
+  bnrsPayments,
+} from "../src/schema.js";
 
 describe("BNRS schema", () => {
-  test("defines the application, owner, and payment tables", () => {
+  test("defines the application, owner, business-address, and payment tables", () => {
     expect(getTableConfig(bnrsApplications).name).toBe("bnrs_applications");
     expect(getTableConfig(bnrsOwnerInformation).name).toBe("bnrs_owner_information");
+    expect(getTableConfig(bnrsBusinessAddresses).name).toBe("bnrs_business_addresses");
     expect(getTableConfig(bnrsPayments).name).toBe("bnrs_payments");
   });
 
@@ -58,6 +64,17 @@ describe("BNRS schema", () => {
 
     expect(config.primaryKeys).toHaveLength(0);
     expect(config.columns.find(({ name }) => name === "application_id")?.primary).toBe(true);
+    expect(config.foreignKeys).toHaveLength(1);
+  });
+
+  test("isolates the required business address behind a one-to-one application foreign key", () => {
+    const config = getTableConfig(bnrsBusinessAddresses);
+
+    expect(config.primaryKeys).toHaveLength(0);
+    expect(config.columns.find(({ name }) => name === "application_id")?.primary).toBe(true);
+    expect(config.columns.find(({ name }) => name === "source")?.notNull).toBe(true);
+    expect(config.columns.find(({ name }) => name === "barangay")?.notNull).toBe(true);
+    expect(config.columns.find(({ name }) => name === "city_municipality")?.notNull).toBe(true);
     expect(config.foreignKeys).toHaveLength(1);
   });
 

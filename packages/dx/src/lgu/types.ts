@@ -9,6 +9,16 @@ export type LguApplicantInformationInput = {
 
 export type LguTerritorialScope = "CITY_MUNICIPALITY" | "REGIONAL" | "NATIONAL";
 
+export type LguBusinessAddressInput = {
+  addressLine1: string;
+  addressLine2?: string;
+  barangay: string;
+  cityMunicipality: string;
+  province: string;
+  region: string;
+  postalCode: string;
+};
+
 export type LguBusinessRegistrationCredentialInput = {
   certificateNumber: string;
   issuingAgency: "DTI-BNRS";
@@ -16,6 +26,7 @@ export type LguBusinessRegistrationCredentialInput = {
   ownerName: string;
   descriptor: string;
   territorialScope: LguTerritorialScope;
+  businessAddress: LguBusinessAddressInput;
   issuedAt: string;
   validUntil: string;
   status: "REGISTERED";
@@ -81,6 +92,7 @@ export type LguBusinessPermit = {
   ownerName: string;
   tin?: string;
   businessActivity: string;
+  businessAddress: LguBusinessAddressInput;
   territorialScope: LguTerritorialScope;
   issuedAt: string;
   validUntil: string;
@@ -97,6 +109,7 @@ export type LguBarangayClearance = {
   ownerName: string;
   tin?: string;
   businessActivity: string;
+  businessAddress: LguBusinessAddressInput;
   issuedAt: string;
   validUntil: string;
   status: "APPROVED";

@@ -1,6 +1,6 @@
 import type { EgovSsoCitizenProfile } from "@repo/egov/eGovSso";
 
-import type { BnrsOwnerInformationInput } from "./types.js";
+import type { BnrsBusinessAddressInput, BnrsOwnerInformationInput } from "./types.js";
 
 function normalizedString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -37,5 +37,39 @@ export function mapEgovSsoProfileToBnrsOwnerInformation(
     ...(suffix === undefined ? {} : { suffix }),
     ...(birthDate === undefined ? {} : { birthDate }),
     ...(gender === undefined ? {} : { gender }),
+  };
+}
+
+export function mapEgovSsoProfileToBnrsResidentialAddress(
+  profile: EgovSsoCitizenProfile,
+): BnrsBusinessAddressInput | null {
+  const addressLine1 = normalizedString(profile.address) ?? normalizedString(profile.street);
+  const addressLine2 = normalizedString(profile.address_line_2);
+  const barangay = normalizedString(profile.barangay);
+  const cityMunicipality = normalizedString(profile.municipality);
+  const province = normalizedString(profile.province);
+  const region = normalizedString(profile.region);
+  const postalCode = normalizedString(profile.postal);
+
+  if (
+    !addressLine1 ||
+    !barangay ||
+    !cityMunicipality ||
+    !province ||
+    !region ||
+    !postalCode ||
+    !/^\d{4}$/.test(postalCode)
+  )
+    return null;
+
+  return {
+    source: "EGOV_RESIDENTIAL",
+    addressLine1,
+    ...(addressLine2 === undefined ? {} : { addressLine2 }),
+    barangay,
+    cityMunicipality,
+    province,
+    region,
+    postalCode,
   };
 }

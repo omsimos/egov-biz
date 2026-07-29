@@ -9,12 +9,13 @@ TERMS_PENDING
   -> OWNER_INFORMATION_PENDING
   -> BUSINESS_NAME_PENDING
   -> SCOPE_PENDING
+  -> BUSINESS_ADDRESS_PENDING
   -> PAYMENT_READY
   -> PAYMENT_PENDING
   -> COMPLETED
 ```
 
-An unfinished application can become `ABANDONED`. A failed, expired, or voided payment returns it to `PAYMENT_READY`. Name and scope can be edited at `PAYMENT_READY`, but are locked once payment begins.
+An unfinished application can become `ABANDONED`. A failed, expired, or voided payment returns it to `PAYMENT_READY`. Name, scope, and business address can be edited at `PAYMENT_READY`, but are locked once payment begins. Payment cannot start while the required business address is missing.
 
 Only one active application is allowed for each eGov user. Completed and abandoned applications remain in history. Business names are considered reserved only by database records in `PAYMENT_PENDING` or `COMPLETED`; there are no built-in reserved-name fixtures.
 
@@ -30,18 +31,30 @@ Do not accept `egovUserId` from an agent or browser payload. DX itself stays sta
 
 `mapEgovSsoProfileToBnrsOwnerInformation` maps only citizenship, first/middle/last name, suffix, birth date, and gender. Missing values are silently omitted. Status responses report only whether owner information is stored and do not return owner PII.
 
+## Business address
+
+The business address is a separate required step after territorial scope. The agent, app, or tool-call layer chooses one of two inputs:
+
+- Reuse the complete residential address returned by `mapEgovSsoProfileToBnrsResidentialAddress`, which carries source `EGOV_RESIDENTIAL`.
+- Collect a complete, different address and submit it with source `USER_PROVIDED`.
+
+The SSO mapper returns `null` unless address line 1, barangay, city/municipality, province, region, and a four-digit postal code are all available. `setBusinessAddress` applies the same completeness checks to either source. DX only validates and stores the address it receives; deciding whether to reuse the residential address or collect a different business address stays outside this package.
+
+Business addresses are stored separately as PII. Status responses expose only `{ stored, source }`, never the address fields.
+
 ## Setup and usage
 
 ```ts
-import { createDatabase } from "@repo/db";
+import { createDatabaseFromEnv } from "@repo/db";
 import { createEgovPayClient } from "@repo/egov/eGovPay";
 import {
   createBnrsService,
   createDrizzleBnrsRepository,
   createEgovPayBnrsPaymentProvider,
+  mapEgovSsoProfileToBnrsResidentialAddress,
 } from "@repo/dx/bnrs";
 
-const database = createDatabase(process.env.DATABASE_URL!);
+const database = createDatabaseFromEnv();
 const repository = createDrizzleBnrsRepository(database);
 const paymentProvider = createEgovPayBnrsPaymentProvider(
   createEgovPayClient({
@@ -70,6 +83,15 @@ await bnrs.setBusinessScope({
   applicationId: application.applicationId,
   scopeId: "NATIONAL",
 });
+const residentialAddress = mapEgovSsoProfileToBnrsResidentialAddress(session.rawProfile);
+
+// The caller decides whether to reuse this or collect a USER_PROVIDED address.
+if (!residentialAddress) throw new Error("Collect a complete business address from the user.");
+await bnrs.setBusinessAddress({
+  actor,
+  applicationId: application.applicationId,
+  address: residentialAddress,
+});
 const checkout = await bnrs.createPayment({
   actor,
   applicationId: application.applicationId,
@@ -82,9 +104,9 @@ Use `syncPaymentStatus({ transactionUuid })` from both callback and return handl
 
 If checkout creation is interrupted, retries keep the same provider transaction ID. An authoritative callback can attach the provider UUID to the creating attempt, and a later creation retry restores a missing checkout URL without opening a second logical payment attempt.
 
-After verified payment, DX generates a `BNRS-YYYYMMDD-XXXXXXXX` transaction reference and a separate mock DTI Certificate No./Business Name Number in `BNN-YYYYMMDD-XXXXXXXX` form. Completion returns the business name, descriptor, scope, owner display name, issue time, total paid, and a structured JSON certificate. Certificate issuance is part of the same idempotent database transition as payment completion, so payment retries and callback races preserve the first certificate identity.
+After verified payment, DX generates a `BNRS-YYYYMMDD-XXXXXXXX` transaction reference and a separate mock DTI Certificate No./Business Name Number in `BNN-YYYYMMDD-XXXXXXXX` form. Payment sync returns only the transaction reference, certificate number, and issue time; it never exposes the owner or business address because the transaction UUID is not actor authorization. Fetch the structured JSON certificate afterward with actor-scoped `getCertificate`. Certificate issuance is part of the same idempotent database transition as payment completion, so payment retries and callback races preserve the first certificate identity.
 
-The JSON certificate contains its certificate number, `DTI-BNRS` issuing agency, business and owner names, descriptor, territorial scope, issue time, five-year validity, and `REGISTERED` status. The database stores only the certificate number and validity timestamp; all other fields are projected from authoritative normalized application and owner records.
+The JSON certificate contains its certificate number, `DTI-BNRS` issuing agency, business and owner names, descriptor, territorial scope, structured business address, issue time, five-year validity, and `REGISTERED` status. The address source is not included in the certificate. The database stores only the certificate number and validity timestamp; all other fields are projected from authoritative normalized application, owner, and business-address records.
 
 Use `listRegisteredBusinesses({ actor })` to retrieve the authenticated user's completed BNRS registrations, newest first. Each result includes the application ID, transaction reference, certificate number, business name, descriptor, scope, and issue time. Incomplete and abandoned applications are not returned. The list intentionally includes only the certificate number rather than duplicating the full certificate; pass that value to `getCertificate({ actor, certificateNumber })` to retrieve the current authoritative JSON certificate. Both operations are scoped to the authenticated eGov user.
 
@@ -102,10 +124,11 @@ Fee and descriptor values are snapshotted on each application so later catalog c
 
 ## Persistence
 
-The Drizzle schema uses three tables:
+The Drizzle schema uses four tables:
 
 - `bnrs_applications` for ownership, lifecycle, business name, scope, fee snapshot, registration result, certificate number, and certificate validity
 - `bnrs_owner_information` for the one-to-one owner PII record
+- `bnrs_business_addresses` for the one-to-one required business-address PII record and its source
 - `bnrs_payments` for every hosted-payment attempt and provider reference
 
 Run the generated migration through the `@repo/db` migration command before using the module.
@@ -120,9 +143,71 @@ Run the generated migration through the `@repo/db` migration command before usin
 - Live DTI/BNRS API calls, agent tools, and application routes are outside this package.
 - Certificate PDF generation and document storage are deferred; the structured JSON certificate is implemented.
 
+# DX BIR forms
+
+`@repo/dx/bir` fills BIR Form 1901 or 1905, saves the generated PDF through the
+shared private file-storage module, and reads it back for the authenticated
+owner. It does not store the structured form data separately. Storage uses
+Cloudflare R2 when its environment variables are configured and local artifact
+storage otherwise.
+
+```text
+trusted eGov actor + validated form data
+  -> render the selected PDF template
+  -> save under bir/<SHA-256 owner hash>/<artifact UUID>.pdf
+  -> return non-PII artifact metadata
+  -> retrieve later with the same trusted actor and artifact UUID
+```
+
+Create the actor only from the authenticated SSO profile. Do not accept the
+eGov user ID from browser or agent input.
+
+```ts
+import { resolve } from "node:path";
+import { createBirFormService } from "@repo/dx/bir";
+import { createFileStorage } from "@repo/utils/files";
+
+const bir = createBirFormService({
+  storage: createFileStorage(),
+  templatePaths: {
+    "1901": resolve(process.cwd(), "public/forms/bir-form-1901.pdf"),
+    "1905": resolve(process.cwd(), "public/forms/bir-form-1905.pdf"),
+  },
+});
+
+const actor = { egovUserId: session.rawProfile.uniqid };
+const artifact = await bir.fillOutAndSaveForm({
+  actor,
+  form: {
+    type: "1901",
+    data: {
+      taxpayerInformation: {
+        rdoCode: "043",
+        taxpayerName: { firstName: "Juan", lastName: "Dela Cruz" },
+      },
+    },
+  },
+});
+
+const saved = await bir.getSavedForm({ actor, artifactId: artifact.artifactId });
+```
+
+Both form types use the copied generators in `@repo/utils/bir-form`. Template
+paths are required configuration because the utility package does not own the
+PDF assets. Form input is validated before rendering, and a render failure is
+never saved. Retrieval derives the private storage key from the trusted actor,
+so another actor receives `FORM_NOT_FOUND` for the same artifact UUID.
+
+The package still exposes `assignDemoRdo` for the simplified BIR demo. It
+randomly chooses a simulated code-only assignment such as `RDO 047`; the caller
+retains it and may put that code into the form data. This is not an address-based
+jurisdiction lookup and must not be used for a real filing. The demo also does
+not collect the Tax Type Questionnaire, which remains required for actual
+NewBizReg filing.
+
 # DX LGU business permits
 
-`@repo/dx/lgu` is a separate, local mock of a straightforward sole-proprietor LGU business-permit flow. It accepts a structured business-name certificate credential from its caller, collects a free-text city or municipality, charges one fixed demo fee, and immediately issues both a business permit and barangay clearance after authoritative payment confirmation.
+`@repo/dx/lgu` is a separate, local mock of a straightforward sole-proprietor LGU business-permit flow. It accepts a structured business-name certificate credential containing the BNRS business address, derives the issuing city from that address, charges one fixed demo fee, and immediately issues both a business permit and barangay clearance after authoritative payment confirmation.
 
 ## Agency isolation and handoff
 
@@ -136,13 +221,22 @@ type LguBusinessRegistrationCredentialInput = {
   ownerName: string;
   descriptor: string;
   territorialScope: "CITY_MUNICIPALITY" | "REGIONAL" | "NATIONAL";
+  businessAddress: {
+    addressLine1: string;
+    addressLine2?: string;
+    barangay: string;
+    cityMunicipality: string;
+    province: string;
+    region: string;
+    postalCode: string;
+  };
   issuedAt: string;
   validUntil: string;
   status: "REGISTERED";
 };
 ```
 
-LGU validates required fields, the supported issuer and status, date consistency, expiry, and the normalized owner-name match. This is an input contract for the demo, not proof of certificate authenticity: LGU has no BNRS lookup or cryptographic verification. Do not give LGU a BNRS repository or service instance.
+LGU validates required fields, the complete structured address, the supported issuer and status, date consistency, expiry, and the normalized owner-name match. This is an input contract for the demo, not proof of certificate authenticity: LGU has no BNRS lookup or cryptographic verification. The orchestrating caller fetches the authoritative credential from BNRS and passes it to LGU; do not give LGU a BNRS repository or service instance.
 
 Agent tools, routes, and orchestration are deliberately outside this package.
 
@@ -162,7 +256,7 @@ The actor ID is authorization context and is stored separately from applicant da
 Use an LGU-owned repository and an independently configured eGovPay client. The SDK can be the same library used elsewhere, but credentials, settlement template, provider instance, and environment configuration belong to LGU:
 
 ```ts
-import { createDatabase } from "@repo/db";
+import { createDatabaseFromEnv } from "@repo/db";
 import { createEgovPayClient } from "@repo/egov/eGovPay";
 import {
   createDrizzleLguRepository,
@@ -170,7 +264,7 @@ import {
   createLguService,
 } from "@repo/dx/lgu";
 
-const database = createDatabase(process.env.DATABASE_URL!);
+const database = createDatabaseFromEnv();
 const repository = createDrizzleLguRepository(database);
 const paymentProvider = createEgovPayLguPaymentProvider(
   createEgovPayClient({
@@ -185,7 +279,6 @@ const application = await lgu.startOrResumeApplication({
   actor,
   applicant,
   certificate,
-  city: "Makati City",
 });
 const checkout = await lgu.createPayment({
   actor,
@@ -197,13 +290,13 @@ const checkout = await lgu.createPayment({
 
 Use `syncPaymentStatus({ transactionUuid })` from callback and return handling. Callback payloads do not decide the result: LGU reads the provider transaction and verifies its UUID, transaction ID, amount, and currency. Repeated checkout creation reuses the pending transaction. A failed, expired, or voided payment returns the application to `PAYMENT_READY`; a pending payment is provider-voided before abandonment. If payment won an abandonment race, the application completes instead.
 
-Payment sync is deliberately not actor-scoped, so its result contains only application ID, lifecycle state, non-PII payment summary, and a `documentsIssued` boolean. It never returns city, applicant data, TIN, certificate details, or issued documents. After a return or callback, use actor-scoped `getStatus` or `getIssuedDocuments` to show the result to the authenticated owner.
+Payment sync is deliberately not actor-scoped, so its result contains only application ID, lifecycle state, non-PII payment summary, and a `documentsIssued` boolean. It never returns the business address, city, applicant data, TIN, certificate details, or issued documents. After a return or callback, use actor-scoped `getStatus` or `getIssuedDocuments` to show the result to the authenticated owner.
 
 If provider creation is interrupted, checkout retry and abandonment both reuse the stored callback/redirect URLs and the same logical transaction ID. Abandonment first recovers the provider transaction, then voids and authoritatively verifies it; LGU never abandons a possibly payable attempt only in local state.
 
 The public service also provides `getStatus`, `getPaymentQuote`, `abandonApplication`, `listIssuedDocuments`, and actor-scoped `getIssuedDocuments`. Both issued documents are returned together.
 
-## Lifecycle, city identity, and fee
+## Lifecycle, business-address identity, and fee
 
 ```text
 PAYMENT_READY -> PAYMENT_PENDING -> COMPLETED
@@ -211,7 +304,7 @@ PAYMENT_READY -> PAYMENT_PENDING -> COMPLETED
        +-----> ABANDONED +-- failed / expired / voided -> PAYMENT_READY
 ```
 
-The city or municipality is intentionally free text. LGU applies Unicode normalization, trims it, and collapses whitespace; application identity compares the result case-insensitively. The demo accepts any city for any supported certificate territorial scope and does not use a city catalog, infer a barangay, correct spelling, or enforce territorial compatibility.
+LGU no longer accepts a separate city. It validates and stores the structured business address carried by the BNRS credential, and derives its city identity from `cityMunicipality`. Address fields are Unicode-normalized, trimmed, and whitespace-collapsed; the postal code must contain four digits. The demo does not use an address catalog, correct spelling, or enforce territorial-scope compatibility.
 
 One non-abandoned application is allowed for each eGov user, certificate number, and normalized city. The same certificate can therefore produce permits in different cities. A matching retry resumes the immutable snapshot; different applicant or certificate details conflict. An unpaid application may be abandoned and replaced. Multiple branches for the same certificate in the same city are deferred.
 
@@ -224,13 +317,13 @@ Verified payment immediately approves the application and atomically issues exac
 - Business permit number `LGU-BP-YYYY-XXXXXXXX`, permit type `NEW_BUSINESS`, `ACTIVE` status, issuing city, BNRS certificate number, business and owner details, optional full TIN, activity, certificate territorial scope, issue/validity dates, and PHP 2,500 total paid.
 - Barangay clearance number `LGU-BC-YYYY-XXXXXXXX`, type `BARANGAY_BUSINESS_CLEARANCE`, `APPROVED` status, the same business/owner/activity data, issue/validity dates, and `includedInBusinessPermitFee: true`.
 
-Both documents expire at `23:59:59.999Z` on December 31 of their issue year. Payment callbacks and retries preserve the first numbers and timestamps. There is no barangay-name field because only the city is collected; the clearance is still displayed and fetched beside the business permit.
+Both documents include the structured BNRS business address and expire at `23:59:59.999Z` on December 31 of their issue year. Payment callbacks and retries preserve the first numbers and timestamps.
 
 ## LGU persistence
 
 The generated Drizzle migration adds three LGU-owned tables:
 
-- `lgu_applications` stores lifecycle, the accepted credential snapshot, city identity, and dedicated permit/clearance issuance columns.
+- `lgu_applications` stores lifecycle, the accepted credential, the required structured-address snapshot, derived city identity, and dedicated permit/clearance issuance columns.
 - `lgu_applicant_information` stores the separate one-to-one owner name and optional TIN.
 - `lgu_payments` stores every LGU hosted-payment attempt and provider reference.
 
@@ -244,7 +337,6 @@ No JSON document blob or separate barangay-clearance table is used. Run the `@re
 - Terms, undertakings, and additional form stages
 - TIN verification
 - Capitalization, employees, tenancy, cedula, and ancillary permits
-- Full business address
 - Review, inspections, and processing delays
 - Renewals, amendments, cancellation, revocation, and post-release workflows
 - PDF generation, document storage, UI/routes, and agent integration

@@ -1,34 +1,36 @@
-import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { createClient, type Config } from "@libsql/client";
+import { drizzle, type LibSQLDatabase } from "drizzle-orm/libsql";
+import { migrate } from "drizzle-orm/libsql/migrator";
 
+import {
+  ensureLocalDatabaseDirectory,
+  getTursoConfig,
+  type DatabaseEnvironment,
+} from "./config.js";
 import * as schema from "./schema.js";
 
-export type Database = PostgresJsDatabase<typeof schema>;
-export type PostgresOptions = NonNullable<Parameters<typeof postgres>[1]>;
+export const DX_MIGRATIONS_TABLE = "__dx_drizzle_migrations";
 
-export interface DatabaseEnvironment {
-  DATABASE_URL?: string | undefined;
+export type Database = LibSQLDatabase<typeof schema> & {
+  $client: ReturnType<typeof createClient>;
+};
+export type TursoOptions = Omit<Config, "url">;
+
+export function createDatabase(url: string, options: TursoOptions = {}): Database {
+  if (url.startsWith("file:"))
+    ensureLocalDatabaseDirectory({ authToken: undefined, isLocal: true, url });
+  const client = createClient({ ...options, url });
+  return drizzle(client, { schema });
 }
 
-export function getDatabaseUrl(environment: DatabaseEnvironment = process.env): string {
-  const databaseUrl = environment.DATABASE_URL?.trim();
-
-  if (!databaseUrl) {
-    throw new Error("DATABASE_URL is required to connect to PostgreSQL");
-  }
-
-  return databaseUrl;
+export function createDatabaseFromEnv(environment: DatabaseEnvironment = process.env): Database {
+  const config = getTursoConfig(environment);
+  return createDatabase(config.url, config.authToken ? { authToken: config.authToken } : {});
 }
 
-export function createDatabase(databaseUrl: string, options?: PostgresOptions): Database {
-  const client = postgres(databaseUrl, options);
-
-  return drizzle({ client, schema });
-}
-
-export function createDatabaseFromEnv(
-  environment: DatabaseEnvironment = process.env,
-  options?: PostgresOptions,
-): Database {
-  return createDatabase(getDatabaseUrl(environment), options);
+export function migrateDatabase(database: Database, migrationsFolder: string): Promise<void> {
+  return migrate(database, {
+    migrationsFolder,
+    migrationsTable: DX_MIGRATIONS_TABLE,
+  });
 }

@@ -12,6 +12,21 @@ export type BnrsOwnerInformationInput = {
   gender?: string;
 };
 
+export type BnrsBusinessAddressSource = "EGOV_RESIDENTIAL" | "USER_PROVIDED";
+
+export type BnrsBusinessAddressInput = {
+  source: BnrsBusinessAddressSource;
+  addressLine1: string;
+  addressLine2?: string;
+  barangay: string;
+  cityMunicipality: string;
+  province: string;
+  region: string;
+  postalCode: string;
+};
+
+export type BnrsBusinessAddressDetails = Omit<BnrsBusinessAddressInput, "source">;
+
 export type BnrsDescriptor = {
   id: string;
   label: string;
@@ -32,6 +47,7 @@ export type BnrsApplicationState =
   | "OWNER_INFORMATION_PENDING"
   | "BUSINESS_NAME_PENDING"
   | "SCOPE_PENDING"
+  | "BUSINESS_ADDRESS_PENDING"
   | "PAYMENT_READY"
   | "PAYMENT_PENDING"
   | "COMPLETED"
@@ -44,6 +60,7 @@ export type BnrsCompletedStep =
   | "OWNER_INFORMATION"
   | "BUSINESS_NAME"
   | "BUSINESS_SCOPE"
+  | "BUSINESS_ADDRESS"
   | "PAYMENT";
 
 export type BnrsNextStep =
@@ -51,6 +68,7 @@ export type BnrsNextStep =
   | "OWNER_INFORMATION"
   | "BUSINESS_NAME"
   | "BUSINESS_SCOPE"
+  | "BUSINESS_ADDRESS"
   | "PAYMENT"
   | null;
 
@@ -68,6 +86,10 @@ export type BnrsApplicationStatus = {
     proposedBusinessName: string;
   } | null;
   scope: BnrsBusinessScope | null;
+  businessAddress: {
+    stored: boolean;
+    source: BnrsBusinessAddressSource | null;
+  };
   payment: {
     status: BnrsPaymentStatus;
     transactionId: string;
@@ -108,6 +130,7 @@ export type BnrsCertificate = {
   ownerName: string;
   descriptor: string;
   territorialScope: BnrsBusinessScopeId;
+  businessAddress: BnrsBusinessAddressDetails;
   issuedAt: string;
   validUntil: string;
   status: "REGISTERED";
@@ -144,10 +167,10 @@ export type BnrsRegistrationSummary = {
   issuedAt: string;
 };
 
-export type BnrsRegistrationResult = BnrsRegistrationSummary & {
-  ownerDisplayName: string;
-  totalPaid: number;
-  certificate: BnrsCertificate;
+export type BnrsPaymentRegistrationReceipt = {
+  referenceCode: string;
+  certificateNumber: string;
+  issuedAt: string;
 };
 
 export type BnrsRegisteredBusiness = BnrsRegistrationSummary & {
@@ -157,5 +180,5 @@ export type BnrsRegisteredBusiness = BnrsRegistrationSummary & {
 
 export type BnrsPaymentSyncResult = {
   status: BnrsApplicationStatus;
-  registration: BnrsRegistrationResult | null;
+  registration: BnrsPaymentRegistrationReceipt | null;
 };

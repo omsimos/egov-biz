@@ -4,6 +4,15 @@ import { BnrsError, createBnrsService } from "../src/bnrs/index.js";
 import { MemoryBnrsRepository } from "./support/memory-repository.js";
 
 const NOW = new Date("2026-07-29T08:30:00.000Z");
+const BUSINESS_ADDRESS = {
+  source: "USER_PROVIDED" as const,
+  addressLine1: "12 Acacia Street",
+  barangay: "Poblacion",
+  cityMunicipality: "Makati City",
+  province: "Metro Manila",
+  region: "National Capital Region",
+  postalCode: "1210",
+};
 
 function setup() {
   const repository = new MemoryBnrsRepository();
@@ -113,6 +122,15 @@ describe("BNRS registration workflow", () => {
       middleName: "Eledia",
       lastName: "Zapa",
     });
+    repository.businessAddresses.set(application.applicationId, {
+      source: "USER_PROVIDED",
+      addressLine1: "12 Acacia Street",
+      barangay: "Poblacion",
+      cityMunicipality: "Makati City",
+      province: "Metro Manila",
+      region: "National Capital Region",
+      postalCode: "1210",
+    });
 
     await expect(
       service.getCertificate({ actor, certificateNumber: "BNN-20260729-BBBBBBBB" }),
@@ -123,6 +141,14 @@ describe("BNRS registration workflow", () => {
       ownerName: "Genrev Eledia Zapa",
       descriptor: "DENTAL CLINIC",
       territorialScope: "NATIONAL",
+      businessAddress: {
+        addressLine1: "12 Acacia Street",
+        barangay: "Poblacion",
+        cityMunicipality: "Makati City",
+        province: "Metro Manila",
+        region: "National Capital Region",
+        postalCode: "1210",
+      },
       issuedAt: "2026-07-29T08:30:00.000Z",
       validUntil: "2031-07-29T08:30:00.000Z",
       status: "REGISTERED",
@@ -162,7 +188,7 @@ describe("BNRS registration workflow", () => {
     expect(first).not.toHaveProperty("egovUserId");
   });
 
-  test("enforces the ordered terms, owner, business-name, and scope transitions", async () => {
+  test("requires a business address after scope and before payment", async () => {
     const { actor, repository, service } = setup();
     const started = await service.startOrResumeApplication({ actor });
 
@@ -230,13 +256,112 @@ describe("BNRS registration workflow", () => {
       scopeId: "NATIONAL",
     });
     expect(scoped).toMatchObject({
+      state: "BUSINESS_ADDRESS_PENDING",
+      nextStep: "BUSINESS_ADDRESS",
+      scope: { registrationFee: 2_000, documentaryStampTax: 30, totalFee: 2_030 },
+      businessAddress: { stored: false, source: null },
+    });
+
+    await expectBnrsError(
+      () =>
+        service.createPayment({
+          actor,
+          applicationId: started.applicationId,
+          callbackUrl: "https://app.example.test/payments/callback",
+          redirectUrl: "https://app.example.test/payments/return",
+        }),
+      "PAYMENT_NOT_READY",
+    );
+
+    const addressed = await service.setBusinessAddress({
+      actor,
+      applicationId: started.applicationId,
+      address: BUSINESS_ADDRESS,
+    });
+    expect(addressed).toMatchObject({
       state: "PAYMENT_READY",
       nextStep: "PAYMENT",
-      scope: { registrationFee: 2_000, documentaryStampTax: 30, totalFee: 2_030 },
+      completedSteps: [
+        "TERMS_AND_CONDITIONS",
+        "OWNER_INFORMATION",
+        "BUSINESS_NAME",
+        "BUSINESS_SCOPE",
+        "BUSINESS_ADDRESS",
+      ],
+      businessAddress: { stored: true, source: "USER_PROVIDED" },
     });
+    expect(repository.businessAddresses.get(started.applicationId)).toEqual(BUSINESS_ADDRESS);
+    expect(JSON.stringify(addressed)).not.toContain("Acacia");
   });
 
-  test("allows name and scope edits until payment begins", async () => {
+  test("rejects an incomplete business address", async () => {
+    const { actor, service } = setup();
+    const application = await service.startOrResumeApplication({ actor });
+    await service.acceptTermsAndConditions({ actor, applicationId: application.applicationId });
+    await service.setOwnerInformation({
+      actor,
+      applicationId: application.applicationId,
+      owner: {},
+    });
+    await service.setBusinessName({
+      actor,
+      applicationId: application.applicationId,
+      dominantName: "Molar Bear",
+      descriptorId: "DENTAL_CLINIC",
+    });
+    await service.setBusinessScope({
+      actor,
+      applicationId: application.applicationId,
+      scopeId: "NATIONAL",
+    });
+
+    await expectBnrsError(
+      () =>
+        service.setBusinessAddress({
+          actor,
+          applicationId: application.applicationId,
+          address: { ...BUSINESS_ADDRESS, barangay: "" },
+        }),
+      "INVALID_BUSINESS_ADDRESS",
+    );
+  });
+
+  test("does not trust a payment-ready state when the required address record is missing", async () => {
+    const { actor, repository, service } = setup();
+    const application = await service.startOrResumeApplication({ actor });
+    Object.assign(repository.applications.get(application.applicationId)!, {
+      state: "PAYMENT_READY" as const,
+      dominantName: "Molar Bear",
+      descriptorId: "DENTAL_CLINIC",
+      descriptorLabel: "DENTAL CLINIC",
+      proposedBusinessName: "Molar Bear Dental Clinic",
+      normalizedBusinessName: "MOLAR BEAR DENTAL CLINIC",
+      scope: "NATIONAL" as const,
+      registrationFee: 2_000,
+      documentaryStampTax: 30,
+      totalFee: 2_030,
+    });
+    await expect(
+      service.getStatus({ actor, applicationId: application.applicationId }),
+    ).resolves.toMatchObject({
+      state: "PAYMENT_READY",
+      nextStep: "BUSINESS_ADDRESS",
+      businessAddress: { stored: false, source: null },
+    });
+
+    await expectBnrsError(
+      () =>
+        service.createPayment({
+          actor,
+          applicationId: application.applicationId,
+          callbackUrl: "https://app.example.test/payments/callback",
+          redirectUrl: "https://app.example.test/payments/return",
+        }),
+      "PAYMENT_NOT_READY",
+    );
+  });
+
+  test("allows name, scope, and address edits until payment begins", async () => {
     const { actor, service } = setup();
     const application = await service.startOrResumeApplication({ actor });
     await service.acceptTermsAndConditions({ actor, applicationId: application.applicationId });
@@ -256,6 +381,21 @@ describe("BNRS registration workflow", () => {
       applicationId: application.applicationId,
       scopeId: "REGIONAL",
     });
+    await service.setBusinessAddress({
+      actor,
+      applicationId: application.applicationId,
+      address: BUSINESS_ADDRESS,
+    });
+
+    const moved = await service.setBusinessAddress({
+      actor,
+      applicationId: application.applicationId,
+      address: {
+        ...BUSINESS_ADDRESS,
+        source: "EGOV_RESIDENTIAL",
+        addressLine1: "88 Narra Avenue",
+      },
+    });
 
     const renamed = await service.setBusinessName({
       actor,
@@ -270,6 +410,7 @@ describe("BNRS registration workflow", () => {
     });
 
     expect(renamed.state).toBe("PAYMENT_READY");
+    expect(moved.businessAddress).toEqual({ stored: true, source: "EGOV_RESIDENTIAL" });
     expect(renamed.businessName?.proposedBusinessName).toBe("Second Name I.T. Solutions");
     expect(rescoped.scope?.totalFee).toBe(530);
   });

@@ -19,6 +19,15 @@ const certificate: LguBusinessRegistrationCredentialInput = {
   issuedAt: "2026-07-28T08:30:00.000Z",
   validUntil: "2031-07-28T08:30:00.000Z",
   status: "REGISTERED",
+  businessAddress: {
+    addressLine1: "12 Acacia Street",
+    addressLine2: "Unit 4",
+    barangay: "Poblacion",
+    cityMunicipality: "Makati City",
+    province: "Metro Manila",
+    region: "National Capital Region",
+    postalCode: "1210",
+  },
 };
 
 function setup() {
@@ -51,12 +60,11 @@ function setup() {
   };
 }
 
-async function prepareApplication(context: ReturnType<typeof setup>, city = "Makati City") {
+async function prepareApplication(context: ReturnType<typeof setup>) {
   return context.service.startOrResumeApplication({
     actor: context.actor,
     applicant: context.applicant,
     certificate,
-    city,
   });
 }
 
@@ -274,6 +282,7 @@ describe("LGU hosted payments and issuance", () => {
         ownerName: "Mara Reyes",
         tin: "123456789000",
         businessActivity: "Dental Clinic",
+        businessAddress: certificate.businessAddress,
         territorialScope: "CITY_MUNICIPALITY",
         issuedAt: NOW.toISOString(),
         validUntil: "2026-12-31T23:59:59.999Z",
@@ -289,6 +298,7 @@ describe("LGU hosted payments and issuance", () => {
         ownerName: "Mara Reyes",
         tin: "123456789000",
         businessActivity: "Dental Clinic",
+        businessAddress: certificate.businessAddress,
         issuedAt: NOW.toISOString(),
         validUntil: "2026-12-31T23:59:59.999Z",
         status: "APPROVED",
