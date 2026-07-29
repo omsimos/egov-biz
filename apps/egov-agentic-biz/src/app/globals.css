@@ -46,6 +46,8 @@
   --color-success-soft: var(--success-soft);
   --color-success-border: var(--success-border);
   --color-success-ink: var(--success-ink);
+  --color-orange-soft: var(--orange-soft);
+  --color-orange-ink: var(--orange-ink);
   --color-warning-soft: var(--warning-soft);
   --color-warning-border: var(--warning-border);
   --color-warning-ink: var(--warning-ink);
@@ -448,27 +450,28 @@ body {
 .bottom-nav .unbuilt {
   color: var(--gray-500);
 }
-.bottom-nav .id-button {
-  justify-content: flex-start;
-  color: #242b38;
-  font-weight: 600;
-}
-.id-orb {
-  width: 54px;
-  height: 54px;
-  margin-top: -27px;
+/* The nav's centre item. No `justify-content` override and no label, unlike the
+   Digital ID orb this replaces: the Landing design draws it unlabelled, so the
+   inherited centring is what the design wants and there is no text to top-align
+   against. -16px lifts it 4px clear of the bar's top border — the old -27px on
+   a flex-start orb cleared 19px and needed a 5px white ring to cut a hole in
+   the border it crossed. At 4px the orb reads as raised within the bar, so it
+   keeps only the design's blue cast shadow. */
+.qr-orb {
+  width: 52px;
+  height: 52px;
+  margin-top: -16px;
   border-radius: 50%;
   background: var(--blue);
   color: #fff;
   display: grid;
   place-items: center;
-  box-shadow:
-    0 6px 16px rgba(7, 85, 233, 0.32),
-    0 0 0 5px #fff;
+  box-shadow: 0 10px 22px -8px rgba(7, 85, 233, 0.9);
 }
-.id-orb svg {
-  width: 30px;
-  height: 30px;
+/* Not matched by `.bottom-nav > div > svg` — this one is a grandchild. */
+.qr-orb svg {
+  width: 25px;
+  height: 25px;
 }
 
 .skeleton-card {
