@@ -4,13 +4,14 @@ import type {
   BnrsRepository,
 } from "../../src/bnrs/repository.js";
 import { BnrsRepositoryConflict } from "../../src/bnrs/repository.js";
-import type { BnrsOwnerInformationInput } from "../../src/bnrs/types.js";
+import type { BnrsBusinessAddressInput, BnrsOwnerInformationInput } from "../../src/bnrs/types.js";
 
 const terminalStates = new Set(["COMPLETED", "ABANDONED"]);
 
 export class MemoryBnrsRepository implements BnrsRepository {
   readonly applications = new Map<string, BnrsApplicationRecord>();
   readonly owners = new Map<string, BnrsOwnerInformationInput>();
+  readonly businessAddresses = new Map<string, BnrsBusinessAddressInput>();
   readonly payments = new Map<string, BnrsPaymentRecord>();
 
   async startOrResumeApplication(egovUserId: string, now: Date) {
@@ -86,6 +87,11 @@ export class MemoryBnrsRepository implements BnrsRepository {
     return owner ? structuredClone(owner) : null;
   }
 
+  async getBusinessAddress(applicationId: string) {
+    const address = this.businessAddresses.get(applicationId);
+    return address ? structuredClone(address) : null;
+  }
+
   async updateApplication(
     input: Parameters<BnrsRepository["updateApplication"]>[0],
   ): Promise<BnrsApplicationRecord | null> {
@@ -114,6 +120,25 @@ export class MemoryBnrsRepository implements BnrsRepository {
 
     this.owners.set(input.applicationId, structuredClone(input.owner));
     application.state = "BUSINESS_NAME_PENDING";
+    application.updatedAt = input.now;
+    return structuredClone(application);
+  }
+
+  async saveBusinessAddressAndAdvance(
+    input: Parameters<BnrsRepository["saveBusinessAddressAndAdvance"]>[0],
+  ): Promise<BnrsApplicationRecord | null> {
+    const application = this.applications.get(input.applicationId);
+    if (
+      !application ||
+      application.egovUserId !== input.egovUserId ||
+      !input.expectedStates.includes(
+        application.state as "BUSINESS_ADDRESS_PENDING" | "PAYMENT_READY",
+      )
+    )
+      return null;
+
+    this.businessAddresses.set(input.applicationId, structuredClone(input.address));
+    application.state = "PAYMENT_READY";
     application.updatedAt = input.now;
     return structuredClone(application);
   }
@@ -165,7 +190,8 @@ export class MemoryBnrsRepository implements BnrsRepository {
     if (
       !application ||
       application.egovUserId !== input.egovUserId ||
-      application.state !== "PAYMENT_READY"
+      application.state !== "PAYMENT_READY" ||
+      !this.businessAddresses.has(input.applicationId)
     )
       return null;
     if (await this.getCurrentPayment(input.applicationId))

@@ -9,12 +9,13 @@ TERMS_PENDING
   -> OWNER_INFORMATION_PENDING
   -> BUSINESS_NAME_PENDING
   -> SCOPE_PENDING
+  -> BUSINESS_ADDRESS_PENDING
   -> PAYMENT_READY
   -> PAYMENT_PENDING
   -> COMPLETED
 ```
 
-An unfinished application can become `ABANDONED`. A failed, expired, or voided payment returns it to `PAYMENT_READY`. Name and scope can be edited at `PAYMENT_READY`, but are locked once payment begins.
+An unfinished application can become `ABANDONED`. A failed, expired, or voided payment returns it to `PAYMENT_READY`. Name, scope, and business address can be edited at `PAYMENT_READY`, but are locked once payment begins. Payment cannot start while the required business address is missing.
 
 Only one active application is allowed for each eGov user. Completed and abandoned applications remain in history. Business names are considered reserved only by database records in `PAYMENT_PENDING` or `COMPLETED`; there are no built-in reserved-name fixtures.
 
@@ -30,6 +31,17 @@ Do not accept `egovUserId` from an agent or browser payload. DX itself stays sta
 
 `mapEgovSsoProfileToBnrsOwnerInformation` maps only citizenship, first/middle/last name, suffix, birth date, and gender. Missing values are silently omitted. Status responses report only whether owner information is stored and do not return owner PII.
 
+## Business address
+
+The business address is a separate required step after territorial scope. The agent, app, or tool-call layer chooses one of two inputs:
+
+- Reuse the complete residential address returned by `mapEgovSsoProfileToBnrsResidentialAddress`, which carries source `EGOV_RESIDENTIAL`.
+- Collect a complete, different address and submit it with source `USER_PROVIDED`.
+
+The SSO mapper returns `null` unless address line 1, barangay, city/municipality, province, region, and a four-digit postal code are all available. `setBusinessAddress` applies the same completeness checks to either source. DX only validates and stores the address it receives; deciding whether to reuse the residential address or collect a different business address stays outside this package.
+
+Business addresses are stored separately as PII. Status responses expose only `{ stored, source }`, never the address fields.
+
 ## Setup and usage
 
 ```ts
@@ -39,6 +51,7 @@ import {
   createBnrsService,
   createDrizzleBnrsRepository,
   createEgovPayBnrsPaymentProvider,
+  mapEgovSsoProfileToBnrsResidentialAddress,
 } from "@repo/dx/bnrs";
 
 const database = createDatabase(process.env.DATABASE_URL!);
@@ -69,6 +82,15 @@ await bnrs.setBusinessScope({
   actor,
   applicationId: application.applicationId,
   scopeId: "NATIONAL",
+});
+const residentialAddress = mapEgovSsoProfileToBnrsResidentialAddress(session.rawProfile);
+
+// The caller decides whether to reuse this or collect a USER_PROVIDED address.
+if (!residentialAddress) throw new Error("Collect a complete business address from the user.");
+await bnrs.setBusinessAddress({
+  actor,
+  applicationId: application.applicationId,
+  address: residentialAddress,
 });
 const checkout = await bnrs.createPayment({
   actor,
@@ -102,10 +124,11 @@ Fee and descriptor values are snapshotted on each application so later catalog c
 
 ## Persistence
 
-The Drizzle schema uses three tables:
+The Drizzle schema uses four tables:
 
 - `bnrs_applications` for ownership, lifecycle, business name, scope, fee snapshot, registration result, certificate number, and certificate validity
 - `bnrs_owner_information` for the one-to-one owner PII record
+- `bnrs_business_addresses` for the one-to-one required business-address PII record and its source
 - `bnrs_payments` for every hosted-payment attempt and provider reference
 
 Run the generated migration through the `@repo/db` migration command before using the module.

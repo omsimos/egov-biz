@@ -22,6 +22,20 @@
       "when": 1785315914875,
       "tag": "0002_short_starfox",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785321496955,
+      "tag": "0003_rich_blizzard",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785321588381,
+      "tag": "0004_backfill_bnrs_business_address_state",
+      "breakpoints": true
     }
   ]
 }

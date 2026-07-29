@@ -1,5 +1,10 @@
 import type { Database } from "@repo/db";
-import { bnrsApplications, bnrsOwnerInformation, bnrsPayments } from "@repo/db/schema";
+import {
+  bnrsApplications,
+  bnrsBusinessAddresses,
+  bnrsOwnerInformation,
+  bnrsPayments,
+} from "@repo/db/schema";
 import { and, desc, eq, inArray, ne, notInArray } from "drizzle-orm";
 
 import {
@@ -8,7 +13,7 @@ import {
   type BnrsPaymentRecord,
   type BnrsRepository,
 } from "./repository.js";
-import type { BnrsOwnerInformationInput } from "./types.js";
+import type { BnrsBusinessAddressInput, BnrsOwnerInformationInput } from "./types.js";
 
 function constraintName(error: unknown): string | undefined {
   if (!error || typeof error !== "object") return undefined;
@@ -34,6 +39,21 @@ function ownerRecord(row: typeof bnrsOwnerInformation.$inferSelect): BnrsOwnerIn
     ...(row.suffix === null ? {} : { suffix: row.suffix }),
     ...(row.birthDate === null ? {} : { birthDate: row.birthDate }),
     ...(row.gender === null ? {} : { gender: row.gender }),
+  };
+}
+
+function businessAddressRecord(
+  row: typeof bnrsBusinessAddresses.$inferSelect,
+): BnrsBusinessAddressInput {
+  return {
+    source: row.source,
+    addressLine1: row.addressLine1,
+    ...(row.addressLine2 === null ? {} : { addressLine2: row.addressLine2 }),
+    barangay: row.barangay,
+    cityMunicipality: row.cityMunicipality,
+    province: row.province,
+    region: row.region,
+    postalCode: row.postalCode,
   };
 }
 
@@ -146,6 +166,14 @@ export function createDrizzleBnrsRepository(database: Database): BnrsRepository 
         .limit(1);
       return owner ? ownerRecord(owner) : null;
     },
+    async getBusinessAddress(applicationId) {
+      const [address] = await database
+        .select()
+        .from(bnrsBusinessAddresses)
+        .where(eq(bnrsBusinessAddresses.applicationId, applicationId))
+        .limit(1);
+      return address ? businessAddressRecord(address) : null;
+    },
     async updateApplication(input) {
       const [updated] = await database
         .update(bnrsApplications)
@@ -186,6 +214,46 @@ export function createDrizzleBnrsRepository(database: Database): BnrsRepository 
           .onConflictDoUpdate({
             target: bnrsOwnerInformation.applicationId,
             set: { ...input.owner, updatedAt: input.now },
+          });
+        return applicationRecord(updated);
+      });
+    },
+    saveBusinessAddressAndAdvance(input) {
+      return database.transaction(async (transaction) => {
+        const [updated] = await transaction
+          .update(bnrsApplications)
+          .set({ state: "PAYMENT_READY", updatedAt: input.now })
+          .where(
+            and(
+              eq(bnrsApplications.id, input.applicationId),
+              eq(bnrsApplications.egovUserId, input.egovUserId),
+              inArray(bnrsApplications.state, [...input.expectedStates]),
+            ),
+          )
+          .returning();
+        if (!updated) return null;
+
+        const address = {
+          source: input.address.source,
+          addressLine1: input.address.addressLine1,
+          addressLine2: input.address.addressLine2 ?? null,
+          barangay: input.address.barangay,
+          cityMunicipality: input.address.cityMunicipality,
+          province: input.address.province,
+          region: input.address.region,
+          postalCode: input.address.postalCode,
+        };
+        await transaction
+          .insert(bnrsBusinessAddresses)
+          .values({
+            applicationId: input.applicationId,
+            ...address,
+            createdAt: input.now,
+            updatedAt: input.now,
+          })
+          .onConflictDoUpdate({
+            target: bnrsBusinessAddresses.applicationId,
+            set: { ...address, updatedAt: input.now },
           });
         return applicationRecord(updated);
       });
@@ -232,6 +300,13 @@ export function createDrizzleBnrsRepository(database: Database): BnrsRepository 
     async beginPayment(input) {
       try {
         return await database.transaction(async (transaction) => {
+          const [businessAddress] = await transaction
+            .select({ applicationId: bnrsBusinessAddresses.applicationId })
+            .from(bnrsBusinessAddresses)
+            .where(eq(bnrsBusinessAddresses.applicationId, input.applicationId))
+            .limit(1);
+          if (!businessAddress) return null;
+
           const [reservedApplication] = await transaction
             .update(bnrsApplications)
             .set({ state: "PAYMENT_PENDING", updatedAt: input.now })
@@ -515,5 +590,6 @@ export function createDrizzleBnrsRepository(database: Database): BnrsRepository 
 export const bnrsDatabaseTables = Object.freeze({
   applications: bnrsApplications,
   ownerInformation: bnrsOwnerInformation,
+  businessAddresses: bnrsBusinessAddresses,
   payments: bnrsPayments,
 });

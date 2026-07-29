@@ -1,0 +1,1220 @@
+{
+  "id": "556a7e4c-f261-4dae-b016-a69fa9764068",
+  "prevId": "7b60ef9c-2e93-4242-b34d-da30c56456fa",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.bnrs_applications": {
+      "name": "bnrs_applications",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "egov_user_id": {
+          "name": "egov_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "bnrs_application_state",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'TERMS_PENDING'"
+        },
+        "terms_accepted_at": {
+          "name": "terms_accepted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dominant_name": {
+          "name": "dominant_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "descriptor_id": {
+          "name": "descriptor_id",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "descriptor_label": {
+          "name": "descriptor_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "proposed_business_name": {
+          "name": "proposed_business_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "normalized_business_name": {
+          "name": "normalized_business_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scope": {
+          "name": "scope",
+          "type": "bnrs_business_scope",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "registration_fee": {
+          "name": "registration_fee",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "documentary_stamp_tax": {
+          "name": "documentary_stamp_tax",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_fee": {
+          "name": "total_fee",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "latest_payment_id": {
+          "name": "latest_payment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reference_code": {
+          "name": "reference_code",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "certificate_number": {
+          "name": "certificate_number",
+          "type": "varchar(40)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "issued_at": {
+          "name": "issued_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "valid_until": {
+          "name": "valid_until",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "abandoned_at": {
+          "name": "abandoned_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "bnrs_one_active_application_per_user": {
+          "name": "bnrs_one_active_application_per_user",
+          "columns": [
+            {
+              "expression": "egov_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"bnrs_applications\".\"state\" not in ('COMPLETED', 'ABANDONED')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bnrs_reserved_business_name_unique": {
+          "name": "bnrs_reserved_business_name_unique",
+          "columns": [
+            {
+              "expression": "normalized_business_name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"bnrs_applications\".\"state\" in ('PAYMENT_PENDING', 'COMPLETED')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bnrs_reference_code_unique": {
+          "name": "bnrs_reference_code_unique",
+          "columns": [
+            {
+              "expression": "reference_code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"bnrs_applications\".\"reference_code\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bnrs_certificate_number_unique": {
+          "name": "bnrs_certificate_number_unique",
+          "columns": [
+            {
+              "expression": "certificate_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"bnrs_applications\".\"certificate_number\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bnrs_applications_user_history": {
+          "name": "bnrs_applications_user_history",
+          "columns": [
+            {
+              "expression": "egov_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "bnrs_certificate_issuance_complete": {
+          "name": "bnrs_certificate_issuance_complete",
+          "value": "(\"bnrs_applications\".\"certificate_number\" is null and \"bnrs_applications\".\"valid_until\" is null) or (\"bnrs_applications\".\"certificate_number\" is not null and \"bnrs_applications\".\"valid_until\" is not null and \"bnrs_applications\".\"state\" = 'COMPLETED')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.bnrs_business_addresses": {
+      "name": "bnrs_business_addresses",
+      "schema": "",
+      "columns": {
+        "application_id": {
+          "name": "application_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "bnrs_business_address_source",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "address_line_1": {
+          "name": "address_line_1",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "address_line_2": {
+          "name": "address_line_2",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "barangay": {
+          "name": "barangay",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "city_municipality": {
+          "name": "city_municipality",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "province": {
+          "name": "province",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "region": {
+          "name": "region",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "postal_code": {
+          "name": "postal_code",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "bnrs_business_addresses_application_id_bnrs_applications_id_fk": {
+          "name": "bnrs_business_addresses_application_id_bnrs_applications_id_fk",
+          "tableFrom": "bnrs_business_addresses",
+          "tableTo": "bnrs_applications",
+          "columnsFrom": [
+            "application_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.bnrs_owner_information": {
+      "name": "bnrs_owner_information",
+      "schema": "",
+      "columns": {
+        "application_id": {
+          "name": "application_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "citizenship": {
+          "name": "citizenship",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_name": {
+          "name": "first_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "middle_name": {
+          "name": "middle_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_name": {
+          "name": "last_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "suffix": {
+          "name": "suffix",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "birth_date": {
+          "name": "birth_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gender": {
+          "name": "gender",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "bnrs_owner_information_application_id_bnrs_applications_id_fk": {
+          "name": "bnrs_owner_information_application_id_bnrs_applications_id_fk",
+          "tableFrom": "bnrs_owner_information",
+          "tableTo": "bnrs_applications",
+          "columnsFrom": [
+            "application_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.bnrs_payments": {
+      "name": "bnrs_payments",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "application_id": {
+          "name": "application_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "varchar(40)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'EGOVPAY'"
+        },
+        "status": {
+          "name": "status",
+          "type": "bnrs_payment_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'CREATING'"
+        },
+        "transaction_id": {
+          "name": "transaction_id",
+          "type": "varchar(150)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "transaction_uuid": {
+          "name": "transaction_uuid",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "checkout_url": {
+          "name": "checkout_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "amount": {
+          "name": "amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "currency": {
+          "name": "currency",
+          "type": "varchar(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'PHP'"
+        },
+        "provider_status": {
+          "name": "provider_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "paid_at": {
+          "name": "paid_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "bnrs_one_pending_payment_per_application": {
+          "name": "bnrs_one_pending_payment_per_application",
+          "columns": [
+            {
+              "expression": "application_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"bnrs_payments\".\"status\" in ('CREATING', 'PENDING')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bnrs_payment_transaction_uuid_unique": {
+          "name": "bnrs_payment_transaction_uuid_unique",
+          "columns": [
+            {
+              "expression": "transaction_uuid",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bnrs_payment_transaction_id_unique": {
+          "name": "bnrs_payment_transaction_id_unique",
+          "columns": [
+            {
+              "expression": "transaction_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bnrs_payments_application_history": {
+          "name": "bnrs_payments_application_history",
+          "columns": [
+            {
+              "expression": "application_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "bnrs_payments_application_id_bnrs_applications_id_fk": {
+          "name": "bnrs_payments_application_id_bnrs_applications_id_fk",
+          "tableFrom": "bnrs_payments",
+          "tableTo": "bnrs_applications",
+          "columnsFrom": [
+            "application_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.lgu_applicant_information": {
+      "name": "lgu_applicant_information",
+      "schema": "",
+      "columns": {
+        "application_id": {
+          "name": "application_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "owner_name": {
+          "name": "owner_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "normalized_owner_name": {
+          "name": "normalized_owner_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tin": {
+          "name": "tin",
+          "type": "varchar(14)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "lgu_applicant_information_application_id_lgu_applications_id_fk": {
+          "name": "lgu_applicant_information_application_id_lgu_applications_id_fk",
+          "tableFrom": "lgu_applicant_information",
+          "tableTo": "lgu_applications",
+          "columnsFrom": [
+            "application_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.lgu_applications": {
+      "name": "lgu_applications",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "egov_user_id": {
+          "name": "egov_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "lgu_application_state",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'PAYMENT_READY'"
+        },
+        "city": {
+          "name": "city",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "normalized_city": {
+          "name": "normalized_city",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "certificate_number": {
+          "name": "certificate_number",
+          "type": "varchar(40)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "certificate_issuing_agency": {
+          "name": "certificate_issuing_agency",
+          "type": "varchar(40)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "certificate_status": {
+          "name": "certificate_status",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "certificate_business_name": {
+          "name": "certificate_business_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "certificate_owner_name": {
+          "name": "certificate_owner_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "certificate_descriptor": {
+          "name": "certificate_descriptor",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "certificate_territorial_scope": {
+          "name": "certificate_territorial_scope",
+          "type": "lgu_territorial_scope",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "certificate_issued_at": {
+          "name": "certificate_issued_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "certificate_valid_until": {
+          "name": "certificate_valid_until",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "latest_payment_id": {
+          "name": "latest_payment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "permit_number": {
+          "name": "permit_number",
+          "type": "varchar(40)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "barangay_clearance_number": {
+          "name": "barangay_clearance_number",
+          "type": "varchar(40)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "documents_issued_at": {
+          "name": "documents_issued_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "documents_valid_until": {
+          "name": "documents_valid_until",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "abandoned_at": {
+          "name": "abandoned_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "lgu_one_application_per_business_city": {
+          "name": "lgu_one_application_per_business_city",
+          "columns": [
+            {
+              "expression": "egov_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "certificate_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "normalized_city",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"lgu_applications\".\"state\" <> 'ABANDONED'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "lgu_permit_number_unique": {
+          "name": "lgu_permit_number_unique",
+          "columns": [
+            {
+              "expression": "permit_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"lgu_applications\".\"permit_number\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "lgu_barangay_clearance_number_unique": {
+          "name": "lgu_barangay_clearance_number_unique",
+          "columns": [
+            {
+              "expression": "barangay_clearance_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"lgu_applications\".\"barangay_clearance_number\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "lgu_applications_user_history": {
+          "name": "lgu_applications_user_history",
+          "columns": [
+            {
+              "expression": "egov_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "lgu_certificate_dates_valid": {
+          "name": "lgu_certificate_dates_valid",
+          "value": "\"lgu_applications\".\"certificate_issued_at\" <= \"lgu_applications\".\"certificate_valid_until\""
+        },
+        "lgu_certificate_credential_supported": {
+          "name": "lgu_certificate_credential_supported",
+          "value": "\"lgu_applications\".\"certificate_issuing_agency\" = 'DTI-BNRS' and \"lgu_applications\".\"certificate_status\" = 'REGISTERED'"
+        },
+        "lgu_issued_documents_complete": {
+          "name": "lgu_issued_documents_complete",
+          "value": "(\"lgu_applications\".\"state\" = 'COMPLETED' and \"lgu_applications\".\"permit_number\" is not null and \"lgu_applications\".\"barangay_clearance_number\" is not null and \"lgu_applications\".\"documents_issued_at\" is not null and \"lgu_applications\".\"documents_valid_until\" is not null) or (\"lgu_applications\".\"state\" <> 'COMPLETED' and \"lgu_applications\".\"permit_number\" is null and \"lgu_applications\".\"barangay_clearance_number\" is null and \"lgu_applications\".\"documents_issued_at\" is null and \"lgu_applications\".\"documents_valid_until\" is null)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.lgu_payments": {
+      "name": "lgu_payments",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "application_id": {
+          "name": "application_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "varchar(40)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'EGOVPAY'"
+        },
+        "status": {
+          "name": "status",
+          "type": "lgu_payment_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'CREATING'"
+        },
+        "transaction_id": {
+          "name": "transaction_id",
+          "type": "varchar(150)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "transaction_uuid": {
+          "name": "transaction_uuid",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "checkout_url": {
+          "name": "checkout_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "provider_callback_url": {
+          "name": "provider_callback_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider_redirect_url": {
+          "name": "provider_redirect_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "currency": {
+          "name": "currency",
+          "type": "varchar(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'PHP'"
+        },
+        "provider_status": {
+          "name": "provider_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "paid_at": {
+          "name": "paid_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "lgu_one_pending_payment_per_application": {
+          "name": "lgu_one_pending_payment_per_application",
+          "columns": [
+            {
+              "expression": "application_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"lgu_payments\".\"status\" in ('CREATING', 'PENDING')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "lgu_payment_transaction_uuid_unique": {
+          "name": "lgu_payment_transaction_uuid_unique",
+          "columns": [
+            {
+              "expression": "transaction_uuid",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "lgu_payment_transaction_id_unique": {
+          "name": "lgu_payment_transaction_id_unique",
+          "columns": [
+            {
+              "expression": "transaction_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "lgu_payments_application_history": {
+          "name": "lgu_payments_application_history",
+          "columns": [
+            {
+              "expression": "application_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "lgu_payments_application_id_lgu_applications_id_fk": {
+          "name": "lgu_payments_application_id_lgu_applications_id_fk",
+          "tableFrom": "lgu_payments",
+          "tableTo": "lgu_applications",
+          "columnsFrom": [
+            "application_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "lgu_payment_assessment_fixed": {
+          "name": "lgu_payment_assessment_fixed",
+          "value": "\"lgu_payments\".\"amount\" = 2500 and \"lgu_payments\".\"currency\" = 'PHP'"
+        },
+        "lgu_payment_provider_state_complete": {
+          "name": "lgu_payment_provider_state_complete",
+          "value": "(\"lgu_payments\".\"status\" = 'CREATING' and \"lgu_payments\".\"transaction_uuid\" is null and \"lgu_payments\".\"paid_at\" is null) or (\"lgu_payments\".\"status\" <> 'CREATING' and \"lgu_payments\".\"transaction_uuid\" is not null and \"lgu_payments\".\"provider_status\" is not null and ((\"lgu_payments\".\"status\" = 'PAID' and \"lgu_payments\".\"paid_at\" is not null) or (\"lgu_payments\".\"status\" <> 'PAID' and \"lgu_payments\".\"paid_at\" is null)))"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.bnrs_application_state": {
+      "name": "bnrs_application_state",
+      "schema": "public",
+      "values": [
+        "TERMS_PENDING",
+        "OWNER_INFORMATION_PENDING",
+        "BUSINESS_NAME_PENDING",
+        "SCOPE_PENDING",
+        "BUSINESS_ADDRESS_PENDING",
+        "PAYMENT_READY",
+        "PAYMENT_PENDING",
+        "COMPLETED",
+        "ABANDONED"
+      ]
+    },
+    "public.bnrs_business_address_source": {
+      "name": "bnrs_business_address_source",
+      "schema": "public",
+      "values": [
+        "EGOV_RESIDENTIAL",
+        "USER_PROVIDED"
+      ]
+    },
+    "public.bnrs_business_scope": {
+      "name": "bnrs_business_scope",
+      "schema": "public",
+      "values": [
+        "CITY_MUNICIPALITY",
+        "REGIONAL",
+        "NATIONAL"
+      ]
+    },
+    "public.bnrs_payment_status": {
+      "name": "bnrs_payment_status",
+      "schema": "public",
+      "values": [
+        "CREATING",
+        "PENDING",
+        "PAID",
+        "FAILED",
+        "EXPIRED",
+        "VOIDED"
+      ]
+    },
+    "public.lgu_application_state": {
+      "name": "lgu_application_state",
+      "schema": "public",
+      "values": [
+        "PAYMENT_READY",
+        "PAYMENT_PENDING",
+        "COMPLETED",
+        "ABANDONED"
+      ]
+    },
+    "public.lgu_payment_status": {
+      "name": "lgu_payment_status",
+      "schema": "public",
+      "values": [
+        "CREATING",
+        "PENDING",
+        "PAID",
+        "FAILED",
+        "EXPIRED",
+        "VOIDED"
+      ]
+    },
+    "public.lgu_territorial_scope": {
+      "name": "lgu_territorial_scope",
+      "schema": "public",
+      "values": [
+        "CITY_MUNICIPALITY",
+        "REGIONAL",
+        "NATIONAL"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

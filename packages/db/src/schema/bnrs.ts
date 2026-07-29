@@ -23,6 +23,7 @@ export const bnrsApplicationStateEnum = pgEnum("bnrs_application_state", [
   "OWNER_INFORMATION_PENDING",
   "BUSINESS_NAME_PENDING",
   "SCOPE_PENDING",
+  "BUSINESS_ADDRESS_PENDING",
   "PAYMENT_READY",
   "PAYMENT_PENDING",
   "COMPLETED",
@@ -33,6 +34,11 @@ export const bnrsBusinessScopeEnum = pgEnum("bnrs_business_scope", [
   "CITY_MUNICIPALITY",
   "REGIONAL",
   "NATIONAL",
+]);
+
+export const bnrsBusinessAddressSourceEnum = pgEnum("bnrs_business_address_source", [
+  "EGOV_RESIDENTIAL",
+  "USER_PROVIDED",
 ]);
 
 export const bnrsPaymentStatusEnum = pgEnum("bnrs_payment_status", [
@@ -103,6 +109,21 @@ export const bnrsOwnerInformation = pgTable("bnrs_owner_information", {
   ...timestamps,
 });
 
+export const bnrsBusinessAddresses = pgTable("bnrs_business_addresses", {
+  applicationId: uuid("application_id")
+    .primaryKey()
+    .references(() => bnrsApplications.id, { onDelete: "cascade" }),
+  source: bnrsBusinessAddressSourceEnum("source").notNull(),
+  addressLine1: text("address_line_1").notNull(),
+  addressLine2: text("address_line_2"),
+  barangay: text("barangay").notNull(),
+  cityMunicipality: text("city_municipality").notNull(),
+  province: text("province").notNull(),
+  region: text("region").notNull(),
+  postalCode: varchar("postal_code", { length: 10 }).notNull(),
+  ...timestamps,
+});
+
 export const bnrsPayments = pgTable(
   "bnrs_payments",
   {
@@ -137,12 +158,23 @@ export const bnrsApplicationsRelations = relations(bnrsApplications, ({ many, on
     fields: [bnrsApplications.id],
     references: [bnrsOwnerInformation.applicationId],
   }),
+  businessAddress: one(bnrsBusinessAddresses, {
+    fields: [bnrsApplications.id],
+    references: [bnrsBusinessAddresses.applicationId],
+  }),
   payments: many(bnrsPayments),
 }));
 
 export const bnrsOwnerInformationRelations = relations(bnrsOwnerInformation, ({ one }) => ({
   application: one(bnrsApplications, {
     fields: [bnrsOwnerInformation.applicationId],
+    references: [bnrsApplications.id],
+  }),
+}));
+
+export const bnrsBusinessAddressesRelations = relations(bnrsBusinessAddresses, ({ one }) => ({
+  application: one(bnrsApplications, {
+    fields: [bnrsBusinessAddresses.applicationId],
     references: [bnrsApplications.id],
   }),
 }));
@@ -158,5 +190,7 @@ export type BnrsApplicationRow = typeof bnrsApplications.$inferSelect;
 export type NewBnrsApplicationRow = typeof bnrsApplications.$inferInsert;
 export type BnrsOwnerInformationRow = typeof bnrsOwnerInformation.$inferSelect;
 export type NewBnrsOwnerInformationRow = typeof bnrsOwnerInformation.$inferInsert;
+export type BnrsBusinessAddressRow = typeof bnrsBusinessAddresses.$inferSelect;
+export type NewBnrsBusinessAddressRow = typeof bnrsBusinessAddresses.$inferInsert;
 export type BnrsPaymentRow = typeof bnrsPayments.$inferSelect;
 export type NewBnrsPaymentRow = typeof bnrsPayments.$inferInsert;

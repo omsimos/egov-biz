@@ -56,6 +56,19 @@ async function prepareApplication(context: ReturnType<typeof setup>) {
     applicationId: application.applicationId,
     scopeId: "NATIONAL",
   });
+  await context.service.setBusinessAddress({
+    actor: context.actor,
+    applicationId: application.applicationId,
+    address: {
+      source: "EGOV_RESIDENTIAL",
+      addressLine1: "12 Acacia Street",
+      barangay: "Poblacion",
+      cityMunicipality: "Makati City",
+      province: "Metro Manila",
+      region: "National Capital Region",
+      postalCode: "1210",
+    },
+  });
   return application.applicationId;
 }
 

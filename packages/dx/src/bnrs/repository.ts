@@ -1,5 +1,6 @@
 import type {
   BnrsApplicationState,
+  BnrsBusinessAddressInput,
   BnrsBusinessScopeId,
   BnrsOwnerInformationInput,
   BnrsPaymentStatus,
@@ -94,6 +95,7 @@ export interface BnrsRepository {
   listCompletedApplications(egovUserId: string): Promise<BnrsApplicationRecord[]>;
   hasOwnerInformation(applicationId: string): Promise<boolean>;
   getOwnerInformation(applicationId: string): Promise<BnrsOwnerInformationInput | null>;
+  getBusinessAddress(applicationId: string): Promise<BnrsBusinessAddressInput | null>;
   updateApplication(input: {
     applicationId: string;
     egovUserId: string;
@@ -106,6 +108,13 @@ export interface BnrsRepository {
     egovUserId: string;
     expectedState: "OWNER_INFORMATION_PENDING";
     owner: BnrsOwnerInformationInput;
+    now: Date;
+  }): Promise<BnrsApplicationRecord | null>;
+  saveBusinessAddressAndAdvance(input: {
+    applicationId: string;
+    egovUserId: string;
+    expectedStates: readonly ("BUSINESS_ADDRESS_PENDING" | "PAYMENT_READY")[];
+    address: BnrsBusinessAddressInput;
     now: Date;
   }): Promise<BnrsApplicationRecord | null>;
   isBusinessNameReserved(input: {

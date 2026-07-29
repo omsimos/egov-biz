@@ -16,6 +16,7 @@ import type {
   BnrsActor,
   BnrsApplicationState,
   BnrsApplicationStatus,
+  BnrsBusinessAddressInput,
   BnrsBusinessScope,
   BnrsBusinessScopeId,
   BnrsCertificate,
@@ -42,6 +43,7 @@ const nextSteps: Record<Exclude<BnrsApplicationState, "COMPLETED" | "ABANDONED">
   OWNER_INFORMATION_PENDING: "OWNER_INFORMATION",
   BUSINESS_NAME_PENDING: "BUSINESS_NAME",
   SCOPE_PENDING: "BUSINESS_SCOPE",
+  BUSINESS_ADDRESS_PENDING: "BUSINESS_ADDRESS",
   PAYMENT_READY: "PAYMENT",
   PAYMENT_PENDING: "PAYMENT",
 };
@@ -49,6 +51,7 @@ const nextSteps: Record<Exclude<BnrsApplicationState, "COMPLETED" | "ABANDONED">
 const advancedFromOwner = new Set<BnrsApplicationState>([
   "BUSINESS_NAME_PENDING",
   "SCOPE_PENDING",
+  "BUSINESS_ADDRESS_PENDING",
   "PAYMENT_READY",
   "PAYMENT_PENDING",
   "COMPLETED",
@@ -106,6 +109,65 @@ function normalizeOwner(owner: BnrsOwnerInformationInput): BnrsOwnerInformationI
   };
 }
 
+function normalizedAddressString(value: string, field: string, maximum: number): string {
+  const normalized = value.normalize("NFKC").trim().replace(/\s+/g, " ");
+  if (!normalized || normalized.length > maximum)
+    throw new BnrsError(
+      "INVALID_BUSINESS_ADDRESS",
+      `${field} must be between 1 and ${maximum} characters.`,
+    );
+  return normalized;
+}
+
+function normalizeBusinessAddress(address: BnrsBusinessAddressInput): BnrsBusinessAddressInput {
+  if (address.source !== "EGOV_RESIDENTIAL" && address.source !== "USER_PROVIDED")
+    throw new BnrsError("INVALID_BUSINESS_ADDRESS", "Select a supported business-address source.");
+  const addressLine1 = normalizedAddressString(address.addressLine1, "Address line 1", 300);
+  const addressLine2 = address.addressLine2
+    ? normalizedAddressString(address.addressLine2, "Address line 2", 200)
+    : undefined;
+  const barangay = normalizedAddressString(address.barangay, "Barangay", 120);
+  const cityMunicipality = normalizedAddressString(
+    address.cityMunicipality,
+    "City/municipality",
+    120,
+  );
+  const province = normalizedAddressString(address.province, "Province", 120);
+  const region = normalizedAddressString(address.region, "Region", 120);
+  const postalCode = normalizedAddressString(address.postalCode, "Postal code", 10);
+  if (!/^\d{4}$/.test(postalCode))
+    throw new BnrsError(
+      "INVALID_BUSINESS_ADDRESS",
+      "Postal code must contain exactly four digits.",
+    );
+  return {
+    source: address.source,
+    addressLine1,
+    ...(addressLine2 === undefined ? {} : { addressLine2 }),
+    barangay,
+    cityMunicipality,
+    province,
+    region,
+    postalCode,
+  };
+}
+
+function sameBusinessAddress(
+  left: BnrsBusinessAddressInput,
+  right: BnrsBusinessAddressInput,
+): boolean {
+  return (
+    left.source === right.source &&
+    left.addressLine1 === right.addressLine1 &&
+    left.addressLine2 === right.addressLine2 &&
+    left.barangay === right.barangay &&
+    left.cityMunicipality === right.cityMunicipality &&
+    left.province === right.province &&
+    left.region === right.region &&
+    left.postalCode === right.postalCode
+  );
+}
+
 function descriptorDisplayLabel(label: string): string {
   return label
     .split(" ")
@@ -126,12 +188,14 @@ export function normalizeBnrsBusinessName(value: string): string {
 function projectCompletedSteps(
   application: BnrsApplicationRecord,
   ownerStored: boolean,
+  businessAddressStored: boolean,
 ): BnrsCompletedStep[] {
   const steps: BnrsCompletedStep[] = [];
   if (application.termsAcceptedAt) steps.push("TERMS_AND_CONDITIONS");
   if (ownerStored) steps.push("OWNER_INFORMATION");
   if (application.proposedBusinessName) steps.push("BUSINESS_NAME");
   if (application.scope) steps.push("BUSINESS_SCOPE");
+  if (businessAddressStored) steps.push("BUSINESS_ADDRESS");
   if (application.state === "COMPLETED") steps.push("PAYMENT");
   return steps;
 }
@@ -158,14 +222,19 @@ function scopeFromApplication(application: BnrsApplicationRecord): BnrsBusinessS
 function projectStatus(
   application: BnrsApplicationRecord,
   ownerStored: boolean,
+  businessAddress: BnrsBusinessAddressInput | null,
   payment: BnrsPaymentRecord | null,
 ): BnrsApplicationStatus {
   const terminal = application.state === "COMPLETED" || application.state === "ABANDONED";
   return {
     applicationId: application.id,
     state: application.state,
-    completedSteps: projectCompletedSteps(application, ownerStored),
-    nextStep: terminal ? null : nextSteps[application.state as keyof typeof nextSteps],
+    completedSteps: projectCompletedSteps(application, ownerStored, businessAddress !== null),
+    nextStep: terminal
+      ? null
+      : application.state === "PAYMENT_READY" && businessAddress === null
+        ? "BUSINESS_ADDRESS"
+        : nextSteps[application.state as keyof typeof nextSteps],
     termsAcceptedAt: application.termsAcceptedAt?.toISOString() ?? null,
     ownerInformation: { stored: ownerStored },
     businessName:
@@ -181,6 +250,10 @@ function projectStatus(
           }
         : null,
     scope: scopeFromApplication(application),
+    businessAddress: {
+      stored: businessAddress !== null,
+      source: businessAddress?.source ?? null,
+    },
     payment: payment
       ? {
           status: payment.status,
@@ -257,11 +330,12 @@ export function createBnrsService(options: BnrsServiceOptions) {
   }
 
   async function statusFor(application: BnrsApplicationRecord) {
-    const [ownerStored, payment] = await Promise.all([
+    const [ownerStored, businessAddress, payment] = await Promise.all([
       options.repository.hasOwnerInformation(application.id),
+      options.repository.getBusinessAddress(application.id),
       options.repository.getLatestPayment(application.id),
     ]);
-    return projectStatus(application, ownerStored, payment);
+    return projectStatus(application, ownerStored, businessAddress, payment);
   }
 
   function paymentProvider(): BnrsPaymentProvider {
@@ -606,6 +680,7 @@ export function createBnrsService(options: BnrsServiceOptions) {
       if (
         application.state !== "BUSINESS_NAME_PENDING" &&
         application.state !== "SCOPE_PENDING" &&
+        application.state !== "BUSINESS_ADDRESS_PENDING" &&
         application.state !== "PAYMENT_READY"
       )
         return invalidState(application.id);
@@ -613,7 +688,12 @@ export function createBnrsService(options: BnrsServiceOptions) {
       const updated = await options.repository.updateApplication({
         applicationId: application.id,
         egovUserId,
-        expectedStates: ["BUSINESS_NAME_PENDING", "SCOPE_PENDING", "PAYMENT_READY"],
+        expectedStates: [
+          "BUSINESS_NAME_PENDING",
+          "SCOPE_PENDING",
+          "BUSINESS_ADDRESS_PENDING",
+          "PAYMENT_READY",
+        ],
         patch: {
           dominantName,
           descriptorId: descriptor.id,
@@ -642,15 +722,20 @@ export function createBnrsService(options: BnrsServiceOptions) {
         if (application.scope === scope.id) return statusFor(application);
         return invalidState(application.id);
       }
-      if (application.state !== "SCOPE_PENDING" && application.state !== "PAYMENT_READY")
+      if (
+        application.state !== "SCOPE_PENDING" &&
+        application.state !== "BUSINESS_ADDRESS_PENDING" &&
+        application.state !== "PAYMENT_READY"
+      )
         return invalidState(application.id);
 
       const updated = await options.repository.updateApplication({
         applicationId: application.id,
         egovUserId,
-        expectedStates: ["SCOPE_PENDING", "PAYMENT_READY"],
+        expectedStates: ["SCOPE_PENDING", "BUSINESS_ADDRESS_PENDING", "PAYMENT_READY"],
         patch: {
-          state: "PAYMENT_READY",
+          state:
+            application.state === "SCOPE_PENDING" ? "BUSINESS_ADDRESS_PENDING" : application.state,
           scope: scope.id,
           registrationFee: scope.registrationFee,
           documentaryStampTax: scope.documentaryStampTax,
@@ -660,16 +745,48 @@ export function createBnrsService(options: BnrsServiceOptions) {
       });
       return updated ? statusFor(updated) : invalidState(application.id);
     },
+    async setBusinessAddress(input: {
+      actor: BnrsActor;
+      applicationId: string;
+      address: BnrsBusinessAddressInput;
+    }) {
+      const { application, egovUserId } = await loadOwnedApplication(
+        input.actor,
+        input.applicationId,
+      );
+      const address = normalizeBusinessAddress(input.address);
+      if (application.state === "PAYMENT_PENDING" || application.state === "COMPLETED") {
+        const existing = await options.repository.getBusinessAddress(application.id);
+        if (existing && sameBusinessAddress(existing, address)) return statusFor(application);
+        return invalidState(application.id);
+      }
+      if (application.state !== "BUSINESS_ADDRESS_PENDING" && application.state !== "PAYMENT_READY")
+        return invalidState(application.id);
+
+      const updated = await options.repository.saveBusinessAddressAndAdvance({
+        applicationId: application.id,
+        egovUserId,
+        expectedStates: ["BUSINESS_ADDRESS_PENDING", "PAYMENT_READY"],
+        address,
+        now: now(),
+      });
+      return updated ? statusFor(updated) : invalidState(application.id);
+    },
     async getPaymentQuote(input: { actor: BnrsActor; applicationId: string }) {
       const { application } = await loadOwnedApplication(input.actor, input.applicationId);
       const quote = scopeFromApplication(application);
+      const businessAddress = await options.repository.getBusinessAddress(application.id);
       if (
         !quote ||
+        !businessAddress ||
         (application.state !== "PAYMENT_READY" &&
           application.state !== "PAYMENT_PENDING" &&
           application.state !== "COMPLETED")
       )
-        throw new BnrsError("PAYMENT_NOT_READY", "Select a business scope before payment.");
+        throw new BnrsError(
+          "PAYMENT_NOT_READY",
+          "Complete the business scope and business address before payment.",
+        );
       return quote;
     },
     async createPayment(input: {
@@ -694,8 +811,17 @@ export function createBnrsService(options: BnrsServiceOptions) {
         throw new BnrsError("PAYMENT_NOT_READY", "The application is not ready for payment.");
       }
       const scope = scopeFromApplication(application);
-      if (!scope || !application.normalizedBusinessName || !application.proposedBusinessName)
-        throw new BnrsError("PAYMENT_NOT_READY", "Complete the business name and scope first.");
+      const businessAddress = await options.repository.getBusinessAddress(application.id);
+      if (
+        !scope ||
+        !businessAddress ||
+        !application.normalizedBusinessName ||
+        !application.proposedBusinessName
+      )
+        throw new BnrsError(
+          "PAYMENT_NOT_READY",
+          "Complete the business name, scope, and business address first.",
+        );
 
       if (!started) {
         try {
