@@ -6,6 +6,10 @@
   "scripts": {
     "check-types": "tsc --noEmit",
     "e2e": "node --env-file-if-exists=../../.env --env-file-if-exists=.env --import tsx src/whole-business-flow.e2e.ts",
+    "e2e:food": "node --env-file-if-exists=../../.env --env-file-if-exists=.env --import tsx src/whole-business-flow.e2e.ts",
+    "e2e:online-retail": "node --env-file-if-exists=../../.env --env-file-if-exists=.env --import tsx src/online-retail-flow.e2e.ts",
+    "e2e:self-employed": "node --env-file-if-exists=../../.env --env-file-if-exists=.env --import tsx src/self-employed-professional-flow.e2e.ts",
+    "e2e:vehicle-rental": "node --env-file-if-exists=../../.env --env-file-if-exists=.env --import tsx src/vehicle-rental-flow.e2e.ts",
     "format": "oxfmt src package.json tsconfig.json turbo.json README.md .env.example",
     "format:check": "oxfmt --check src package.json tsconfig.json turbo.json README.md .env.example",
     "lint": "oxlint src",

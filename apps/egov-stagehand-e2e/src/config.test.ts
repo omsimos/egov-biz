@@ -37,6 +37,24 @@ describe("Stagehand whole-flow configuration", () => {
     );
   });
 
+  test("allows non-payment scenarios to use their own business-name prefix", () => {
+    const config = readFlowConfig(
+      {
+        ...baseline,
+        E2E_ALLOW_EGOVPAY: "false",
+        EGOVPAY_API_KEY: "live_example",
+      },
+      new Date("2026-07-29T12:34:56.000Z"),
+      {
+        businessNamePrefix: "Stagehand Roadster Rentals",
+        stagingPaymentCount: 0,
+      },
+    );
+
+    assert.equal(config.allowEgovPay, false);
+    assert.equal(config.businessName, "Stagehand Roadster Rentals 260729123456");
+  });
+
   test("keeps the dev-login flow on loopback", () => {
     assert.throws(
       () => readFlowConfig({ ...baseline, E2E_BASE_URL: "https://example.com" }),
