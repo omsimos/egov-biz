@@ -269,7 +269,7 @@ export function LoginScreen({
         </button>
       ) : null}
       <main
-        className="relative flex h-[calc(100%-36px)] min-h-[604px] flex-col overflow-x-hidden overflow-y-auto px-[22px] pt-[25px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:flex-none"
+        className="relative flex h-[calc(100%-var(--status-bar-h))] min-h-[604px] flex-col overflow-x-hidden overflow-y-auto px-[22px] pt-[25px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:flex-none"
         id="app-content"
       >
         <div aria-hidden="true" className="flex h-12 items-center justify-center gap-[9px]">

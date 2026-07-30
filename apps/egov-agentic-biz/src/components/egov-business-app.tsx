@@ -1044,7 +1044,7 @@ export function BusinessLanding({
         )}
       </header>
       <div
-        className="h-[calc(100%-36px-58px)] overflow-y-auto overscroll-contain px-5 pb-[112px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="h-[calc(100%-var(--status-bar-h)-58px)] overflow-y-auto overscroll-contain px-5 pb-[112px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         id="app-content"
       >
         {returning ? (
@@ -1523,7 +1523,7 @@ export function EgaphBusinessApp({
                     <div className="screen bg-canvas!">
                       <StatusBar />
                       <div
-                        className="flex h-[calc(100%-36px)] flex-col items-center justify-center px-[38px] text-center"
+                        className="flex h-[calc(100%-var(--status-bar-h))] flex-col items-center justify-center px-[38px] text-center"
                         role="status"
                       >
                         <div className="relative grid size-[62px] animate-[soft-pulse_1.8s_infinite] rotate-[-4deg] place-items-center rounded-[22px] bg-primary text-white shadow-[0_12px_28px_rgba(7,85,233,0.24)] motion-reduce:animate-none!">
