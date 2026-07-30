@@ -24,6 +24,17 @@ export const SHEET_OUT: Transition = { duration: 0.18, ease: EASE_OUT };
 export const SCRIM_IN: Transition = { duration: 0.22, ease: EASE_OUT };
 export const SCRIM_OUT: Transition = { duration: 0.16, ease: EASE_OUT };
 
+// The Dynamic Island opening under the pointer — the one hover motion owns
+// rather than CSS, because the card inside mounts with the expansion and both
+// have to run off one clock.
+export const ISLAND_IN: Transition = { duration: 0.34, ease: EASE_DRAWER };
+export const ISLAND_OUT: Transition = { duration: 0.22, ease: EASE_OUT };
+
+// The card lags the box open so the logo lands in a box with room for it, and
+// leaves first so it never smears against the shrinking edge.
+export const ISLAND_CARD_IN: Transition = { delay: 0.09, duration: 0.19, ease: EASE_OUT };
+export const ISLAND_CARD_OUT: Transition = { duration: 0.1, ease: EASE_OUT };
+
 // One value for both directions: a screen change is a swap, not an arrival, so
 // the outgoing and incoming halves have to be the same length or they overlap
 // unevenly. 220ms is the ceiling — past that, navigating the prototype starts

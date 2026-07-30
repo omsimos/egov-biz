@@ -11,6 +11,7 @@ import {
 import { motion } from "motion/react";
 import type { Ref } from "react";
 import { BrandLogo } from "@/components/brand-logo";
+import { OmsimosMark } from "@/components/omsimos-mark";
 import { LANDING } from "@/lib/motion";
 import { cn, FOCUS_RING } from "@/lib/utils";
 
@@ -20,8 +21,12 @@ const trustPoints = [
   { Icon: BuildingsIcon, label: "4 agencies, one flow", tone: "text-[var(--egov-orange)]" },
 ];
 
-// Spans, not links: this landing is one viewport with no sections to target.
-const navItems = ["How it works", "Services", "Support"];
+// Links now, not the spans they replace: both leave for a site that exists,
+// rather than targeting a section this one-viewport landing hasn't got.
+const navItems = [
+  { href: "https://egov-sdk.omsimos.com/", label: "egov.js" },
+  { href: "https://omsimos.com", label: "Support" },
+];
 
 const HEADER_BUTTON = "font-extrabold text-base transition-colors duration-150 disabled:opacity-60";
 
@@ -32,12 +37,50 @@ export function LandingHeader({ onStart }: { onStart: () => void }) {
     // Above .landing-blobs (z-0, positioned) but below .landing-main (z-2), so
     // nothing here can paint over the phone at narrow widths.
     <header className="relative z-1 hidden flex-none items-center justify-between gap-8 px-[clamp(20px,4vw,56px)] py-[22px] min-[760px]:flex">
-      <BrandLogo height={30} priority />
-      <nav aria-label="About eGOVbusiness" className="flex items-center gap-[34px]">
-        {navItems.map((item) => (
-          <span className="text-base font-bold text-gray-800" key={item}>
-            {item}
+      {/* The attribution sits out below 900px on fit, not taste: this header is
+          one row, and it is the piece that pushes "Get started" past the edge. */}
+      <div className="flex items-center gap-3">
+        <BrandLogo height={28} priority />
+        <span className="hidden items-center border-l-[1.5px] border-gray-200 pl-3 min-[900px]:flex">
+          {/* Box-centred, this reads high: the ink centroid of "eGOVbusiness"
+              sits ~3px below its box centre, since "business" is all x-height.
+              The hairline stays centred on the row; only the type moves. */}
+          <span className="flex translate-y-[3px] items-center gap-[7px]">
+            <span className="text-[13px] font-bold text-gray-500">by</span>
+            <a
+              aria-label="Omsimos (opens in a new tab)"
+              className={cn(
+                "flex items-center gap-[6px] rounded-md text-[15px] font-extrabold -tracking-[.2px] text-gray-900",
+                "transition-colors duration-150 hover:text-primary",
+                FOCUS_RING,
+              )}
+              data-cuelume-toggle="page"
+              href="https://omsimos.com"
+              rel="noreferrer"
+              target="_blank"
+            >
+              Omsimos
+              <OmsimosMark size={17} />
+            </a>
           </span>
+        </span>
+      </div>
+      <nav aria-label="About eGOVbusiness" className="flex items-center gap-[34px]">
+        {navItems.map(({ href, label }) => (
+          <a
+            className={cn(
+              "rounded-md text-base font-bold text-gray-800",
+              "transition-colors duration-150 hover:text-primary",
+              FOCUS_RING,
+            )}
+            data-cuelume-toggle="page"
+            href={href}
+            key={label}
+            rel="noreferrer"
+            target="_blank"
+          >
+            {label}
+          </a>
         ))}
       </nav>
       <div className="flex items-center gap-3.5">

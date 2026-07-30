@@ -12,7 +12,10 @@ import {
   UserIcon,
   WalletIcon,
 } from "@phosphor-icons/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
+import { OmsimosMark } from "@/components/omsimos-mark";
+import { ISLAND_CARD_IN, ISLAND_CARD_OUT, ISLAND_IN, ISLAND_OUT } from "@/lib/motion";
 
 /**
  * The phone frame element that sheets portal into. Base UI requires a
@@ -41,6 +44,52 @@ export function usePhoneFrame() {
   return useContext(PhoneFrameContext);
 }
 
+// Radius 15, not the 999 a pill is usually written as: the browser clamps it to
+// half the shorter side, so animating from 999 the drawn radius tracks the
+// growing height instead — it climbs to ~40 and snaps back to 30 at the end.
+const ISLAND_REST = { borderRadius: 15, height: 30, width: 112 };
+const ISLAND_OPEN = { borderRadius: 30, height: 96, width: 200 };
+
+/**
+ * The phone's Dynamic Island — hardware, so it belongs to the frame and appears
+ * on every screen. The payment island shares this origin and paints above it,
+ * covering this exactly and swallowing the pointer while it is up.
+ *
+ * Hover-only, so decoration only: this sits inside an aria-hidden bar, where
+ * anything focusable would be tabbable but invisible to a screen reader.
+ */
+function DynamicIsland() {
+  const [open, setOpen] = useState(false);
+  // reducedMotion="user" drops transforms and layout animations, but not the
+  // explicit width/height this animates.
+  const reduced = useReducedMotion();
+  return (
+    <motion.div
+      animate={open ? ISLAND_OPEN : ISLAND_REST}
+      className="dynamic-island"
+      initial={false}
+      onHoverEnd={() => setOpen(false)}
+      onHoverStart={() => setOpen(true)}
+      transition={reduced ? { duration: 0 } : open ? ISLAND_IN : ISLAND_OUT}
+    >
+      <AnimatePresence>
+        {open && (
+          <motion.span
+            animate={{ opacity: 1, transition: ISLAND_CARD_IN }}
+            className="dynamic-island-card"
+            exit={{ opacity: 0, transition: ISLAND_CARD_OUT }}
+            initial={{ opacity: 0 }}
+            style={{ height: ISLAND_OPEN.height, width: ISLAND_OPEN.width }}
+          >
+            <OmsimosMark size={32} />
+            <span className="dynamic-island-domain">omsimos.com</span>
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
 export function StatusBar() {
   const [time, setTime] = useState<string | null>(null);
   useEffect(() => {
@@ -54,11 +103,7 @@ export function StatusBar() {
   }, []);
   return (
     <div className="status-bar" aria-hidden="true">
-      {/* The phone's Dynamic Island. Hardware, not app UI, so it belongs to the
-          frame and appears on every screen. Nothing has to coordinate with the
-          payment island: that one shares this origin and is larger on both
-          axes, so it covers this exactly rather than sitting beside it. */}
-      <span className="dynamic-island" />
+      <DynamicIsland />
       <span className="status-left">
         {time ?? "9:41"}
         <BellSlashIcon weight="fill" />
