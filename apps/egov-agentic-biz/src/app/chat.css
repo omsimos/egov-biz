@@ -6,7 +6,7 @@
    white card and bubble on it. 0-2-0 wins regardless of order. */
 .screen.agent-chat-screen {
   display: grid;
-  grid-template-rows: 36px auto minmax(0, 1fr) minmax(0, auto);
+  grid-template-rows: var(--status-bar-h) auto minmax(0, 1fr) minmax(0, auto);
   background: var(--canvas);
 }
 .completion-confetti {

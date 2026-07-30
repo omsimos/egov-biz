@@ -64,7 +64,7 @@ export function HomeScreen({
       <div
         // pb clears the QR orb, which is 52px at margin-top:-16px and so floats
         // 4px over this scroller's last line.
-        className="h-[calc(100%-36px-76px)] overflow-y-auto overscroll-contain px-[18px] pt-3.5 pb-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="h-[calc(100%-var(--status-bar-h)-76px)] overflow-y-auto overscroll-contain px-[18px] pt-3.5 pb-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         id="app-content"
       >
         <header className="flex items-center justify-between gap-3">

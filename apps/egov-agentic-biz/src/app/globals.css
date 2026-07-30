@@ -160,6 +160,10 @@
    equivalent brand token so bespoke CSS keeps reading its familiar name while
    there is a single source of truth for the value. */
 :root {
+  /* The simulated status bar's height, read by every screen that sizes a
+     scroller under it. One variable because that height is subtracted in five
+     places, and on a real phone it goes to 0 (see the max-width block below). */
+  --status-bar-h: 36px;
   --blue: var(--primary);
   --blue-dark: var(--egov-blue-dark);
   --blue-soft: var(--egov-blue-soft);
@@ -360,7 +364,7 @@ body {
   background: var(--canvas);
 }
 .preview-cards-scroll {
-  height: calc(100% - 36px);
+  height: calc(100% - var(--status-bar-h));
   overflow-y: auto;
   scrollbar-width: none;
   padding: 12px 14px 40px;
@@ -393,7 +397,7 @@ body {
   overflow: hidden;
 }
 .status-bar {
-  height: 36px;
+  height: var(--status-bar-h);
   padding: 11px 22px 0;
   display: flex;
   /* Load-bearing on the flex-column screens (.business-record-screen): without
@@ -681,6 +685,23 @@ body {
   to {
     opacity: 0.25;
     transform: translateY(-4px);
+  }
+}
+
+/* Below 760px the phone is the page, and the device is already showing its own
+   clock, signal and battery — a simulated set under the real one reads as a
+   rendering bug, and the Dynamic Island is a cutout the device either has or
+   hasn't. So the bar collapses to nothing and takes its contents with it.
+   Height 0 rather than display:none: .agent-chat-screen is a grid that places
+   the bar in its first row, and removing the child would shift every row up.
+   759.98, not 759, so there is no gap against the min-width: 760px block. */
+@media (max-width: 759.98px) {
+  :root {
+    --status-bar-h: 0px;
+  }
+  .status-bar {
+    padding: 0;
+    overflow: hidden;
   }
 }
 
