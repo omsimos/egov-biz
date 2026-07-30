@@ -34,18 +34,38 @@ export function LandingHeader({ onStart }: { onStart: () => void }) {
     // nothing here can paint over the phone at narrow widths.
     <header className="relative z-1 hidden flex-none items-center justify-between gap-8 px-[clamp(20px,4vw,56px)] py-[22px] min-[760px]:flex">
       {/* eGOVbusiness by Omsimos, one lockup. The attribution is deliberately a
-          tier down — 13px against a 42px mark, behind a hairline — so the
-          product is still what you read first. It appears from 900px up: the
-          header is a single row of five things, and below that width the
-          attribution is what pushes the nav into the buttons. */}
+          tier down — 15px against a 28px mark, behind a hairline — so the
+          product is what you read first.
+          Both halves step at 1024px, and the reason is fit, not taste: this
+          header is one row of five things, and at 760px the full-size mark alone
+          pushes "Get started" off the edge. Under 1024 the mark drops to 20px
+          and the attribution sits out. */}
       <div className="flex items-center gap-3">
-        <BrandLogo height={42} priority />
-        <span className="hidden items-center gap-[7px] border-l-[1.5px] border-gray-200 pl-3 min-[900px]:flex">
+        <BrandLogo
+          className="[--brand-ink:20px] min-[1024px]:[--brand-ink:28px]"
+          height={28}
+          priority
+        />
+        <span className="hidden items-center gap-[7px] border-l-[1.5px] border-gray-200 pl-3 min-[1024px]:flex">
           <span className="text-[13px] font-bold text-gray-500">by</span>
-          <span className="flex items-center gap-[6px] text-[15px] font-extrabold -tracking-[.2px] text-gray-900">
+          {/* The one real link in this header — every other item here is a span
+              because the landing has no sections to target. The mark takes
+              currentColor, so it warms with the wordmark on hover. */}
+          <a
+            aria-label="Omsimos (opens in a new tab)"
+            className={cn(
+              "flex items-center gap-[6px] rounded-md text-[15px] font-extrabold -tracking-[.2px] text-gray-900",
+              "transition-colors duration-150 hover:text-primary",
+              FOCUS_RING,
+            )}
+            data-cuelume-toggle="page"
+            href="https://omsimos.com"
+            rel="noreferrer"
+            target="_blank"
+          >
             Omsimos
             <OmsimosMark size={17} />
-          </span>
+          </a>
         </span>
       </div>
       <nav aria-label="About eGOVbusiness" className="flex items-center gap-[34px]">
