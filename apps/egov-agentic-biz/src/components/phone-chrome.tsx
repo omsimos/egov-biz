@@ -12,7 +12,10 @@ import {
   UserIcon,
   WalletIcon,
 } from "@phosphor-icons/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
+import { OmsimosMark } from "@/components/omsimos-mark";
+import { ISLAND_CARD_IN, ISLAND_CARD_OUT, ISLAND_IN, ISLAND_OUT } from "@/lib/motion";
 
 /**
  * The phone frame element that sheets portal into. Base UI requires a
@@ -41,6 +44,65 @@ export function usePhoneFrame() {
   return useContext(PhoneFrameContext);
 }
 
+// Resting, then hovered. Geometry lives here rather than in CSS because motion
+// animates it inline and the two would otherwise disagree about the open size —
+// the card is sized from the same numbers so it never reflows mid-expansion.
+//
+// 15, not the 999 a pill is normally written as. The browser clamps a radius to
+// half the shorter side, so both draw the same pill at 30px tall — but animated
+// from 999 the number stays above the clamp for most of the expansion, which
+// means the *drawn* radius tracks half the growing height instead: it climbs to
+// ~40 as the box opens and then snaps back down to 30 at the end. Corners that
+// get rounder than they finish and then pop is what read as unsmooth. Between
+// the two radii actually drawn, 15 → 30 rises once and stops.
+const ISLAND_REST = { borderRadius: 15, height: 30, width: 112 };
+const ISLAND_OPEN = { borderRadius: 30, height: 96, width: 200 };
+
+/**
+ * The phone's Dynamic Island. Hardware, not app UI, so it belongs to the frame
+ * and appears on every screen. Nothing has to coordinate with the payment
+ * island: that one shares this origin, is larger on both axes, and paints above
+ * the status bar, so it covers this exactly rather than sitting beside it — and
+ * while it is up it also swallows the pointer, so this cannot expand out from
+ * under it.
+ *
+ * Hover-only, and so decoration only: it lives inside an aria-hidden bar, and a
+ * focusable easter egg in there would be reachable by tab while invisible to a
+ * screen reader. Nothing here is load-bearing, so there is nothing to miss.
+ */
+function DynamicIsland() {
+  const [open, setOpen] = useState(false);
+  // MotionConfig's reducedMotion="user" drops transforms and layout animations
+  // but not an explicit width/height, which is what this animates.
+  const reduced = useReducedMotion();
+  return (
+    <motion.div
+      animate={open ? ISLAND_OPEN : ISLAND_REST}
+      className="dynamic-island"
+      initial={false}
+      onHoverEnd={() => setOpen(false)}
+      onHoverStart={() => setOpen(true)}
+      transition={reduced ? { duration: 0 } : open ? ISLAND_IN : ISLAND_OUT}
+    >
+      <AnimatePresence>
+        {open && (
+          <motion.span
+            animate={{ opacity: 1, transition: ISLAND_CARD_IN }}
+            className="dynamic-island-card"
+            exit={{ opacity: 0, transition: ISLAND_CARD_OUT }}
+            initial={{ opacity: 0 }}
+            style={{ height: ISLAND_OPEN.height, width: ISLAND_OPEN.width }}
+          >
+            {/* currentColor, so the card's white is the mark's white. */}
+            <OmsimosMark size={32} />
+            <span className="dynamic-island-domain">omsimos.com</span>
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
 export function StatusBar() {
   const [time, setTime] = useState<string | null>(null);
   useEffect(() => {
@@ -54,11 +116,7 @@ export function StatusBar() {
   }, []);
   return (
     <div className="status-bar" aria-hidden="true">
-      {/* The phone's Dynamic Island. Hardware, not app UI, so it belongs to the
-          frame and appears on every screen. Nothing has to coordinate with the
-          payment island: that one shares this origin and is larger on both
-          axes, so it covers this exactly rather than sitting beside it. */}
-      <span className="dynamic-island" />
+      <DynamicIsland />
       <span className="status-left">
         {time ?? "9:41"}
         <BellSlashIcon weight="fill" />
