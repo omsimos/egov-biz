@@ -24,17 +24,14 @@ export const SHEET_OUT: Transition = { duration: 0.18, ease: EASE_OUT };
 export const SCRIM_IN: Transition = { duration: 0.22, ease: EASE_OUT };
 export const SCRIM_OUT: Transition = { duration: 0.16, ease: EASE_OUT };
 
-// The phone's Dynamic Island opening under the pointer — the one hover motion
-// owns rather than CSS, against the rule above. The exception is earned: the
-// panel inside mounts with the expansion, so the box and its contents have to
-// run off one clock, and the contents have to outlive the collapse long enough
-// to fade rather than blink out. Slower than the sheet on the way open: the box
-// is small, and a fast grow on a small box reads as a flinch.
+// The Dynamic Island opening under the pointer — the one hover motion owns
+// rather than CSS, because the card inside mounts with the expansion and both
+// have to run off one clock.
 export const ISLAND_IN: Transition = { duration: 0.34, ease: EASE_DRAWER };
 export const ISLAND_OUT: Transition = { duration: 0.22, ease: EASE_OUT };
 
-// The card lags the box open, so the logo arrives in a box that already has room
-// for it, and leaves first, so it never smears against the shrinking edge.
+// The card lags the box open so the logo lands in a box with room for it, and
+// leaves first so it never smears against the shrinking edge.
 export const ISLAND_CARD_IN: Transition = { delay: 0.09, duration: 0.19, ease: EASE_OUT };
 export const ISLAND_CARD_OUT: Transition = { duration: 0.1, ease: EASE_OUT };
 

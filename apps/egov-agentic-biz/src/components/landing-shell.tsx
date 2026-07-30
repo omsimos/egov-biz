@@ -21,9 +21,8 @@ const trustPoints = [
   { Icon: BuildingsIcon, label: "4 agencies, one flow", tone: "text-[var(--egov-orange)]" },
 ];
 
-// Real links, unlike the placeholder spans these replace: both leave for a site
-// that exists, rather than targeting a section this one-viewport landing hasn't
-// got. Fewer items also buys the enlarged lockup its room back — see the header.
+// Links now, not the spans they replace: both leave for a site that exists,
+// rather than targeting a section this one-viewport landing hasn't got.
 const navItems = [
   { href: "https://egov-sdk.omsimos.com/", label: "egov.js" },
   { href: "https://omsimos.com", label: "Support" },
@@ -38,20 +37,14 @@ export function LandingHeader({ onStart }: { onStart: () => void }) {
     // Above .landing-blobs (z-0, positioned) but below .landing-main (z-2), so
     // nothing here can paint over the phone at narrow widths.
     <header className="relative z-1 hidden flex-none items-center justify-between gap-8 px-[clamp(20px,4vw,56px)] py-[22px] min-[760px]:flex">
-      {/* eGOVbusiness by Omsimos, one lockup. The attribution is deliberately a
-          tier down — 15px against a 28px mark, behind a hairline — so the
-          product is what you read first. It sits out below 900px, on fit rather
-          than taste: this header is one row, and the attribution is the piece
-          that pushes "Get started" past the edge. */}
+      {/* The attribution sits out below 900px on fit, not taste: this header is
+          one row, and it is the piece that pushes "Get started" past the edge. */}
       <div className="flex items-center gap-3">
         <BrandLogo height={28} priority />
         <span className="hidden items-center border-l-[1.5px] border-gray-200 pl-3 min-[900px]:flex">
-          {/* Nudged, and the divider deliberately left where it was: box-centred
-              against this wordmark the attribution reads high, because the ink
-              centroid of "eGOVbusiness" sits ~3px below its box centre —
-              "business" is all x-height, so the mass is low. 3px is measured,
-              not eyeballed: it lands the two centroids within a pixel. The
-              hairline still centres on the row; only the type moves. */}
+          {/* Box-centred, this reads high: the ink centroid of "eGOVbusiness"
+              sits ~3px below its box centre, since "business" is all x-height.
+              The hairline stays centred on the row; only the type moves. */}
           <span className="flex translate-y-[3px] items-center gap-[7px]">
             <span className="text-[13px] font-bold text-gray-500">by</span>
             <a
@@ -67,7 +60,6 @@ export function LandingHeader({ onStart }: { onStart: () => void }) {
               target="_blank"
             >
               Omsimos
-              {/* Takes currentColor, so it warms with the wordmark on hover. */}
               <OmsimosMark size={17} />
             </a>
           </span>

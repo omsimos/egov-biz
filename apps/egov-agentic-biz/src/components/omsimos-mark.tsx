@@ -1,18 +1,9 @@
-// The Omsimos swirl, for the "by Omsimos" attribution beside the product mark.
+// Inlined from omsimos-logo.svg rather than using the white PNG, so the mark can
+// take currentColor — grey on the light header, white in the Dynamic Island.
 //
-// Inline vector rather than the supplied omsimos-logo-white.png: the landing
-// header sits on --surface, where a white mark is invisible, and an attribution
-// has to take the colour of the text it sits in. currentColor does that; a
-// raster of one colour cannot.
-//
-// The viewBox is the artwork's ink box, not the source artboard. omsimos-logo.svg
-// draws the mark inside a 2000-square with ~400 units of margin, so rendering the
-// declared viewBox puts a small, off-centre swirl in the middle of empty space.
-// 416 610 1168 780 is that box measured off a raster of the source — the same
-// 1168x780 the white PNG is cropped to, which confirms it.
-//
-// Three of the source's four paths. The fourth spans 0.07 units and renders at
-// no size we use it at.
+// The viewBox is the artwork's ink box, not the source's: that draws the mark
+// inside a 2000-square with ~400 units of margin. Three of its four paths; the
+// fourth spans 0.07 units.
 const ASPECT = 1168 / 780;
 
 export function OmsimosMark({ className, size = 17 }: { className?: string; size?: number }) {
@@ -23,8 +14,8 @@ export function OmsimosMark({ className, size = 17 }: { className?: string; size
       className={className}
       fill="currentColor"
       height={size}
-      // Sized twice for the reason BrandLogo is: width/height are presentation
-      // attributes, so a flex parent's default align-items:stretch still wins.
+      // Sized twice: width/height are presentation attributes, so a flex
+      // parent's align-items:stretch still wins over them.
       style={{ height: size, width }}
       viewBox="416 610 1168 780"
       width={width}

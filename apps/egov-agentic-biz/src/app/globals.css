@@ -420,30 +420,22 @@ body {
   top: 9px;
   left: 50%;
   transform: translateX(-50%);
-  /* Resting size, duplicated from ISLAND_REST in phone-chrome so the pill is
-     already the right shape on first paint; motion writes the same values
-     inline once it mounts, and every change after that. 15px rather than the
-     usual 999px pill radius for the same reason ISLAND_REST uses it: the
-     animation interpolates the number, not the radius the clamp made of it. */
+  /* Mirrors ISLAND_REST in phone-chrome, which motion then owns inline. */
   width: 112px;
   height: 30px;
   border-radius: 15px;
   background: var(--overlay-ink);
-  /* What sells the expansion: the card is full-size from the first frame and the
-     growing pill uncovers it, rather than the content stretching along with the
-     box. Also why the card carries no shadow — it would be clipped. */
+  /* The growing pill uncovers the card rather than stretching it. */
   overflow: hidden;
 }
-/* Centred rather than stretched (inset: 0), because the box is mid-animation for
-   340ms and a stretched card would reflow its contents on every frame of it.
-   translateX(-50%) against the island's own centre line, which does not move. */
+/* Centred and fixed-size rather than inset: 0, so the card does not reflow on
+   every frame of the 340ms expansion. */
 .dynamic-island-card {
   position: absolute;
   top: 0;
   left: 50%;
   transform: translateX(-50%);
   display: grid;
-  /* The mark centres in what is left over; the domain is pinned to the floor. */
   grid-template-rows: minmax(0, 1fr) auto;
   place-items: center;
   gap: 7px;

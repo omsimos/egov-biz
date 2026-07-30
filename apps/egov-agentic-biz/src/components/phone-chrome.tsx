@@ -44,36 +44,24 @@ export function usePhoneFrame() {
   return useContext(PhoneFrameContext);
 }
 
-// Resting, then hovered. Geometry lives here rather than in CSS because motion
-// animates it inline and the two would otherwise disagree about the open size —
-// the card is sized from the same numbers so it never reflows mid-expansion.
-//
-// 15, not the 999 a pill is normally written as. The browser clamps a radius to
-// half the shorter side, so both draw the same pill at 30px tall — but animated
-// from 999 the number stays above the clamp for most of the expansion, which
-// means the *drawn* radius tracks half the growing height instead: it climbs to
-// ~40 as the box opens and then snaps back down to 30 at the end. Corners that
-// get rounder than they finish and then pop is what read as unsmooth. Between
-// the two radii actually drawn, 15 → 30 rises once and stops.
+// Radius 15, not the 999 a pill is usually written as: the browser clamps it to
+// half the shorter side, so animating from 999 the drawn radius tracks the
+// growing height instead — it climbs to ~40 and snaps back to 30 at the end.
 const ISLAND_REST = { borderRadius: 15, height: 30, width: 112 };
 const ISLAND_OPEN = { borderRadius: 30, height: 96, width: 200 };
 
 /**
- * The phone's Dynamic Island. Hardware, not app UI, so it belongs to the frame
- * and appears on every screen. Nothing has to coordinate with the payment
- * island: that one shares this origin, is larger on both axes, and paints above
- * the status bar, so it covers this exactly rather than sitting beside it — and
- * while it is up it also swallows the pointer, so this cannot expand out from
- * under it.
+ * The phone's Dynamic Island — hardware, so it belongs to the frame and appears
+ * on every screen. The payment island shares this origin and paints above it,
+ * covering this exactly and swallowing the pointer while it is up.
  *
- * Hover-only, and so decoration only: it lives inside an aria-hidden bar, and a
- * focusable easter egg in there would be reachable by tab while invisible to a
- * screen reader. Nothing here is load-bearing, so there is nothing to miss.
+ * Hover-only, so decoration only: this sits inside an aria-hidden bar, where
+ * anything focusable would be tabbable but invisible to a screen reader.
  */
 function DynamicIsland() {
   const [open, setOpen] = useState(false);
-  // MotionConfig's reducedMotion="user" drops transforms and layout animations
-  // but not an explicit width/height, which is what this animates.
+  // reducedMotion="user" drops transforms and layout animations, but not the
+  // explicit width/height this animates.
   const reduced = useReducedMotion();
   return (
     <motion.div
@@ -93,7 +81,6 @@ function DynamicIsland() {
             initial={{ opacity: 0 }}
             style={{ height: ISLAND_OPEN.height, width: ISLAND_OPEN.width }}
           >
-            {/* currentColor, so the card's white is the mark's white. */}
             <OmsimosMark size={32} />
             <span className="dynamic-island-domain">omsimos.com</span>
           </motion.span>
