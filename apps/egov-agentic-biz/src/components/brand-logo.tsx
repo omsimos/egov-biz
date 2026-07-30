@@ -1,5 +1,4 @@
 import Image from "next/image";
-import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import logo from "../../public/images/egovbusiness-logo.png";
 
@@ -13,19 +12,18 @@ import logo from "../../public/images/egovbusiness-logo.png";
 const ASPECT = 3; // 2172 / 724
 
 /**
- * Where the wordmark actually sits inside the file, as fractions of it. The
- * supplied asset is mostly transparent padding — 42.5% of its height is ink —
- * so a `height` that sized the *file* drew a wordmark well under half that, and
- * asking for a bigger mark bought mostly empty space. On a one-viewport landing
- * that empty space is header height taken from the hero.
+ * Where the wordmark actually sits inside the file, as fractions of it — ink
+ * x 36-2134, y 192-496 of 2172x724, measured off the file itself.
  *
- * Measured off a 543x181 render of the file (an exact 1:4 of the source): ink
- * spans x 9-533, y 48-124.
+ * Only 42% of the file's height is ink, so a `height` that sized the *file* drew
+ * a wordmark well under half that (30 gave 13px), and asking for a bigger mark
+ * bought mostly empty space. On a one-viewport landing that empty space is
+ * header height taken from the hero. So `height` is the wordmark's own height:
+ * the file is scaled until its ink matches, then clipped to it.
  */
-const INK = { height: 77 / 181, left: 9 / 543, top: 48 / 181, width: 525 / 543 };
+const INK = { height: 305 / 724, left: 36 / 2172, top: 192 / 724, width: 2099 / 2172 };
 
-// Everything derives from the ink height, so the mark can be resized by that one
-// number — see --brand-ink below. Ratios, not pixels: they hold at any size.
+// Ratios off the ink height, so one number drives the whole box.
 const FILE_H = 1 / INK.height;
 const FILE_W = ASPECT * FILE_H;
 const BOX_W = FILE_W * INK.width;
@@ -38,45 +36,35 @@ export function BrandLogo({
   priority = false,
 }: {
   className?: string;
-  /**
-   * The wordmark's own height, not the file's. Also the size the srcset is
-   * generated for, so it must be the LARGEST the mark is ever drawn at: a
-   * caller may step --brand-ink down at narrow widths (the header does), but
-   * stepping it up past this would resample a too-small candidate.
-   */
+  /** The wordmark's own height, not the file's. */
   height?: number;
   priority?: boolean;
 }) {
+  const fileHeight = Math.round(height * FILE_H);
+  const fileWidth = Math.round(height * FILE_W);
   return (
     <span
       className={cn("relative block shrink-0 overflow-hidden", className)}
-      style={
-        {
-          "--brand-ink": `${height}px`,
-          height: "var(--brand-ink)",
-          width: `calc(var(--brand-ink) * ${BOX_W})`,
-        } as CSSProperties
-      }
+      style={{ height, width: Math.round(height * BOX_W) }}
     >
-      {/* The whole file, scaled until its wordmark is --brand-ink tall, then
-          positioned so the ink box is what the wrapper clips to. Both axes need
-          a definite length: a flex column defaults to align-items:stretch,
-          which pulls a cross-size of `auto` to the container's width — that
-          once rendered this lockup at 13.7:1 — and next/image sizes its srcset
-          from what it is handed. */}
+      {/* The whole file, scaled until its wordmark is `height` tall and offset so
+          the ink box is what the wrapper clips to. Both axes need a definite
+          length: a flex column defaults to align-items:stretch, which pulls a
+          cross-size of `auto` to the container's width — that once rendered this
+          lockup at 13.7:1 — and next/image sizes its srcset from what it gets. */}
       <Image
         alt="eGOVbusiness"
-        height={Math.round(height * FILE_H)}
+        height={fileHeight}
         priority={priority}
         src={logo}
         style={{
-          height: `calc(var(--brand-ink) * ${FILE_H})`,
-          left: `calc(var(--brand-ink) * ${OFFSET_LEFT})`,
+          height: fileHeight,
+          left: Math.round(height * OFFSET_LEFT),
           position: "absolute",
-          top: `calc(var(--brand-ink) * ${OFFSET_TOP})`,
-          width: `calc(var(--brand-ink) * ${FILE_W})`,
+          top: Math.round(height * OFFSET_TOP),
+          width: fileWidth,
         }}
-        width={Math.round(height * FILE_W)}
+        width={fileWidth}
       />
     </span>
   );

@@ -21,8 +21,13 @@ const trustPoints = [
   { Icon: BuildingsIcon, label: "4 agencies, one flow", tone: "text-[var(--egov-orange)]" },
 ];
 
-// Spans, not links: this landing is one viewport with no sections to target.
-const navItems = ["How it works", "Services", "Support"];
+// Real links, unlike the placeholder spans these replace: both leave for a site
+// that exists, rather than targeting a section this one-viewport landing hasn't
+// got. Fewer items also buys the enlarged lockup its room back — see the header.
+const navItems = [
+  { href: "https://egov-sdk.omsimos.com/", label: "egov.js" },
+  { href: "https://omsimos.com", label: "Support" },
+];
 
 const HEADER_BUTTON = "font-extrabold text-base transition-colors duration-150 disabled:opacity-60";
 
@@ -35,44 +40,55 @@ export function LandingHeader({ onStart }: { onStart: () => void }) {
     <header className="relative z-1 hidden flex-none items-center justify-between gap-8 px-[clamp(20px,4vw,56px)] py-[22px] min-[760px]:flex">
       {/* eGOVbusiness by Omsimos, one lockup. The attribution is deliberately a
           tier down — 15px against a 28px mark, behind a hairline — so the
-          product is what you read first.
-          Both halves step at 1024px, and the reason is fit, not taste: this
-          header is one row of five things, and at 760px the full-size mark alone
-          pushes "Get started" off the edge. Under 1024 the mark drops to 20px
-          and the attribution sits out. */}
+          product is what you read first. It sits out below 900px, on fit rather
+          than taste: this header is one row, and the attribution is the piece
+          that pushes "Get started" past the edge. */}
       <div className="flex items-center gap-3">
-        <BrandLogo
-          className="[--brand-ink:20px] min-[1024px]:[--brand-ink:28px]"
-          height={28}
-          priority
-        />
-        <span className="hidden items-center gap-[7px] border-l-[1.5px] border-gray-200 pl-3 min-[1024px]:flex">
-          <span className="text-[13px] font-bold text-gray-500">by</span>
-          {/* The one real link in this header — every other item here is a span
-              because the landing has no sections to target. The mark takes
-              currentColor, so it warms with the wordmark on hover. */}
+        <BrandLogo height={28} priority />
+        <span className="hidden items-center border-l-[1.5px] border-gray-200 pl-3 min-[900px]:flex">
+          {/* Nudged, and the divider deliberately left where it was: box-centred
+              against this wordmark the attribution reads high, because the ink
+              centroid of "eGOVbusiness" sits ~3px below its box centre —
+              "business" is all x-height, so the mass is low. 3px is measured,
+              not eyeballed: it lands the two centroids within a pixel. The
+              hairline still centres on the row; only the type moves. */}
+          <span className="flex translate-y-[3px] items-center gap-[7px]">
+            <span className="text-[13px] font-bold text-gray-500">by</span>
+            <a
+              aria-label="Omsimos (opens in a new tab)"
+              className={cn(
+                "flex items-center gap-[6px] rounded-md text-[15px] font-extrabold -tracking-[.2px] text-gray-900",
+                "transition-colors duration-150 hover:text-primary",
+                FOCUS_RING,
+              )}
+              data-cuelume-toggle="page"
+              href="https://omsimos.com"
+              rel="noreferrer"
+              target="_blank"
+            >
+              Omsimos
+              {/* Takes currentColor, so it warms with the wordmark on hover. */}
+              <OmsimosMark size={17} />
+            </a>
+          </span>
+        </span>
+      </div>
+      <nav aria-label="About eGOVbusiness" className="flex items-center gap-[34px]">
+        {navItems.map(({ href, label }) => (
           <a
-            aria-label="Omsimos (opens in a new tab)"
             className={cn(
-              "flex items-center gap-[6px] rounded-md text-[15px] font-extrabold -tracking-[.2px] text-gray-900",
+              "rounded-md text-base font-bold text-gray-800",
               "transition-colors duration-150 hover:text-primary",
               FOCUS_RING,
             )}
             data-cuelume-toggle="page"
-            href="https://omsimos.com"
+            href={href}
+            key={label}
             rel="noreferrer"
             target="_blank"
           >
-            Omsimos
-            <OmsimosMark size={17} />
+            {label}
           </a>
-        </span>
-      </div>
-      <nav aria-label="About eGOVbusiness" className="flex items-center gap-[34px]">
-        {navItems.map((item) => (
-          <span className="text-base font-bold text-gray-800" key={item}>
-            {item}
-          </span>
         ))}
       </nav>
       <div className="flex items-center gap-3.5">
