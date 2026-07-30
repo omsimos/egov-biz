@@ -23,13 +23,6 @@ const ASPECT = 3; // 2172 / 724
  */
 const INK = { height: 305 / 724, left: 36 / 2172, top: 192 / 724, width: 2099 / 2172 };
 
-// Ratios off the ink height, so one number drives the whole box.
-const FILE_H = 1 / INK.height;
-const FILE_W = ASPECT * FILE_H;
-const BOX_W = FILE_W * INK.width;
-const OFFSET_TOP = -INK.top * FILE_H;
-const OFFSET_LEFT = -INK.left * FILE_W;
-
 export function BrandLogo({
   className,
   height = 23,
@@ -40,12 +33,17 @@ export function BrandLogo({
   height?: number;
   priority?: boolean;
 }) {
-  const fileHeight = Math.round(height * FILE_H);
-  const fileWidth = Math.round(height * FILE_W);
+  // Width off the *rounded* height, not off `height` again: rounding each axis
+  // against the ink fractions independently left the pair a pixel out of
+  // 2172:724, and next/image reads any deviation from the intrinsic ratio as
+  // "one dimension was modified by CSS" and warns. Everything below therefore
+  // measures against these two numbers, not against `height`.
+  const fileHeight = Math.round(height / INK.height);
+  const fileWidth = Math.round(fileHeight * ASPECT);
   return (
     <span
       className={cn("relative block shrink-0 overflow-hidden", className)}
-      style={{ height, width: Math.round(height * BOX_W) }}
+      style={{ height, width: Math.round(fileWidth * INK.width) }}
     >
       {/* The whole file, scaled until its wordmark is `height` tall and offset so
           the ink box is what the wrapper clips to. Both axes need a definite
@@ -59,9 +57,9 @@ export function BrandLogo({
         src={logo}
         style={{
           height: fileHeight,
-          left: Math.round(height * OFFSET_LEFT),
+          left: -Math.round(fileWidth * INK.left),
           position: "absolute",
-          top: Math.round(height * OFFSET_TOP),
+          top: -Math.round(fileHeight * INK.top),
           width: fileWidth,
         }}
         width={fileWidth}
