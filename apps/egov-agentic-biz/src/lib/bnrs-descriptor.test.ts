@@ -33,11 +33,11 @@ describe("BNRS descriptor suggestions", () => {
   });
 
   test("keeps the official order when there is no valid suggestion", () => {
-    expect(orderBnrsDescriptorsWithSuggestionFirst(BNRS_DESCRIPTORS, null)).toEqual(
-      [...BNRS_DESCRIPTORS],
-    );
-    expect(orderBnrsDescriptorsWithSuggestionFirst(BNRS_DESCRIPTORS, "MADE_UP_SHOP")).toEqual(
-      [...BNRS_DESCRIPTORS],
-    );
+    expect(orderBnrsDescriptorsWithSuggestionFirst(BNRS_DESCRIPTORS, null)).toEqual([
+      ...BNRS_DESCRIPTORS,
+    ]);
+    expect(orderBnrsDescriptorsWithSuggestionFirst(BNRS_DESCRIPTORS, "MADE_UP_SHOP")).toEqual([
+      ...BNRS_DESCRIPTORS,
+    ]);
   });
 });
