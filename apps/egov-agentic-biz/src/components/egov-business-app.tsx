@@ -1433,7 +1433,9 @@ export function EgaphBusinessApp({
   return (
     <div className="landing-stage">
       <div aria-hidden="true" className="landing-blobs" />
-      {onLanding && <LandingHeader onStart={() => setSigningIn(true)} />}
+      {onLanding && (
+        <LandingHeader collapsed={signingIn} onStart={() => setSigningIn(true)} />
+      )}
       <div className="landing-main">
         {onLanding && (
           <LandingCopy

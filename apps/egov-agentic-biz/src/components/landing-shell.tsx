@@ -32,7 +32,13 @@ const HEADER_BUTTON = "font-extrabold text-base transition-colors duration-150 d
 
 // Two exports, not one shell: the header spans the stage while the copy is the
 // phone's flex sibling inside .landing-main.
-export function LandingHeader({ onStart }: { onStart: () => void }) {
+export function LandingHeader({
+  collapsed,
+  onStart,
+}: {
+  collapsed: boolean;
+  onStart: () => void;
+}) {
   return (
     // Above .landing-blobs (z-0, positioned) but below .landing-main (z-2), so
     // nothing here can paint over the phone at narrow widths.
@@ -83,10 +89,17 @@ export function LandingHeader({ onStart }: { onStart: () => void }) {
           </a>
         ))}
       </nav>
-      <div className="flex items-center gap-3.5">
+      <div
+        aria-hidden={collapsed}
+        className={cn(
+          "flex items-center gap-3.5 transition-opacity duration-200 ease-[var(--ease-out)]",
+          collapsed && "pointer-events-none opacity-0",
+        )}
+      >
         <button
           className={cn(HEADER_BUTTON, "px-1.5 py-[11px] hover:text-primary", FOCUS_RING)}
           data-cuelume-toggle="page"
+          disabled={collapsed}
           onClick={onStart}
           type="button"
         >
@@ -101,6 +114,7 @@ export function LandingHeader({ onStart }: { onStart: () => void }) {
             FOCUS_RING,
           )}
           data-cuelume-toggle="page"
+          disabled={collapsed}
           onClick={onStart}
           type="button"
         >
