@@ -25,33 +25,42 @@ function paymentRecord(row: typeof bnrsPayments.$inferSelect): BnrsPaymentRecord
 }
 
 function ownerRecord(row: typeof bnrsOwnerInformation.$inferSelect): BnrsOwnerInformationInput {
-  return {
-    ...(row.citizenship === null ? {} : { citizenship: row.citizenship }),
-    ...(row.firstName === null ? {} : { firstName: row.firstName }),
-    ...(row.middleName === null ? {} : { middleName: row.middleName }),
-    ...(row.lastName === null ? {} : { lastName: row.lastName }),
-    ...(row.suffix === null ? {} : { suffix: row.suffix }),
-    ...(row.birthDate === null ? {} : { birthDate: row.birthDate }),
-    ...(row.gender === null ? {} : { gender: row.gender }),
-  };
+  const owner: BnrsOwnerInformationInput = {};
+  if (row.citizenship !== null) owner.citizenship = row.citizenship;
+  if (row.firstName !== null) owner.firstName = row.firstName;
+  if (row.middleName !== null) owner.middleName = row.middleName;
+  if (row.lastName !== null) owner.lastName = row.lastName;
+  if (row.suffix !== null) owner.suffix = row.suffix;
+  if (row.birthDate !== null) owner.birthDate = row.birthDate;
+  if (row.gender !== null) owner.gender = row.gender;
+  return owner;
 }
 
 function businessAddressRecord(
   row: typeof bnrsBusinessAddresses.$inferSelect,
 ): BnrsBusinessAddressInput {
-  return {
+  const address: BnrsBusinessAddressInput = {
     source: row.source,
     addressLine1: row.addressLine1,
-    ...(row.addressLine2 === null ? {} : { addressLine2: row.addressLine2 }),
     barangay: row.barangay,
     cityMunicipality: row.cityMunicipality,
     province: row.province,
     region: row.region,
     postalCode: row.postalCode,
   };
+  if (row.addressLine2 !== null) address.addressLine2 = row.addressLine2;
+  return address;
 }
 
 class BnrsTransitionRollback extends Error {}
+
+// A promise rejection reason is `unknown` by the language's own rules; this
+// handler only tests it with `instanceof` and rethrows anything it does not own.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters
+function rollbackToNull(error: unknown): null {
+  if (error instanceof BnrsTransitionRollback) return null;
+  throw error;
+}
 
 export function createDrizzleBnrsRepository(database: Database): BnrsRepository {
   async function findActiveApplication(egovUserId: string) {
@@ -410,10 +419,7 @@ export function createDrizzleBnrsRepository(database: Database): BnrsRepository 
             payment: paymentRecord(payment),
           };
         })
-        .catch((error: unknown) => {
-          if (error instanceof BnrsTransitionRollback) return null;
-          throw error;
-        });
+        .catch(rollbackToNull);
     },
     recordPendingPayment(input) {
       return database.transaction(async (transaction) => {
@@ -496,10 +502,7 @@ export function createDrizzleBnrsRepository(database: Database): BnrsRepository 
             payment: paymentRecord(payment),
           };
         })
-        .catch((error: unknown) => {
-          if (error instanceof BnrsTransitionRollback) return null;
-          throw error;
-        });
+        .catch(rollbackToNull);
     },
     completePayment(input) {
       return database
@@ -558,10 +561,7 @@ export function createDrizzleBnrsRepository(database: Database): BnrsRepository 
             payment: paymentRecord(payment),
           };
         })
-        .catch((error: unknown) => {
-          if (error instanceof BnrsTransitionRollback) return null;
-          throw error;
-        });
+        .catch(rollbackToNull);
     },
   };
 }

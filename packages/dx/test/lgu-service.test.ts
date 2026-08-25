@@ -39,12 +39,14 @@ function setup() {
   return { actor, applicant, repository, service };
 }
 
-async function expectLguError(action: () => Promise<unknown>, code: LguError["code"]) {
+async function expectLguError<T>(action: () => Promise<T>, code: LguError["code"]) {
   try {
     await action();
     throw new Error("Expected an LguError");
   } catch (error) {
     expect(error).toBeInstanceOf(LguError);
+    // SAFETY: the expectation above throws unless `error` is a LguError, so this
+    // line is only reached once that instance check has held.
     expect((error as LguError).code).toBe(code);
   }
 }
@@ -148,6 +150,9 @@ describe("LGU application workflow", () => {
         service.startOrResumeApplication({
           actor,
           applicant,
+          // SAFETY: the assertion only builds the invalid input. `issuingAgency`
+          // is re-checked at runtime, and this case exists to prove a non-BNRS
+          // agency is rejected with INVALID_CERTIFICATE.
           certificate: { ...certificate, issuingAgency: "OTHER" as "DTI-BNRS" },
         }),
       "INVALID_CERTIFICATE",
@@ -159,6 +164,12 @@ describe("LGU application workflow", () => {
           applicant,
           certificate: {
             ...certificate,
+            // SAFETY: the assertion only builds the invalid input; the claim under
+            // test is that the service rejects it with INVALID_CERTIFICATE.
+            // A certificate reaches the service as JSON, so a missing business
+            // address is reachable at runtime but has no compile-time spelling —
+            // only a chain through `unknown` can construct that payload here.
+            // oxlint-disable-next-line anti-slop/no-chained-type-assertions
             businessAddress: undefined as unknown as typeof certificate.businessAddress,
           },
         }),

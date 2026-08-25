@@ -39,7 +39,7 @@ export interface BnrsServiceOptions {
   generateId?: () => string;
 }
 
-const nextSteps: Record<Exclude<BnrsApplicationState, "COMPLETED" | "ABANDONED">, BnrsNextStep> = {
+const nextSteps = {
   TERMS_PENDING: "TERMS_AND_CONDITIONS",
   OWNER_INFORMATION_PENDING: "OWNER_INFORMATION",
   BUSINESS_NAME_PENDING: "BUSINESS_NAME",
@@ -47,7 +47,7 @@ const nextSteps: Record<Exclude<BnrsApplicationState, "COMPLETED" | "ABANDONED">
   BUSINESS_ADDRESS_PENDING: "BUSINESS_ADDRESS",
   PAYMENT_READY: "PAYMENT",
   PAYMENT_PENDING: "PAYMENT",
-};
+} satisfies Record<Exclude<BnrsApplicationState, "COMPLETED" | "ABANDONED">, BnrsNextStep>;
 
 const advancedFromOwner = new Set<BnrsApplicationState>([
   "BUSINESS_NAME_PENDING",
@@ -99,15 +99,15 @@ function normalizeOwner(owner: BnrsOwnerInformationInput): BnrsOwnerInformationI
   if (birthDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(birthDate))
     throw new BnrsError("INVALID_OWNER_INFORMATION", "Birth date must use YYYY-MM-DD format.");
 
-  return {
-    ...(citizenship === undefined ? {} : { citizenship }),
-    ...(firstName === undefined ? {} : { firstName }),
-    ...(middleName === undefined ? {} : { middleName }),
-    ...(lastName === undefined ? {} : { lastName }),
-    ...(suffix === undefined ? {} : { suffix }),
-    ...(birthDate === undefined ? {} : { birthDate }),
-    ...(gender === undefined ? {} : { gender }),
-  };
+  const normalized: BnrsOwnerInformationInput = {};
+  if (citizenship !== undefined) normalized.citizenship = citizenship;
+  if (firstName !== undefined) normalized.firstName = firstName;
+  if (middleName !== undefined) normalized.middleName = middleName;
+  if (lastName !== undefined) normalized.lastName = lastName;
+  if (suffix !== undefined) normalized.suffix = suffix;
+  if (birthDate !== undefined) normalized.birthDate = birthDate;
+  if (gender !== undefined) normalized.gender = gender;
+  return normalized;
 }
 
 function normalizedAddressString(value: string, field: string, maximum: number): string {
@@ -141,16 +141,17 @@ function normalizeBusinessAddress(address: BnrsBusinessAddressInput): BnrsBusine
       "INVALID_BUSINESS_ADDRESS",
       "Postal code must contain exactly four digits.",
     );
-  return {
+  const normalized: BnrsBusinessAddressInput = {
     source: address.source,
     addressLine1,
-    ...(addressLine2 === undefined ? {} : { addressLine2 }),
     barangay,
     cityMunicipality,
     province,
     region,
     postalCode,
   };
+  if (addressLine2 !== undefined) normalized.addressLine2 = addressLine2;
+  return normalized;
 }
 
 function sameBusinessAddress(
@@ -170,15 +171,16 @@ function sameBusinessAddress(
 }
 
 function certificateBusinessAddress(address: BnrsBusinessAddressInput): BnrsBusinessAddressDetails {
-  return {
+  const details: BnrsBusinessAddressDetails = {
     addressLine1: address.addressLine1,
-    ...(address.addressLine2 === undefined ? {} : { addressLine2: address.addressLine2 }),
     barangay: address.barangay,
     cityMunicipality: address.cityMunicipality,
     province: address.province,
     region: address.region,
     postalCode: address.postalCode,
   };
+  if (address.addressLine2 !== undefined) details.addressLine2 = address.addressLine2;
+  return details;
 }
 
 function descriptorDisplayLabel(label: string): string {
@@ -243,6 +245,8 @@ function projectStatus(
     applicationId: application.id,
     state: application.state,
     completedSteps: projectCompletedSteps(application, ownerStored, businessAddress !== null),
+    // SAFETY: `terminal` above already returned for COMPLETED and ABANDONED, the
+    // only two states `nextSteps` omits, so what remains is exactly its key set.
     nextStep: terminal
       ? null
       : application.state === "PAYMENT_READY" && businessAddress === null

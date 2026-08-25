@@ -21,12 +21,14 @@ function setup() {
   return { actor, repository, service };
 }
 
-async function expectBnrsError(action: () => Promise<unknown>, code: BnrsError["code"]) {
+async function expectBnrsError<T>(action: () => Promise<T>, code: BnrsError["code"]) {
   try {
     await action();
     throw new Error("Expected a BnrsError");
   } catch (error) {
     expect(error).toBeInstanceOf(BnrsError);
+    // SAFETY: the expectation above throws unless `error` is a BnrsError, so this
+    // line is only reached once that instance check has held.
     expect((error as BnrsError).code).toBe(code);
   }
 }

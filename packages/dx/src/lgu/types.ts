@@ -1,3 +1,5 @@
+import type { JsonValue } from "../boundary.js";
+
 export type LguActor = {
   egovUserId: string;
 };
@@ -77,7 +79,7 @@ export interface LguPaymentProvider {
     callbackUrl: string;
     redirectUrl: string;
     items: readonly LguPaymentItem[];
-    description: Readonly<Record<string, unknown>>;
+    description: Readonly<Record<string, JsonValue>>;
   }): Promise<LguPaymentCheckout>;
   getTransaction(transactionUuid: string): Promise<LguPaymentProviderSnapshot>;
   voidTransaction(transactionUuid: string): Promise<void>;

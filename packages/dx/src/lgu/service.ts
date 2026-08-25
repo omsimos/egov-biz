@@ -1,3 +1,5 @@
+import { payloadNumber, payloadRecord, payloadString } from "../boundary.js";
+
 import { getLguPaymentQuote } from "./constants.js";
 import { LguError } from "./errors.js";
 import type {
@@ -12,6 +14,7 @@ import type {
   LguApplicationStatus,
   LguApplicantInformationInput,
   LguBusinessAddressInput,
+  LguBusinessPermit,
   LguBusinessRegistrationCredentialInput,
   LguIssuedDocuments,
   LguPaymentCheckout,
@@ -29,19 +32,36 @@ export interface LguServiceOptions {
   generateId?: () => string;
 }
 
+/** The document fields the business permit and the barangay clearance share. */
+type LguIssuedDocumentFields = Pick<
+  LguBusinessPermit,
+  | "issuingLgu"
+  | "bnrsCertificateNumber"
+  | "businessName"
+  | "ownerName"
+  | "tin"
+  | "businessActivity"
+  | "businessAddress"
+  | "issuedAt"
+  | "validUntil"
+>;
+
 const territorialScopes = new Set<LguTerritorialScope>([
   "CITY_MUNICIPALITY",
   "REGIONAL",
   "NATIONAL",
 ]);
 
+// Callers hand this an already-parsed string, so `undefined` here means the
+// boundary parser rejected the incoming value — the same "is required" outcome
+// the inline representation check used to produce.
 function normalizedRequiredString(
-  value: unknown,
+  value: string | undefined,
   code: "INVALID_APPLICANT" | "INVALID_CITY" | "INVALID_CERTIFICATE",
   field: string,
   maximum: number,
 ): string {
-  if (typeof value !== "string") throw new LguError(code, `${field} is required.`);
+  if (value === undefined) throw new LguError(code, `${field} is required.`);
   const normalized = value.normalize("NFKC").trim().replace(/\s+/g, " ");
   if (!normalized || normalized.length > maximum)
     throw new LguError(code, `${field} must be between 1 and ${maximum} characters.`);
@@ -52,14 +72,19 @@ function comparisonKey(value: string): string {
   return value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleUpperCase("en-PH");
 }
 
+// The eGov SSO profile types `tin_id` as `unknown` — the provider returns a bare
+// string, a number, or a nested object depending on the ID that backs it — so
+// this really is handed an unparsed value.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters
 export function normalizeLguTin(value: unknown): string | undefined {
   if (value === undefined || value === null || value === "") return undefined;
-  if (typeof value === "string" || typeof value === "number") {
-    const digits = String(value).replaceAll(/\D/g, "");
+  const scalar = payloadString(value) ?? payloadNumber(value);
+  if (scalar !== undefined) {
+    const digits = String(scalar).replaceAll(/\D/g, "");
     return digits.length >= 9 && digits.length <= 14 ? digits : undefined;
   }
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-  const record = value as Record<string, unknown>;
+  const record = payloadRecord(value);
+  if (record === undefined) return undefined;
   for (const key of ["tin", "tin_number", "tinNumber", "id_number"]) {
     const tin = normalizeLguTin(record[key]);
     if (tin) return tin;
@@ -75,7 +100,7 @@ function validateActor(actor: LguActor): string {
 
 function normalizeApplicant(input: LguApplicantInformationInput): LguApplicantInformationRecord {
   const ownerName = normalizedRequiredString(
-    input.ownerName,
+    payloadString(input.ownerName),
     "INVALID_APPLICANT",
     "Owner name",
     240,
@@ -83,60 +108,64 @@ function normalizeApplicant(input: LguApplicantInformationInput): LguApplicantIn
   const tin = normalizeLguTin(input.tin);
   if (input.tin !== undefined && !tin)
     throw new LguError("INVALID_APPLICANT", "TIN must contain between 9 and 14 digits.");
-  return {
+  const applicant: LguApplicantInformationRecord = {
     ownerName,
     normalizedOwnerName: comparisonKey(ownerName),
-    ...(tin === undefined ? {} : { tin }),
   };
+  if (tin !== undefined) applicant.tin = tin;
+  return applicant;
 }
 
-function normalizeBusinessAddress(input: unknown): LguBusinessAddressInput {
-  if (!input || typeof input !== "object" || Array.isArray(input))
+// The declared parameter type is the contract callers claim to honour, not one
+// this service can trust: a certificate reaches it as a request body or a stored
+// row, so every field is re-parsed here before it is believed.
+function normalizeBusinessAddress(input: LguBusinessAddressInput): LguBusinessAddressInput {
+  const address = payloadRecord(input);
+  if (address === undefined)
     throw new LguError(
       "INVALID_CERTIFICATE",
       "A structured business address is required in the certificate.",
     );
-  const address = input as Record<string, unknown>;
   const addressLine1 = normalizedRequiredString(
-    address.addressLine1,
+    payloadString(address.addressLine1),
     "INVALID_CERTIFICATE",
     "Business address line 1",
     300,
   );
   const addressLine2 = address.addressLine2
     ? normalizedRequiredString(
-        address.addressLine2,
+        payloadString(address.addressLine2),
         "INVALID_CERTIFICATE",
         "Business address line 2",
         200,
       )
     : undefined;
   const barangay = normalizedRequiredString(
-    address.barangay,
+    payloadString(address.barangay),
     "INVALID_CERTIFICATE",
     "Business barangay",
     120,
   );
   const cityMunicipality = normalizedRequiredString(
-    address.cityMunicipality,
+    payloadString(address.cityMunicipality),
     "INVALID_CERTIFICATE",
     "Business city/municipality",
     120,
   );
   const province = normalizedRequiredString(
-    address.province,
+    payloadString(address.province),
     "INVALID_CERTIFICATE",
     "Business province",
     120,
   );
   const region = normalizedRequiredString(
-    address.region,
+    payloadString(address.region),
     "INVALID_CERTIFICATE",
     "Business region",
     120,
   );
   const postalCode = normalizedRequiredString(
-    address.postalCode,
+    payloadString(address.postalCode),
     "INVALID_CERTIFICATE",
     "Business postal code",
     4,
@@ -146,21 +175,25 @@ function normalizeBusinessAddress(input: unknown): LguBusinessAddressInput {
       "INVALID_CERTIFICATE",
       "Business postal code must contain exactly four digits.",
     );
-  return {
+  const normalized: LguBusinessAddressInput = {
     addressLine1,
-    ...(addressLine2 === undefined ? {} : { addressLine2 }),
     barangay,
     cityMunicipality,
     province,
     region,
     postalCode,
   };
+  if (addressLine2 !== undefined) normalized.addressLine2 = addressLine2;
+  return normalized;
 }
 
-function parsedCertificateDate(value: unknown, field: string): Date {
-  if (typeof value !== "string" || !value.trim())
+// Same story as `normalizeBusinessAddress`: the declared `string` is a claim the
+// caller makes, so the value is re-parsed before it is turned into a date.
+function parsedCertificateDate(value: string, field: string): Date {
+  const text = payloadString(value);
+  if (text === undefined || !text.trim())
     throw new LguError("INVALID_CERTIFICATE", `${field} is required.`);
-  const date = new Date(value);
+  const date = new Date(text);
   if (Number.isNaN(date.getTime()))
     throw new LguError("INVALID_CERTIFICATE", `${field} must be a valid date.`);
   return date;
@@ -168,13 +201,13 @@ function parsedCertificateDate(value: unknown, field: string): Date {
 
 function normalizeCertificate(input: LguBusinessRegistrationCredentialInput, now: Date) {
   const issuingAgency = normalizedRequiredString(
-    input.issuingAgency,
+    payloadString(input.issuingAgency),
     "INVALID_CERTIFICATE",
     "Issuing agency",
     40,
   ).toLocaleUpperCase("en-PH");
   const status = normalizedRequiredString(
-    input.status,
+    payloadString(input.status),
     "INVALID_CERTIFICATE",
     "Certificate status",
     20,
@@ -196,7 +229,7 @@ function normalizeCertificate(input: LguBusinessRegistrationCredentialInput, now
 
   return {
     certificateNumber: normalizedRequiredString(
-      input.certificateNumber,
+      payloadString(input.certificateNumber),
       "INVALID_CERTIFICATE",
       "Certificate number",
       40,
@@ -204,19 +237,19 @@ function normalizeCertificate(input: LguBusinessRegistrationCredentialInput, now
     issuingAgency: "DTI-BNRS" as const,
     status: "REGISTERED" as const,
     businessName: normalizedRequiredString(
-      input.businessName,
+      payloadString(input.businessName),
       "INVALID_CERTIFICATE",
       "Business name",
       240,
     ),
     ownerName: normalizedRequiredString(
-      input.ownerName,
+      payloadString(input.ownerName),
       "INVALID_CERTIFICATE",
       "Certificate owner name",
       240,
     ),
     descriptor: normalizedRequiredString(
-      input.descriptor,
+      payloadString(input.descriptor),
       "INVALID_CERTIFICATE",
       "Business descriptor",
       240,
@@ -246,17 +279,23 @@ function certificateFromRecord(
 }
 
 function businessAddressFromRecord(application: LguApplicationRecord): LguBusinessAddressInput {
-  return {
+  const address: LguBusinessAddressInput = {
     addressLine1: application.businessAddressLine1,
-    ...(application.businessAddressLine2 === null
-      ? {}
-      : { addressLine2: application.businessAddressLine2 }),
     barangay: application.businessBarangay,
     cityMunicipality: application.city,
     province: application.businessProvince,
     region: application.businessRegion,
     postalCode: application.businessPostalCode,
   };
+  if (application.businessAddressLine2 !== null)
+    address.addressLine2 = application.businessAddressLine2;
+  return address;
+}
+
+function projectApplicant(applicant: LguApplicantInformationRecord): LguApplicantInformationInput {
+  const projected: LguApplicantInformationInput = { ownerName: applicant.ownerName };
+  if (applicant.tin !== undefined) projected.tin = applicant.tin;
+  return projected;
 }
 
 function projectIssuedDocuments(
@@ -274,17 +313,17 @@ function projectIssuedDocuments(
     payment.status !== "PAID"
   )
     return null;
-  const commonDocumentFields = {
+  const commonDocumentFields: LguIssuedDocumentFields = {
     issuingLgu: application.city,
     bnrsCertificateNumber: application.certificateNumber,
     businessName: application.certificateBusinessName,
     ownerName: applicant.ownerName,
-    ...(applicant.tin === undefined ? {} : { tin: applicant.tin }),
     businessActivity: application.certificateDescriptor,
     businessAddress: businessAddressFromRecord(application),
     issuedAt: application.documentsIssuedAt.toISOString(),
     validUntil: application.documentsValidUntil.toISOString(),
   };
+  if (applicant.tin !== undefined) commonDocumentFields.tin = applicant.tin;
   return {
     applicationId: application.id,
     businessPermit: {
@@ -377,10 +416,7 @@ export function createLguService(options: LguServiceOptions) {
       applicationId: application.id,
       state: application.state,
       city: application.city,
-      applicant: {
-        ownerName: resolvedApplicant.ownerName,
-        ...(resolvedApplicant.tin === undefined ? {} : { tin: resolvedApplicant.tin }),
-      },
+      applicant: projectApplicant(resolvedApplicant),
       certificate: certificateFromRecord(application),
       fee: getLguPaymentQuote(),
       payment: paymentSummary(payment),
