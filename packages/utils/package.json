@@ -33,7 +33,7 @@
   },
   "devDependencies": {
     "@total-typescript/tsconfig": "1.0.4",
-    "@types/node": "^20",
+    "@types/node": "^24",
     "typescript": "7.0.2"
   }
 }
