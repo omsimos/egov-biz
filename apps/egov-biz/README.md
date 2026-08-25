@@ -78,7 +78,7 @@ releasing:
 
 ```sh
 turso db create egov-biz
-bun --filter egov-biz run db:migrate
+bun --filter egov-biz db:migrate
 ```
 
 Provision and migrate the DX database separately with the migration command in

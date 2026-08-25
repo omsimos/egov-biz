@@ -97,12 +97,12 @@ artifacts, and remote staging transactions are kept for inspection.
 
 ## Non-live checks
 
-The normal monorepo `test`, `lint`, `format:check`, and `check-types` tasks do not
+The normal monorepo `test`, `lint`, `format`, and `check-types` tasks do not
 run the stateful browser journey. They only validate this harness:
 
 ```bash
 bun --filter egov-stagehand-e2e test
 bun --filter egov-stagehand-e2e check-types
-bun --filter egov-stagehand-e2e lint
-bun --filter egov-stagehand-e2e format:check
+bun run lint
+bun run format
 ```

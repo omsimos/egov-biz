@@ -1,5 +1,5 @@
 {
-  "name": "hackathon-idea-fact-checker",
+  "name": "egov-biz-monorepo",
   "private": true,
   "workspaces": [
     "apps/*",
@@ -14,7 +14,7 @@
     "clean": "rm -rf node_modules .turbo apps/*/.next apps/*/dist apps/*/node_modules apps/*/.turbo packages/*/.next packages/*/dist packages/*/node_modules packages/*/.turbo",
     "debug:business": "bun run dev:business 2>&1 | tee \"/tmp/ebiz\"",
     "dev:business": "turbo run dev --filter=egov-biz",
-    "demo:reset-businesses": "bun --filter egov-biz run demo:reset-businesses",
+    "demo:reset-businesses": "bun --filter egov-biz demo:reset-businesses",
     "e2e:business": "turbo run e2e --filter=egov-stagehand-e2e",
     "format": "oxfmt --check",
     "format:fix": "oxfmt .",
