@@ -3,7 +3,7 @@
 # Build this file from the repository root:
 # docker build -f apps/egov-biz/Dockerfile -t egov-biz .
 
-FROM oven/bun:1.3.14-slim AS dependencies
+FROM oven/bun:1.4.0-slim AS dependencies
 
 WORKDIR /repo
 

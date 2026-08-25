@@ -45,7 +45,7 @@ jobs:
         with:
           # Keep in step with "packageManager" in the root package.json and the
           # base image in apps/egov-biz/Dockerfile.
-          bun-version: 1.3.14
+          bun-version: 1.4.0
 
       - name: Cache Bun install
         uses: actions/cache@v6
@@ -99,7 +99,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.14
+          bun-version: 1.4.0
 
       - name: Cache Bun install
         uses: actions/cache@v6

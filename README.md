@@ -45,12 +45,12 @@ the whole repo in one process rather than per package.
 
 ## Prerequisites
 
-| Requirement                   | Version                 | Needed for                                                                           |
-| ----------------------------- | ----------------------- | ------------------------------------------------------------------------------------ |
-| [Bun](https://bun.sh)         | 1.3+ (repo pins 1.3.14) | Everything. It is the package manager and the test runner                            |
-| [Node.js](https://nodejs.org) | 20.12+                  | The E2E suite only, which uses `--env-file-if-exists`                                |
-| Docker                        | any recent              | Local Redis, through `infra:up`                                                      |
-| eGov partner credentials      |                         | `EGOVSSO_PARTNER_CODE` and `EGOVSSO_PARTNER_SECRET`, from the eGovPH partner program |
+| Requirement                   | Version                | Needed for                                                                           |
+| ----------------------------- | ---------------------- | ------------------------------------------------------------------------------------ |
+| [Bun](https://bun.sh)         | 1.4+ (repo pins 1.4.0) | Everything. It is the package manager and the test runner                            |
+| [Node.js](https://nodejs.org) | 24                     | The E2E suite only, which uses `--env-file-if-exists`                                |
+| Docker                        | any recent             | Local Redis, through `infra:up`                                                      |
+| eGov partner credentials      |                        | `EGOVSSO_PARTNER_CODE` and `EGOVSSO_PARTNER_SECRET`, from the eGovPH partner program |
 
 A [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) key is optional, and it is the only
 AI credential needed: the gateway also runs Exa web search through `gateway.tools.exaSearch`,
