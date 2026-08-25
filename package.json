@@ -8,6 +8,7 @@
     "packages/transcript-scraper",
     "packages/utils"
   ],
+  "type": "module",
   "scripts": {
     "build": "turbo run build",
     "check-types": "turbo run check-types",
@@ -23,6 +24,7 @@
     "test": "turbo run test"
   },
   "devDependencies": {
+    "@oxlint/plugins": "1.80.0",
     "egov.js": "0.2.0",
     "lefthook": "2.1.10",
     "oxfmt": "0.65.0",
