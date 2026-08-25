@@ -6,6 +6,13 @@ import { Stagehand, type Page, type Variables } from "@browserbasehq/stagehand";
 import { z } from "zod";
 import type { FlowConfig } from "./config.js";
 
+/** Everything in a scenario report is serialized with JSON.stringify. */
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+export type ReportDetails = Record<string, JsonValue>;
+
+/** The subset of Stagehand's act options this harness sets. */
+type ActOptions = { timeout: number; variables?: Variables };
+
 type Step = {
   name: string;
   status: "passed" | "failed";
@@ -125,10 +132,9 @@ export class ScenarioHarness {
     assert(this.stagehand, "Stagehand has not been initialized.");
     this.lastStep = name;
     console.log(`→ ${name}`);
-    const result = await this.stagehand.act(instruction, {
-      timeout: 90_000,
-      ...(variables ? { variables } : {}),
-    });
+    const actOptions: ActOptions = { timeout: 90_000 };
+    if (variables) actOptions.variables = variables;
+    const result = await this.stagehand.act(instruction, actOptions);
     assert.equal(
       result.success,
       true,
@@ -229,7 +235,7 @@ export class ScenarioHarness {
   async waitForText(description: string, expected: string | RegExp, timeout = 180_000) {
     return this.waitFor(
       description,
-      ({ text }) => (typeof expected === "string" ? text.includes(expected) : expected.test(text)),
+      ({ text }) => (expected instanceof RegExp ? expected.test(text) : text.includes(expected)),
       timeout,
     );
   }
@@ -237,7 +243,7 @@ export class ScenarioHarness {
   async expectBody(expected: string | RegExp, message: string) {
     const text = await this.bodyText();
     assert(
-      typeof expected === "string" ? text.includes(expected) : expected.test(text),
+      expected instanceof RegExp ? expected.test(text) : text.includes(expected),
       `${message}\nCurrent page text:\n${normalizeText(text).slice(-1_500)}`,
     );
   }
@@ -245,7 +251,7 @@ export class ScenarioHarness {
   async expectBodyNot(expected: string | RegExp, message: string) {
     const text = await this.bodyText();
     assert(
-      typeof expected === "string" ? !text.includes(expected) : !expected.test(text),
+      expected instanceof RegExp ? !expected.test(text) : !text.includes(expected),
       `${message}\nCurrent page text:\n${normalizeText(text).slice(-1_500)}`,
     );
   }
@@ -389,7 +395,7 @@ export class ScenarioHarness {
     await this.clickControl("submit registration idea", "[aria-label='Continue']:not(:disabled)");
   }
 
-  async writeReport(status: "passed" | "failed", details: Record<string, unknown> = {}) {
+  async writeReport(status: "passed" | "failed", details: ReportDetails = {}) {
     const metrics = this.stagehand ? await this.stagehand.metrics : undefined;
     await writeFile(
       path.join(this.artifactDirectory, "report.json"),
@@ -412,6 +418,7 @@ export class ScenarioHarness {
     );
   }
 
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters
   async recordFailure(error: unknown) {
     const message = error instanceof Error ? error.stack || error.message : String(error);
     this.steps.push({
@@ -432,7 +439,7 @@ export class ScenarioHarness {
 
 export async function runScenario(
   options: ScenarioOptions,
-  execute: (flow: ScenarioHarness) => Promise<Record<string, unknown> | void>,
+  execute: (flow: ScenarioHarness) => Promise<ReportDetails | void>,
 ) {
   const flow = new ScenarioHarness(options);
   try {
