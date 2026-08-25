@@ -16,8 +16,7 @@ export async function GET(request: Request) {
   const session = await readSession(request);
   if (!session) return new Response(null, { status: 401 });
 
-  const source =
-    typeof session.rawProfile.photo === "string" ? session.rawProfile.photo.trim() : "";
+  const source = session.rawProfile.photo?.trim() ?? "";
   if (!source) return new Response(null, { status: 404 });
 
   const dataImage = dataImagePattern.exec(source);

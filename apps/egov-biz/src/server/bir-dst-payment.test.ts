@@ -31,6 +31,8 @@ describe("verifyBirDstProviderTransaction", () => {
       throw new Error("Expected the altered payment to be rejected.");
     } catch (error) {
       expect(error).toBeInstanceOf(BirDstPaymentError);
+      // SAFETY: the expectation above already asserted the instance type, and it
+      // throws on failure, so this line is only reached for a BirDstPaymentError.
       expect((error as BirDstPaymentError).code).toBe("PAYMENT_MISMATCH");
     }
   });

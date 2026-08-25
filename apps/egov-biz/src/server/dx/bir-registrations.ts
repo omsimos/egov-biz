@@ -37,6 +37,9 @@ export type FinalizeBirSoleProprietorRegistrationInput = {
 function jsonArray<T>(value: string): T[] {
   try {
     const parsed = JSON.parse(value);
+    // SAFETY: each caller below passes the element type of the column it reads,
+    // and `upsertRegisteredBusiness` in this module is the only writer of those
+    // columns — it stores `JSON.stringify` of exactly those arrays.
     return Array.isArray(parsed) ? (parsed as T[]) : [];
   } catch {
     return [];

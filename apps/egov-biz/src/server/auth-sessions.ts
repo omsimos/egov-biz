@@ -7,6 +7,23 @@ export type StoredAuthSession = {
   rawProfile: EgovSsoCitizenProfile;
 };
 
+/**
+ * Decode a persisted session row. Every `EgovSsoCitizenProfile` field is
+ * optional, so the only thing a stored profile has to be is a JSON object;
+ * anything else is a corrupt row and is reported as such by returning `null`.
+ */
+function parseStoredProfile(rawProfileJson: string): EgovSsoCitizenProfile | null {
+  const parsed: unknown = JSON.parse(rawProfileJson);
+  // `JSON.parse` only ever produces this realm's objects and arrays, so
+  // `instanceof Object` rejects exactly the JSON primitives (including `null`).
+  if (!(parsed instanceof Object) || Array.isArray(parsed)) return null;
+  // SAFETY: `parsed` is a non-array JSON object, and every field of
+  // `EgovSsoCitizenProfile` is optional, so any such object inhabits the type.
+  // `storeAuthSession` below is the only writer of this column and stores the
+  // eGov SSO profile verbatim.
+  return parsed as EgovSsoCitizenProfile;
+}
+
 export async function storeAuthSession(
   sessionId: string,
   rawProfile: EgovSsoCitizenProfile,
@@ -35,8 +52,8 @@ export async function readStoredAuthSession(
   if (!row) return undefined;
 
   try {
-    const rawProfile = JSON.parse(row.rawProfileJson) as EgovSsoCitizenProfile;
-    if (!rawProfile || typeof rawProfile !== "object" || Array.isArray(rawProfile)) {
+    const rawProfile = parseStoredProfile(row.rawProfileJson);
+    if (!rawProfile) {
       await deleteStoredAuthSession(sessionId);
       return undefined;
     }

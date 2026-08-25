@@ -203,8 +203,12 @@ export async function dispatchSmsOnce<Output>(
 ): Promise<Output> {
   if (!(await repository.reserve(key))) {
     const existing = await repository.read(key);
-    if (existing?.status === "accepted" && existing.outputJson)
+    if (existing?.status === "accepted" && existing.outputJson) {
+      // SAFETY: an `accepted` row for this key was written a few lines below by
+      // `repository.accept(key, JSON.stringify(output))`, from the `send()`
+      // result of the earlier call for this same tool and user message.
       return JSON.parse(existing.outputJson) as Output;
+    }
     if (existing?.status === "pending") throw new SmsDispatchUncertainError();
     throw new Error("This SMS dispatch already failed; send a new message to retry");
   }

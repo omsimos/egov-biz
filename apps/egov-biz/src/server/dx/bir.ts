@@ -2,6 +2,9 @@ import { resolve } from "node:path";
 import { createBirFormService, type BirFormService } from "@omsimos/dx/bir";
 import { createFileStorage } from "@omsimos/utils/files";
 
+// SAFETY: the added slot is optional, so this view claims nothing about
+// `globalThis` that is not already true — reading `__egovBizBir` before the
+// first assignment yields `undefined`. This module is its only writer.
 const globalCache = globalThis as typeof globalThis & {
   __egovBizBir?: BirFormService;
 };

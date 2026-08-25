@@ -201,11 +201,15 @@ export function PreviewStage() {
   const [screen, setScreenState] = useState<PreviewScreen>("home");
   useEffect(() => {
     const hash = window.location.hash.slice(1);
+    // Looking the fragment up in `screens` rather than testing membership hands
+    // back the matching literal, so the screen it selects is a PreviewScreen by
+    // construction.
+    const requested = screens.find((candidate) => candidate === hash);
     // The deep link (#login, #cards) lives in the URL, which is only readable
     // after hydration; picking it during render would diverge from the server
     // markup, so this stays an effect that syncs React with the address bar.
     // oxlint-disable-next-line react/set-state-in-effect
-    if ((screens as readonly string[]).includes(hash)) setScreenState(hash as PreviewScreen);
+    if (requested) setScreenState(requested);
   }, []);
   // State, not a ref: DialogContent reads it during render to pick its portal
   // container, so the frame mounting has to cause a re-render.

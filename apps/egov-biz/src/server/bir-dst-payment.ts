@@ -1,5 +1,6 @@
 import { createEgovPayClient } from "@omsimos/dx";
 import { createClient, type EgovPayTransaction } from "egov.js";
+import { z } from "zod";
 import { egovPayBaseUrl } from "@/lib/payment-urls";
 import {
   createPayment,
@@ -18,6 +19,13 @@ type BirDstPaymentReference = {
   artifactId: string;
   checkoutUrl: string;
 };
+
+// The reference column is free-form provider metadata, so decode it rather than
+// trusting that every stored row was written by `encodeReference` below.
+const birDstPaymentReferenceSchema = z.object({
+  artifactId: z.string(),
+  checkoutUrl: z.string(),
+});
 
 export class BirDstPaymentError extends Error {
   constructor(
@@ -60,10 +68,8 @@ function encodeReference(reference: BirDstPaymentReference) {
 function decodeReference(value: string | null): BirDstPaymentReference | null {
   if (!value) return null;
   try {
-    const parsed = JSON.parse(value) as Partial<BirDstPaymentReference>;
-    return typeof parsed.artifactId === "string" && typeof parsed.checkoutUrl === "string"
-      ? { artifactId: parsed.artifactId, checkoutUrl: parsed.checkoutUrl }
-      : null;
+    const parsed = birDstPaymentReferenceSchema.safeParse(JSON.parse(value));
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }

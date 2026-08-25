@@ -31,7 +31,7 @@ type LoginResponse = { authenticated: true; profile: CitizenProfile } | { error:
 type LoginStep = "email" | "otp" | "mpin";
 
 const OTP_RESEND_SECONDS = 180;
-const stepNumber: Record<LoginStep, number> = { email: 1, mpin: 3, otp: 2 };
+const stepNumber = { email: 1, mpin: 3, otp: 2 } satisfies Record<LoginStep, number>;
 
 function digitsOnly(value: string) {
   return value.replace(/\D/g, "").slice(0, 6);
@@ -74,6 +74,9 @@ async function exchangeForSession(exchangeCode: string) {
     headers: { "Content-Type": "application/json" },
     method: "POST",
   });
+  // SAFETY: the body comes from this app's own `/api/auth/egov/exchange` route,
+  // which answers with `{ authenticated, profile }` or `{ error }` — the two
+  // members of `LoginResponse`. The check below discriminates them.
   const body = (await response.json()) as LoginResponse;
   if (!response.ok || "error" in body) {
     throw new Error("error" in body ? body.error : "Authentication failed.");
