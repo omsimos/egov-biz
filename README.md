@@ -1,97 +1,232 @@
 # egov-scripts
 
-Monorepo for **Omsimos**' eGov Hackathon work: products built on the standalone
-[`egov.js`](https://github.com/omsimos/egov.js) SDK plus shared data, DX, and
-transcript tooling.
+Monorepo for [Omsimos](https://github.com/omsimos)' eGov Hackathon work: an agentic
+business-registration assistant for the Philippines, plus the shared packages it runs on.
+Everything here builds on [`egov.js`](https://github.com/omsimos/egov.js), a typed SDK for
+the eGovPH partner services that is developed and versioned separately.
 
-The flagship product is **`rag-hor`**, a fact-checked view of Philippine congressional
-hearings: long-form hearing videos are transcribed with timestamps, refined, and handed
-to a multi-agent RAG pipeline that grounds every claim in credible government data
-(legislative records, jurisprudence, and the national budget) and returns each as
-`claim → verdict → cited source → backing excerpt`. The eGov foundation is
-product-agnostic — other ideas can build on the same APIs.
+The product is **`apps/egov-agentic-biz`**. A citizen describes the business they want to
+open, and the assistant walks them through registration end to end: a DTI business name
+through BNRS, a combined LGU business permit and barangay clearance, and BIR Forms 1901 and
+1905 as filled PDFs. Payments run through eGovPay hosted checkout. Everything the assistant
+asserts comes from an authenticated eGov call or a record it wrote itself.
 
-- **eGov API architecture & reference (shared foundation):** [`docs/architecture.md`](./docs/architecture.md)
-- **Hearing project — concept, feasibility & impact:** [`apps/rag-hor/docs/research-paper.md`](./apps/rag-hor/docs/research-paper.md)
-- **Hearing project — product architecture:** [`apps/rag-hor/docs/architecture.md`](./apps/rag-hor/docs/architecture.md)
+> [!WARNING]
+> Base URLs in `.env.sample` point at hackathon and staging hosts (`hackathon-*.e.gov.ph`,
+> `*.oueg.info`). This is prototype work against test infrastructure, not a production
+> government service. Point it at production endpoints only with the corresponding
+> credentials and approval.
 
 ## Layout
 
 ```
 egov-scripts/
 ├── apps/
-│   ├── egov-agentic-biz/   # Agentic business-registration assistant
-│   └── rag-hor/            # Next.js RAG agent for House hearings
+│   ├── egov-agentic-biz/    # The assistant. Next.js 16, React 19, AI SDK 7
+│   └── egov-stagehand-e2e/  # Browser E2E suite driving the four registration routes
 ├── packages/
-│   ├── db/                 # Shared database package
-│   ├── dx/                 # BNRS, LGU, and BIR business-registration flows
-│   └── transcript-scraper/ # YouTube timestamped-transcript extractor
-├── docs/                   # eGov API architecture & reference (shared)
-├── turbo.json              # Turborepo task graph
-└── .env.sample             # Service base URLs + credential slots
+│   ├── db/                  # Shared Turso/libSQL persistence for DX (Drizzle)
+│   ├── dx/                  # BNRS, LGU, and BIR registration flows
+│   ├── utils/               # BIR PDF generation and the private artifact store
+│   └── transcript-scraper/  # Dependency-free YouTube transcript extractor
+├── docs/architecture.md     # eGov API architecture and reference
+├── scripts/                 # One-off service probes (eMessage, eGovPay)
+├── .oxlintrc.json           # Lint config, repo-wide
+├── .oxfmtrc.json            # Format config, repo-wide
+└── .env.sample              # Every credential slot both apps read
 ```
 
-Tooling: **Bun** workspaces + **Turborepo**, with `oxfmt`/`oxlint` for formatting and
-linting. Both run as Turborepo [root tasks](https://turborepo.dev/docs/guides/tools/oxc)
-(`turbo run //#lint`, `turbo run //#format`) over the whole repo rather than per package,
-configured in `.oxlintrc.json` and `.oxfmtrc.json`.
+Bun workspaces and Turborepo, with [oxc](https://oxc.rs) for linting and formatting. `oxlint`
+and `oxfmt` run as Turborepo [root tasks](https://turborepo.dev/docs/guides/tools/oxc) over
+the whole repo in one process rather than per package.
+
+`docs/architecture.md` predates the removal of an earlier app and describes a tree that no
+longer matches this one. Read it for the eGov service reference, not the layout.
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) 1.3+
-- Docker (for `rag-hor` infrastructure: Qdrant + Redis)
-- eGov hackathon credentials (see `.env.sample`) for the SDK, and a Vercel AI Gateway key for `rag-hor`
+| Requirement                   | Version                 | Needed for                                                                           |
+| ----------------------------- | ----------------------- | ------------------------------------------------------------------------------------ |
+| [Bun](https://bun.sh)         | 1.3+ (repo pins 1.3.14) | Everything. It is the package manager and the test runner                            |
+| [Node.js](https://nodejs.org) | 20.12+                  | The E2E suite only, which uses `--env-file-if-exists`                                |
+| Docker                        | any recent              | Local Redis, through `infra:up`                                                      |
+| eGov partner credentials      |                         | `EGOVSSO_PARTNER_CODE` and `EGOVSSO_PARTNER_SECRET`, from the eGovPH partner program |
 
-## Getting started
+A [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) key is optional. Without one the
+assistant falls back to deterministic local questions and the registration flow still
+completes.
+
+## Quick start
 
 ```bash
 bun install
-cp .env.sample .env      # fill in the eGov credentials you need
+cp .env.sample .env                            # fill in the two EGOVSSO_PARTNER_* values
+bun --filter egov-agentic-biz run infra:up     # Redis on 127.0.0.1:6380
+bun run dev:business                           # http://localhost:3000
 ```
 
-Root scripts (`lint` and `format` invoke oxc directly; the rest fan out through Turborepo):
+The app database needs no setup. `TURSO_DATABASE_URL` defaults to a local SQLite file that is
+created on demand, and the first query applies pending migrations.
 
-| Command                                 | What it does                      |
-| --------------------------------------- | --------------------------------- |
-| `bun run build`                         | Build all packages/apps           |
-| `bun run test`                          | Run every workspace's tests       |
-| `bun run lint` / `bun run lint:fix`     | Lint the repo (oxlint) / autofix  |
-| `bun run format` / `bun run format:fix` | Check formatting (oxfmt) / write  |
-| `bun run check-types`                   | Type-check all workspaces         |
-| `bun run dev:business`                  | Run the eGov Agentic Business app |
+The DX database is separate and is not migrated on demand. Initialize it once before using
+the registration flow:
+
+```bash
+bun --env-file=.env --filter @repo/db db:migrate
+```
+
+Signing in needs a real eGovPH account. On loopback there is a dev session at
+`/api/auth/dev-login` that skips it, which is also what the E2E suite uses.
+
+## Environment configuration
+
+Every value is server-side. None are exposed to the browser. `.env.sample` documents each one
+inline; this is the summary.
+
+| Group           | Variables                                                                                           | Required     | Without it                                                              |
+| --------------- | --------------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------- |
+| eGov SSO        | `EGOVSSO_BASE_URL`, `EGOVSSO_PARTNER_CODE`, `EGOVSSO_PARTNER_SECRET`, `EGOVSSO_SESSION_TTL_SECONDS` | Yes          | No sign-in. The loopback dev session still works                        |
+| AI              | `AI_GATEWAY_API_KEY`, `CHAT_MODEL`, `EXA_API_KEY`                                                   | No           | Deterministic local intake questions instead of generated ones          |
+| App database    | `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`                                                            | No           | Local SQLite file, migrated on first query                              |
+| DX database     | `DX_TURSO_DATABASE_URL`, `DX_TURSO_AUTH_TOKEN`                                                      | No           | `packages/db/data/egov-dx.sqlite`, migrated by hand                     |
+| Redis           | `REDIS_URL`                                                                                         | Yes          | Streams cannot resume after a browser reconnect                         |
+| eGovPay         | `EGOVPAY_BASE_URL`, `EGOVPAY_API_KEY`, `EGOVPAY_SETTLEMENT_TEMPLATE_UUID`, `APP_URL`                | For payments | Registration stops at the first fee                                     |
+| eGovPay, LGU    | `LGU_EGOVPAY_*`                                                                                     | No           | Reuses the `EGOVPAY_*` account                                          |
+| eGovPay, tunnel | `EGOVPAY_CALLBACK_URL`, `EGOVPAY_RETURN_URL`                                                        | No           | Both are derived from `APP_URL`                                         |
+| eMessage        | `EMESSAGE_BASE_URL`, `EMESSAGE_ACCESS_TOKEN`                                                        | No           | No SMS delivery                                                         |
+| Artifacts       | `R2_BASE_URL`, `R2_ACCESS_KEY`, `R2_SECRET_KEY`                                                     | No           | Generated PDFs go to `FILE_STORAGE_DIRECTORY`, default `data/artifacts` |
+| BIR templates   | `BIR_FORM_1901_TEMPLATE_PATH`, `BIR_FORM_1905_TEMPLATE_PATH`                                        | No           | Uses the bundled templates                                              |
+| E2E             | `OPENAI_API_KEY`, `STAGEHAND_MODEL`, `E2E_BASE_URL`, `E2E_HEADLESS`, `E2E_RUN_ID`                   | No           | Defaults suffice against a local app                                    |
+
+Two settings cause more trouble than the rest.
+
+**Redis must be a TCP URL.** On Upstash that is `REDIS_URL` (`rediss://`), never
+`KV_REST_API_URL`. The REST client cannot hold a pub/sub subscription, which
+`resumable-stream` requires. `src/lib/env.ts` rejects anything that is not `redis:` or
+`rediss:` up front instead of failing later at connect time.
+
+**The two databases are deliberately separate.** `@repo/db` ignores `TURSO_DATABASE_URL` and
+reads only `DX_TURSO_*`, so the DX package cannot reach the app database by accident.
+
+Deployment variables and where each comes from are in the
+[app README](./apps/egov-agentic-biz/README.md).
+
+## Scripts
+
+Run from the repository root. `lint` and `format` call oxc directly; the rest fan out through
+Turborepo.
+
+| Command                         | What it does                                          |
+| ------------------------------- | ----------------------------------------------------- |
+| `bun run dev:business`          | Start the assistant on port 3000                      |
+| `bun run build`                 | Build every package and app                           |
+| `bun run test`                  | Run every workspace's tests                           |
+| `bun run check-types`           | Type-check every workspace                            |
+| `bun run lint` / `lint:fix`     | Lint the repo with oxlint, or autofix                 |
+| `bun run format` / `format:fix` | Check formatting with oxfmt, or write it              |
+| `bun run e2e:business`          | Run the Stagehand E2E suite against a running app     |
+| `bun run demo:reset-businesses` | Clear demo business records                           |
+| `bun run clean`                 | Remove `node_modules`, build output, and Turbo caches |
+
+`bun run format` checks and `format:fix` writes, following the Turborepo oxc guide. That is
+the reverse of the usual convention, so it is easy to get backwards.
+
+Per-workspace scripts, including the database and Docker commands, live in each workspace's
+README.
 
 ## Workspaces
 
-### `apps/egov-agentic-biz` — agentic business registration
+### `apps/egov-agentic-biz`
 
-A Next.js assistant for guiding citizens through business registration using
-authenticated eGov data and generated government-form artifacts.
+The assistant. Next.js 16 with React 19, AI SDK 7 for the agent loop, Drizzle over
+Turso/libSQL for durable chats, Redis pub/sub for resumable streams, and Cloudflare R2 for
+generated PDFs. Its [README](./apps/egov-agentic-biz/README.md) covers local setup, schema
+changes, the DX workflow boundary, and Vercel deployment.
 
-### `apps/rag-hor` — the product
+### `apps/egov-stagehand-e2e`
 
-A timestamp-grounded research agent for House of Representatives video hearings:
-an indexed hearing catalog plus a synchronized workspace (YouTube · live transcript ·
-persistent RAG agent). Next.js 16 + React 19, AI SDK 7 `ToolLoopAgent` (agent
-orchestration is moving to **eve** on Vercel), models on Vercel AI Gateway, Qdrant for
-timestamp-aware vectors, SQLite for metadata/conversations, Redis for resumable
-streams. Setup, ingestion, and agent details are in its own
-[README](./apps/rag-hor/README.md).
+Browser E2E driving four registration routes with
+[Stagehand](https://github.com/browserbase/stagehand): a sole-proprietor food business, a
+self-employed professional going direct to BIR, online retail, and vehicle rental. The full
+food journey covers sign-in, intake, three eGovPay payments, and the post-registration chats.
+Needs a running app. See its [README](./apps/egov-stagehand-e2e/README.md).
 
-### `egov.js` — eGovPH SDK
+### `packages/dx`
 
-The SDK is maintained in
-[`omsimos/egov.js`](https://github.com/omsimos/egov.js) and consumed from npm as
-[`egov.js`](https://www.npmjs.com/package/egov.js). It provides generated clients and
-types for nine eGovPH partner services from a canonical OpenAPI document.
+The registration flows: `@repo/dx/bnrs` for sole-proprietorship business names,
+`@repo/dx/lgu` for the combined business permit and barangay clearance, and `@repo/dx/bir`
+for owner-scoped Forms 1901 and 1905. BNRS and LGU state is local and database-backed, and
+payment is delegated to eGovPay. The [README](./packages/dx/README.md) documents the
+application state machine.
 
-### `packages/transcript-scraper` — transcript extraction
+### `packages/db`
 
-Dependency-free extraction of a YouTube video's public timestamped transcript to
-segments + SRT. See its [README](./packages/transcript-scraper/README.md).
+Turso/libSQL persistence for DX, through Drizzle. Defaults to its own local database so DX
+data stays separate from any application's, whatever the process working directory.
+[README](./packages/db/README.md).
 
-## Configuration
+### `packages/utils`
 
-All eGov service base URLs and credential slots are declared in `.env.sample`. App
-integration code fails fast when a required credential is missing. Base URLs currently target
-hackathon/staging hosts (`hackathon-*.e.gov.ph`, `*.oueg.info`); promote to production
-endpoints before any real deployment. Keep all credentials server-side.
+`@repo/utils/bir-form` generates the BIR Form 1901 and 1905 PDFs and validates their input
+schemas. `@repo/utils/files` is the private artifact store, R2 with a local directory
+fallback. [README](./packages/utils/README.md).
+
+### `packages/transcript-scraper`
+
+Extracts the public timestamped transcript from a YouTube video as segments and SRT. No
+dependencies. [README](./packages/transcript-scraper/README.md).
+
+## Dependencies
+
+`egov.js` is pinned at `0.1.0` and consumed from npm.
+
+`apps/egov-agentic-biz` runs `next` 16.2.10, `react` and `react-dom` 19.2.4, `ai` 7 with
+`@ai-sdk/react` 4 and `@ai-sdk/mcp` 2, `drizzle-orm` 0.45.2 over `@libsql/client`, `ioredis`
+with `resumable-stream`, `zod` 4, and Tailwind 4. The interface is `@base-ui/react`,
+`@phosphor-icons/react`, `motion`, `streamdown`, and `cuelume`.
+
+`packages/dx` depends on `@repo/db`, `@repo/utils`, `drizzle-orm`, and `egov.js`.
+`packages/db` on `drizzle-orm` and `@libsql/client`. `packages/utils` on
+`@aws-sdk/client-s3`, `pdf-lib`, and `zod`. `packages/transcript-scraper` has none.
+`apps/egov-stagehand-e2e` uses `@browserbasehq/stagehand` 3.7.1 and `zod`.
+
+Tooling is `turbo` 2.10.5, `oxlint` 1.74.0, `oxfmt` 0.59.0, and `drizzle-kit` 0.31.10. The
+packages build with TypeScript 7; the apps use TypeScript 5.
+
+## Testing
+
+```bash
+bun run test                      # every workspace
+bun run check-types               # every workspace
+bun --filter @repo/dx run test    # one workspace
+```
+
+The E2E suite is separate because it drives a real browser against a running app:
+
+```bash
+bun run dev:business              # in one terminal
+bun run e2e:business              # in another
+```
+
+CI runs build, types, lint, and test on pull requests, split into a workflow per area so an
+unrelated package cannot gate a change. Migrations apply on push to `main`.
+
+## Contributing
+
+Before opening a pull request:
+
+```bash
+bun run format:fix && bun run lint && bun run check-types && bun run test
+```
+
+`.oxlintrc.json` records why each disabled rule is off. Suppress a rule inline only with a
+comment explaining why, next to the `oxlint-disable-next-line`.
+
+Commits follow Conventional Commits, scoped by area where it helps (`fix(biz):`, `chore:`).
+
+## License
+
+[MIT](./LICENSE).
+
+`egov.js` is a separate project with its own license and release cycle. Nothing here is
+affiliated with or endorsed by the Philippine government.
