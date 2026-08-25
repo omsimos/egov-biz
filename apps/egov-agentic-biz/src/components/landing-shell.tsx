@@ -32,13 +32,7 @@ const HEADER_BUTTON = "font-extrabold text-base transition-colors duration-150 d
 
 // Two exports, not one shell: the header spans the stage while the copy is the
 // phone's flex sibling inside .landing-main.
-export function LandingHeader({
-  collapsed,
-  onStart,
-}: {
-  collapsed: boolean;
-  onStart: () => void;
-}) {
+export function LandingHeader({ collapsed, onStart }: { collapsed: boolean; onStart: () => void }) {
   return (
     // Above .landing-blobs (z-0, positioned) but below .landing-main (z-2), so
     // nothing here can paint over the phone at narrow widths.

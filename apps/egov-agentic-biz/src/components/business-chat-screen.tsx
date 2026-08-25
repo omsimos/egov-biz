@@ -42,7 +42,7 @@ import {
 import { DefaultChatTransport, getToolName, isToolUIPart } from "ai";
 import { play } from "cuelume";
 import { AnimatePresence, motion } from "motion/react";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 import { StatusBar } from "@/components/phone-chrome";
 import { Badge } from "@/components/ui/badge";
@@ -1836,11 +1836,12 @@ export function BusinessChatScreen({
   // A new batch starts at its first question, and the plan checklist yields:
   // the two share the header's progress row, and an open checklist would push
   // the question the citizen has to answer off the top of the thread.
+  const pendingToolCallId = pending?.part.toolCallId;
   useEffect(() => {
     setQuestionIndex(0);
     setQuestionValid(false);
-    if (pending) setPlanOpen(false);
-  }, [pending?.part.toolCallId]);
+    if (pendingToolCallId) setPlanOpen(false);
+  }, [pendingToolCallId]);
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [visibleMessages, pending, status]);
@@ -1930,25 +1931,28 @@ export function BusinessChatScreen({
       }
     })();
   }, [addToolOutput, busy, legacyBirConsentPending, pendingQuestion, sendMessage]);
-  const continueAfterPayment = async (serviceType: PaymentServiceType = "dti-business-name") => {
-    if (serviceType === "dti-business-name") setLocalPaymentStatus("paid");
-    setLocalPaymentStatuses((current) => ({ ...current, [serviceType]: "paid" }));
-    setContinuationError("");
-    try {
-      // Add a non-visual event message so useChat always starts a new request.
-      // Calling sendMessage() without a message can be ignored after a completed
-      // assistant turn by some chat-state transitions.
-      await sendMessage(
-        {
-          role: "user",
-          parts: [{ type: "data-paymentCompleted", data: { status: "paid", serviceType } }],
-        },
-        { body: { event: "payment-completed", paymentService: serviceType } },
-      );
-    } catch {
-      setContinuationError("Payment is saved, but I couldn’t start the next step automatically.");
-    }
-  };
+  const continueAfterPayment = useCallback(
+    async (serviceType: PaymentServiceType = "dti-business-name") => {
+      if (serviceType === "dti-business-name") setLocalPaymentStatus("paid");
+      setLocalPaymentStatuses((current) => ({ ...current, [serviceType]: "paid" }));
+      setContinuationError("");
+      try {
+        // Add a non-visual event message so useChat always starts a new request.
+        // Calling sendMessage() without a message can be ignored after a completed
+        // assistant turn by some chat-state transitions.
+        await sendMessage(
+          {
+            role: "user",
+            parts: [{ type: "data-paymentCompleted", data: { status: "paid", serviceType } }],
+          },
+          { body: { event: "payment-completed", paymentService: serviceType } },
+        );
+      } catch {
+        setContinuationError("Payment is saved, but I couldn’t start the next step automatically.");
+      }
+    },
+    [sendMessage],
+  );
 
   const automaticPaymentService =
     paymentService ??
@@ -1967,7 +1971,13 @@ export function BusinessChatScreen({
     if (continuedPayment.current === continuationKey) return;
     continuedPayment.current = continuationKey;
     void continueAfterPayment(automaticPaymentService);
-  }, [automaticPaymentService, conversation.id, paymentService, paymentStatus]);
+  }, [
+    automaticPaymentService,
+    continueAfterPayment,
+    conversation.id,
+    paymentService,
+    paymentStatus,
+  ]);
   useEffect(() => {
     if (
       management ||

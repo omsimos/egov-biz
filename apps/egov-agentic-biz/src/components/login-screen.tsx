@@ -467,6 +467,9 @@ export function LoginScreen({
         </section>
 
         {process.env.NODE_ENV !== "production" ? (
+          // A Route Handler rather than a page: it sets the session cookie and
+          // redirects, so it needs a document navigation that <Link> would not do.
+          // oxlint-disable-next-line next/no-html-link-for-pages
           <a
             className={cn(
               "relative z-[2] mt-4 flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-warning-border bg-warning-soft px-3 py-2.5 text-sm font-bold text-warning-ink no-underline",

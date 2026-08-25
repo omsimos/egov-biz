@@ -16,9 +16,10 @@
     "dev:business": "turbo run dev --filter=egov-agentic-biz",
     "demo:reset-businesses": "bun --filter egov-agentic-biz run demo:reset-businesses",
     "e2e:business": "turbo run e2e --filter=egov-stagehand-e2e",
-    "format": "turbo run format",
-    "format:check": "turbo run format:check",
-    "lint": "turbo run lint",
+    "format": "oxfmt --check",
+    "format:fix": "oxfmt .",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
     "test": "turbo run test"
   },
   "devDependencies": {

@@ -4,6 +4,9 @@ import { cn } from "@/lib/utils";
 
 function FieldLabel({ className, ...props }: React.ComponentProps<"label">) {
   return (
+    // A styling primitive, not a label site: every caller passes `htmlFor` and the
+    // control it points at, which the rule cannot see from the wrapper.
+    // oxlint-disable-next-line jsx-a11y/label-has-associated-control
     <label
       data-slot="field-label"
       className={cn("mb-1.5 block text-xs font-bold text-muted-foreground", className)}

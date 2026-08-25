@@ -10,9 +10,6 @@
     "generate:bir-form": "bun scripts/generate-bir-1901.ts --fixture",
     "generate:bir-form:complete": "bun scripts/generate-bir-1901.ts --complete-fixture",
     "check-types": "tsc --noEmit",
-    "format": "oxfmt src scripts drizzle.config.ts package.json tsconfig.json",
-    "format:check": "oxfmt --check src scripts drizzle.config.ts package.json tsconfig.json",
-    "lint": "oxlint src scripts drizzle.config.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "infra:up": "docker compose up -d",
@@ -26,7 +23,6 @@
     "db:reset:data": "bun --env-file=../../.env --env-file=.env scripts/reset-data.ts"
   },
   "dependencies": {
-    "@ai-sdk/mcp": "^2.0.15",
     "@ai-sdk/react": "^4.0.35",
     "@base-ui/react": "^1.6.0",
     "@libsql/client": "^0.17.4",
@@ -58,9 +54,8 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "babel-plugin-react-compiler": "1.0.0",
     "drizzle-kit": "0.31.10",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.10",
     "tailwindcss": "^4.3.3",
     "typescript": "^5"
   },

@@ -25,9 +25,6 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "format": "oxfmt src test drizzle.config.ts README.md package.json tsconfig.json",
-    "format:check": "oxfmt --check src test drizzle.config.ts README.md package.json tsconfig.json",
-    "lint": "oxlint src test drizzle.config.ts",
     "test": "bun test"
   },
   "dependencies": {

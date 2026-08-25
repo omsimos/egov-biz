@@ -10,6 +10,7 @@ on:
       - "package.json"
       - "bun.lock"
       - "turbo.json"
+      - ".oxlintrc.json"
       - ".github/workflows/dx-db.yml"
   push:
     branches: [main]
@@ -19,6 +20,7 @@ on:
       - "package.json"
       - "bun.lock"
       - "turbo.json"
+      - ".oxlintrc.json"
       - ".github/workflows/dx-db.yml"
   # Lets a failed migration be retried without an empty commit.
   workflow_dispatch:
@@ -62,7 +64,7 @@ jobs:
         run: bunx turbo run check-types --filter=@repo/db --filter=@repo/dx
 
       - name: Lint
-        run: bunx turbo run lint --filter=@repo/db --filter=@repo/dx
+        run: bunx turbo run //#lint
 
       - name: Test
         run: bunx turbo run test --filter=@repo/db --filter=@repo/dx

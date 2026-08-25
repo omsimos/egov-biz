@@ -20,20 +20,17 @@
     "e2e": {
       "cache": false
     },
-    "format": {
-      "cache": false
-    },
-    "format:check": {
-      "dependsOn": ["transit"],
-      "outputs": []
-    },
-    "lint": {
-      "dependsOn": ["transit"],
-      "outputs": []
-    },
     "test": {
       "dependsOn": ["transit"],
       "outputs": []
+    },
+    "//#lint": {},
+    "//#lint:fix": {
+      "cache": false
+    },
+    "//#format": {},
+    "//#format:fix": {
+      "cache": false
     }
   }
 }

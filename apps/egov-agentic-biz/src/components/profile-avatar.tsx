@@ -23,7 +23,7 @@ export function ProfileAvatar({
 
   return (
     // The source is a same-origin, authenticated proxy for the eGov profile photo.
-    // eslint-disable-next-line @next/next/no-img-element
+    // oxlint-disable-next-line next/no-img-element
     <img
       alt={`${profile.fullName} profile`}
       className={className}
