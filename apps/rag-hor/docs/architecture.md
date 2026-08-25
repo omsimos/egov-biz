@@ -1,6 +1,6 @@
 # RAG-HOR — Product Architecture
 
-*The hearing fact-checking product, built on the shared eGov foundation.*
+_The hearing fact-checking product, built on the shared eGov foundation._
 
 - **Concept, feasibility & impact:** [`research-paper.md`](./research-paper.md)
 - **Shared eGov API/SDK reference:** [`../../../docs/architecture.md`](../../../docs/architecture.md)
@@ -94,7 +94,7 @@ stepping stone: today's tools become tomorrow's subagents.
 The product app is built and runnable today:
 
 - **Next.js 16 + React 19 + Tailwind 4**, Bun scripts, served via Portless at `https://rag-hor.localhost`.
-- **AI SDK 7** through **Vercel AI Gateway** (one `AI_GATEWAY_API_KEY` for both chat and embeddings). Defaults are deliberately cheap: chat `google/gemini-2.5-flash-lite`, embeddings `openai/text-embedding-3-small` (1,536-dim). eGov AI is **not** the inference layer — its catalog exposes neither embeddings nor AI SDK-compatible streamed tool calls, so it is a candidate *additional tool*, not the model backend.
+- **AI SDK 7** through **Vercel AI Gateway** (one `AI_GATEWAY_API_KEY` for both chat and embeddings). Defaults are deliberately cheap: chat `google/gemini-2.5-flash-lite`, embeddings `openai/text-embedding-3-small` (1,536-dim). eGov AI is **not** the inference layer — its catalog exposes neither embeddings nor AI SDK-compatible streamed tool calls, so it is a candidate _additional tool_, not the model backend.
 - **Qdrant** for timestamp-aware transcript vectors; **SQLite** (`better-sqlite3`) for hearing metadata, transcript segments, conversations, and AI SDK UI messages; **Redis** + `resumable-stream` for reconnectable SSE.
 
 **Ingestion pipeline** (`scripts/ingest.ts`, stages `FETCH → CHUNK → EMBED → STORE → READY`):
@@ -131,4 +131,4 @@ with transcript/web tools, and the synchronized workspace UI. Remaining work:
 2. **Government-data grounding** — the core of the fact-checking thesis, not yet wired: add BetterGov Open Congress, the Juris.ph MCP, and the Compass SDK so claims are cross-referenced against legislative/legal/budget records rather than only the hearing's own transcript.
 3. **eve migration + fact-checker** — move orchestration to eve (Vercel) and split the single `ToolLoopAgent` into the specialized subagents that route claims and aggregate verdicts (§2).
 4. **Views** — agenda calendar (schedule scraped from `congress.gov.ph/committees/committee-meetings`, joined to BetterGov committee data) and the legislative-data explorer (BetterGov API).
-5. **Productionization** — move off `hackathon-*`/`*.oueg.info` staging hosts; add eGov credit monitoring (`getTokenCredits`) and adapter-level retries for the undocumented endpoints (YouTube `get_panel`).
+5. **Productionization** — validate the configured eGov gateway contracts; add eGov credit monitoring (`getTokenCredits`) and adapter-level retries for the undocumented endpoints (YouTube `get_panel`).

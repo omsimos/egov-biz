@@ -58,17 +58,19 @@ against the same schema.
 
 ## Deploying to Vercel
 
-Set these in the project (all server-side):
+Set these in the project. Credentials stay server-side; the SSO base URL and
+partner code are also rendered to the browser to initialize login:
 
-| Variable                                        | Where it comes from                                                             |
-| ----------------------------------------------- | ------------------------------------------------------------------------------- |
-| `TURSO_DATABASE_URL`                            | `turso db show --url <database>`                                                |
-| `TURSO_AUTH_TOKEN`                              | `turso db tokens create <database>`                                             |
-| `DX_TURSO_DATABASE_URL`                         | URL for the separately provisioned DX database                                  |
-| `DX_TURSO_AUTH_TOKEN`                           | Token for the DX database                                                       |
-| `REDIS_URL`                                     | Upstash — the `rediss://` TCP URL                                               |
-| `R2_BASE_URL`, `R2_ACCESS_KEY`, `R2_SECRET_KEY` | Cloudflare R2                                                                   |
-| `EMESSAGE_BASE_URL`, `EMESSAGE_ACCESS_TOKEN`    | eMessage SMS provider                                                           |
+| Variable                                                                  | Where it comes from                                                                             |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `TURSO_DATABASE_URL`                                                      | `turso db show --url <database>`                                                                |
+| `TURSO_AUTH_TOKEN`                                                        | `turso db tokens create <database>`                                                             |
+| `DX_TURSO_DATABASE_URL`                                                   | URL for the separately provisioned DX database                                                  |
+| `DX_TURSO_AUTH_TOKEN`                                                     | Token for the DX database                                                                       |
+| `REDIS_URL`                                                               | Upstash — the `rediss://` TCP URL                                                               |
+| `R2_BASE_URL`, `R2_ACCESS_KEY`, `R2_SECRET_KEY`                           | Cloudflare R2                                                                                   |
+| `EGOVSSO_BASE_URL`, `EGOVSSO_PARTNER_CODE`, `EGOVSSO_PARTNER_SECRET`      | eGov SSO integration; `EGOVSSO_SESSION_TTL_SECONDS` optionally overrides the session TTL        |
+| `EMESSAGE_BASE_URL`, `EMESSAGE_ACCESS_TOKEN`                              | eMessage SMS provider                                                                           |
 | `EGOVPAY_BASE_URL`, `EGOVPAY_API_KEY`, `EGOVPAY_SETTLEMENT_TEMPLATE_UUID` | eGovPay checkout for BNRS and LGU; optional `LGU_EGOVPAY_*` values can override the LGU account |
 
 Create the database once, then run `bun run db:migrate` against it as part of

@@ -88,6 +88,6 @@ segments + SRT. See its [README](./packages/transcript-scraper/README.md).
 ## Configuration
 
 All eGov service base URLs and credential slots are declared in `.env.sample`. App
-integration code fails fast when a required credential is missing. Base URLs currently target
-hackathon/staging hosts (`hackathon-*.e.gov.ph`, `*.oueg.info`); promote to production
-endpoints before any real deployment. Keep all credentials server-side.
+integration code fails fast when a required credential is missing. Base URLs target the
+documented `platforms-api.e.gov.ph` service gateway and remain environment-configurable.
+Keep credentials server-side.

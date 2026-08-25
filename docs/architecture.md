@@ -61,19 +61,20 @@ the source of truth for **9 eGovPH services**.
 
 ### 3.1 Service inventory (from code + `.env.sample`)
 
-| Service                | Base URL (`.env.sample`)               | Auth (env)                                              | Implemented capability                                                                                                 | Example use                                      |
-| ---------------------- | -------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| **eGov AI**            | `egov-ai-core-ws.oueg.info`            | `EGOVAI_ACCESS_CODE` → short-lived bearer + **credits** | `ai_assistant`, `translator`, `document_extractor` (OCR), `speech_maker`, `laws_and_regulations`, `tourism`, `credits` | Text repair, translation, summarization, PDF OCR |
-| **eGov Compass**       | `dbm-ws.oueg.info`                     | `EGOVCOMPASS_API_KEY`                                   | SARO, NCA, SAAODB (records + dashboard), LGSF (records + dashboard)                                                    | Budget lookups / fact-checking                   |
-| **eMessage**           | `ws-message.e.gov.ph`                  | `EMESSAGE_ACCESS_TOKEN`                                 | `sendSms` (POST `/messaging/v1/sms/push`)                                                                              | SMS notifications                                |
-| **eGovChain**          | (EVM JSON-RPC)                         | none (public RPC)                                       | `eth_*` JSON-RPC: `blockNumber`, `chainId`, `getBalance`, `getLogs`, `call`, `sendRawTransaction`                      | Anchor/verify document or record hashes          |
-| **eReport**            | `stg-ereport-ws.oueg.info`             | `EREPORT_ACCESS_TOKEN`                                  | submit complaint (+OTP flow), list reports/types, region→barangay lookups                                              | Citizen reporting workflows                      |
-| **eGov SSO**           | `hackathon-sso.e.gov.ph`               | `EGOVSSO_PARTNER_CODE`/`SECRET`                         | OAuth-style citizen login → citizen profile                                                                            | Verified user accounts                           |
-| **eVerify**            | `hackathon-everify-api.e.gov.ph`       | `EVERIFY_CLIENT_ID`/`SECRET`/`PUBKEY`                   | identity verification, QR verify                                                                                       | PhilSys identity checks                          |
-| **eGovPay**            | `egovpay-pgi-ws-dev.oueg.info`         | `EGOVPAY_API_KEY`                                       | payments/settlement                                                                                                    | Government payments                              |
-| **eGov Face Liveness** | `hackathon-face-liveness-api.e.gov.ph` | `EGOVLIVENESS_API_KEY`                                  | biometric liveness sessions                                                                                            | Anti-spoofing during identity checks             |
+| Service                | Base URL env            | Auth (env)                                              | Implemented capability                                                                                                 | Example use                                      |
+| ---------------------- | ----------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| **eGov AI**            | `EGOVAI_BASE_URL`       | `EGOVAI_ACCESS_CODE` → short-lived bearer + **credits** | `ai_assistant`, `translator`, `document_extractor` (OCR), `speech_maker`, `laws_and_regulations`, `tourism`, `credits` | Text repair, translation, summarization, PDF OCR |
+| **eGov Compass**       | `EGOVCOMPASS_BASE_URL`  | `EGOVCOMPASS_API_KEY`                                   | SARO, NCA, SAAODB (records + dashboard), LGSF (records + dashboard)                                                    | Budget lookups / fact-checking                   |
+| **eMessage**           | `EMESSAGE_BASE_URL`     | `EMESSAGE_ACCESS_TOKEN`                                 | `sendSms` (POST `/messaging/v1/sms/push`)                                                                              | SMS notifications                                |
+| **eGovChain**          | `EGOVCHAIN_BASE_URL`    | `EGOVCHAIN_TOKEN` (gateway path)                        | `eth_*` JSON-RPC: `blockNumber`, `chainId`, `getBalance`, `getLogs`, `call`, `sendRawTransaction`                      | Anchor/verify document or record hashes          |
+| **eReport**            | `EREPORT_BASE_URL`      | `EREPORT_ACCESS_CODE` → short-lived bearer              | submit complaint (+OTP flow), list reports/types, region→barangay lookups                                              | Citizen reporting workflows                      |
+| **eGov SSO**           | `EGOVSSO_BASE_URL`      | `EGOVSSO_PARTNER_CODE`/`SECRET`                         | OAuth-style citizen login → citizen profile                                                                            | Verified user accounts                           |
+| **eVerify**            | `EVERIFY_BASE_URL`      | `EVERIFY_CLIENT_ID`/`SECRET`/`PUBKEY`                   | identity verification, QR verify                                                                                       | PhilSys identity checks                          |
+| **eGovPay**            | `EGOVPAY_BASE_URL`      | `EGOVPAY_API_KEY`                                       | payments/settlement                                                                                                    | Government payments                              |
+| **eGov Face Liveness** | `EGOVLIVENESS_BASE_URL` | `EGOVLIVENESS_API_KEY`                                  | biometric liveness sessions                                                                                            | Anti-spoofing during identity checks             |
 
-> Base URLs are **hackathon/staging** hosts (`hackathon-*.e.gov.ph`, `*.oueg.info`), not production. This must be accounted for before any real deployment.
+> Base URLs are supplied through environment variables. The checked-in sample targets the
+> documented `platforms-api.e.gov.ph` gateway.
 
 ### 3.2 eGov AI — the detail that matters most
 
@@ -94,7 +95,7 @@ The generated `egovAi` service implements a **credit-metered, token-based** API:
 
 ### 3.3 eGov Compass — authenticated budget data
 
-The generated `compass` service is an **authenticated partner client** (`dbm-ws.oueg.info`, `EGOVCOMPASS_API_KEY`) — distinct from, and stronger than, the public undocumented `compass-api.dbm.gov.ph`. It returns structured, typed budget data:
+The generated `compass` service is an **authenticated partner client** (`EGOVCOMPASS_BASE_URL`, `EGOVCOMPASS_API_KEY`) — distinct from, and stronger than, the public undocumented `compass-api.dbm.gov.ph`. It returns structured, typed budget data:
 
 - **SAAODB records + dashboard:** the full appropriations → allotments → obligations → disbursements cascade, with `unobligated`/`unreleased`, obligation/disbursement **rates**, expense-class breakdown (`PS`/`MOOE`/`CO`/`FINEX`), and top entities. Queryable by `reportYear`, `period` (`FY`/`Q1`–`Q4`), `sheetScope` (`agency`/`sucs`/`summary`), and entity.
 - **SARO** records (release orders, by dept/agency/expense-class/SARO number), **NCA** records (cash allocations), **LGSF** records + dashboard (local government support fund, by region/province/municipality/program).
