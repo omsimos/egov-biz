@@ -108,8 +108,8 @@ Two settings cause more trouble than the rest.
 
 **Redis must be a TCP URL.** On Upstash that is `REDIS_URL` (`rediss://`), never
 `KV_REST_API_URL`. The REST client cannot hold a pub/sub subscription, which
-`resumable-stream` requires. `src/lib/env.ts` rejects anything that is not `redis:` or
-`rediss:` up front instead of failing later at connect time.
+`resumable-stream` requires. `apps/egov-biz/src/lib/env.ts` rejects anything that is not
+`redis:` or `rediss:` up front instead of failing later at connect time.
 
 **The two databases are deliberately separate.** `@omsimos/db` ignores `TURSO_DATABASE_URL` and
 reads only `DX_TURSO_*`, so the DX package cannot reach the app database by accident.
