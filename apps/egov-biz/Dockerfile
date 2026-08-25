@@ -13,13 +13,15 @@ WORKDIR /repo
 COPY package.json bun.lock ./
 COPY apps/egov-biz/package.json apps/egov-biz/package.json
 COPY apps/egov-stagehand-e2e/package.json apps/egov-stagehand-e2e/package.json
-COPY apps/rag-hor/package.json apps/rag-hor/package.json
-COPY apps/rag-hor/packages/transcript-scraper/package.json \
-  apps/rag-hor/packages/transcript-scraper/package.json
 COPY packages/db/package.json packages/db/package.json
 COPY packages/dx/package.json packages/dx/package.json
 COPY packages/transcript-scraper/package.json packages/transcript-scraper/package.json
 COPY packages/utils/package.json packages/utils/package.json
+
+# lefthook's postinstall runs `lefthook install -f`, and .dockerignore keeps
+# .git out of the build context, so it would print a git fatal on every build.
+# Its postinstall no-ops when CI is set, which is accurate here anyway.
+ENV CI=true
 
 RUN bun install --frozen-lockfile
 
