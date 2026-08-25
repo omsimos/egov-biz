@@ -62,7 +62,7 @@ deterministic local questions and skips web search, and the registration flow st
 ```bash
 bun install
 cp .env.sample .env                            # fill in the two EGOVSSO_PARTNER_* values
-bun --filter egov-biz run infra:up             # Redis on 127.0.0.1:6380
+bun --filter egov-biz infra:up                 # Redis on 127.0.0.1:6380
 bun run dev:business                           # http://localhost:3000
 ```
 
@@ -187,7 +187,7 @@ dependencies. [README](./packages/transcript-scraper/README.md).
 ```bash
 bun run test                      # every workspace
 bun run check-types               # every workspace
-bun --filter @omsimos/dx run test # one workspace
+bun --filter @omsimos/dx test     # one workspace
 ```
 
 The E2E suite is separate because it drives a real browser against a running app:

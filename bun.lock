@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "hackathon-idea-fact-checker",
+      "name": "egov-biz-monorepo",
       "devDependencies": {
         "egov.js": "0.2.0",
         "oxfmt": "0.59.0",
