@@ -1,6 +1,6 @@
-import { createMCPClient } from "@ai-sdk/mcp";
-import { createGateway, generateObject, streamText } from "ai";
+import { createGateway, streamText } from "ai";
 import { z } from "zod";
+import { runExaSearch } from "@/lib/web-search";
 
 export const dynamic = "force-dynamic";
 
@@ -63,43 +63,24 @@ Make the update specific to the supplied business and latest answer. Use plain l
       };
 
       const searchTask = async () => {
-        let client: Awaited<ReturnType<typeof createMCPClient>> | null = null;
-        try {
-          const searchDecision = await generateObject({
-            model,
-            schema: z.object({ query: z.string().min(8).max(140) }),
-            system:
-              "Write one precise Exa web-search query for current official Philippine government evidence relevant to this business-registration step. Prefer .gov.ph sources. Return only the structured query.",
-            prompt: `Business: ${prompt}\nBusiness city: ${profileCity ?? "not confirmed"}\nLatest answer: ${latest ? `${latest.question}: ${latest.labels.join(", ")}` : "none"}\nKnown answers: ${answers.map((answer) => `${answer.question}: ${answer.labels.join(", ")}`).join("; ") || "none"}`,
-            abortSignal: request.signal,
-          });
-          const query = searchDecision.object.query.trim().slice(0, 140);
-          const id = crypto.randomUUID();
-          client = await createMCPClient({
-            transport: {
-              type: "http",
-              url: "https://mcp.exa.ai/mcp?tools=web_search_exa",
-              redirect: "follow",
-              ...(process.env.EXA_API_KEY
-                ? { headers: { "x-api-key": process.env.EXA_API_KEY } }
-                : {}),
-            },
-          });
-          send({ type: "tool_start", id, name: "web_search", query });
-          try {
-            const result = await client.callTool({
-              name: "web_search_exa",
-              arguments: { query, numResults: 5 },
-              options: { signal: request.signal, timeout: 8_000 },
-            });
-            send({ type: result.isError ? "tool_error" : "tool_complete", id, name: "web_search" });
-          } catch (error) {
-            send({ type: "tool_error", id, name: "web_search" });
-            throw error;
-          }
-        } finally {
-          await client?.close();
-        }
+        const id = crypto.randomUUID();
+        let started = false;
+        // The model picks the query as the tool input, so the separate
+        // generateObject round trip that used to choose it is gone.
+        const run = await runExaSearch({
+          gateway,
+          model,
+          system:
+            "Search once for current official Philippine government evidence relevant to this business-registration step. Prefer .gov.ph sources.",
+          prompt: `Business: ${prompt}\nBusiness city: ${profileCity ?? "not confirmed"}\nLatest answer: ${latest ? `${latest.question}: ${latest.labels.join(", ")}` : "none"}\nKnown answers: ${answers.map((answer) => `${answer.question}: ${answer.labels.join(", ")}`).join("; ") || "none"}`,
+          abortSignal: request.signal,
+          onQuery: (query) => {
+            started = true;
+            send({ type: "tool_start", id, name: "web_search", query });
+          },
+        });
+        if (!started) return;
+        send({ type: run.failed ? "tool_error" : "tool_complete", id, name: "web_search" });
       };
 
       try {

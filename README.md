@@ -52,9 +52,10 @@ the whole repo in one process rather than per package.
 | Docker                        | any recent              | Local Redis, through `infra:up`                                                      |
 | eGov partner credentials      |                         | `EGOVSSO_PARTNER_CODE` and `EGOVSSO_PARTNER_SECRET`, from the eGovPH partner program |
 
-A [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) key is optional. Without one the
-assistant falls back to deterministic local questions and the registration flow still
-completes.
+A [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) key is optional, and it is the only
+AI credential needed: the gateway also runs Exa web search through `gateway.tools.exaSearch`,
+so there is no separate Exa key. Without a gateway key the assistant falls back to
+deterministic local questions and skips web search, and the registration flow still completes.
 
 ## Quick start
 
@@ -88,7 +89,7 @@ summary.
 | Group           | Variables                                                                                           | Required     | Without it                                                              |
 | --------------- | --------------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------- |
 | eGov SSO        | `EGOVSSO_BASE_URL`, `EGOVSSO_PARTNER_CODE`, `EGOVSSO_PARTNER_SECRET`, `EGOVSSO_SESSION_TTL_SECONDS` | Yes          | No sign-in. The loopback dev session still works                        |
-| AI              | `AI_GATEWAY_API_KEY`, `CHAT_MODEL`, `EXA_API_KEY`                                                   | No           | Deterministic local intake questions instead of generated ones          |
+| AI              | `AI_GATEWAY_API_KEY`, `CHAT_MODEL`                                                                  | No           | Deterministic local intake questions, and no Exa web search             |
 | App database    | `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`                                                            | No           | Local SQLite file, migrated on first query                              |
 | DX database     | `DX_TURSO_DATABASE_URL`, `DX_TURSO_AUTH_TOKEN`                                                      | No           | `packages/db/data/egov-dx.sqlite`, migrated by hand                     |
 | Redis           | `REDIS_URL`                                                                                         | Yes          | Streams cannot resume after a browser reconnect                         |

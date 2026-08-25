@@ -15,7 +15,6 @@
       "name": "egov-agentic-biz",
       "version": "0.1.0",
       "dependencies": {
-        "@ai-sdk/mcp": "^2.0.15",
         "@ai-sdk/react": "^4.0.35",
         "@base-ui/react": "^1.6.0",
         "@libsql/client": "^0.17.4",

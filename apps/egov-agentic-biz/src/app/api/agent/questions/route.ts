@@ -1,6 +1,6 @@
-import { createMCPClient } from "@ai-sdk/mcp";
-import { createGateway, generateObject, generateText, stepCountIs } from "ai";
+import { createGateway, generateObject } from "ai";
 import { z } from "zod";
+import { officialSourcesFrom, runExaSearch } from "@/lib/web-search";
 import { fallbackQuestionFor, inferCategory, type RegulatoryFlag } from "@/lib/business-rules";
 import {
   buildRationale,
@@ -69,72 +69,23 @@ type RequestBody = {
 };
 
 async function researchWithExa(plan: GeneratedPlan, city: string) {
-  let client: Awaited<ReturnType<typeof createMCPClient>> | null = null;
-  try {
-    client = await createMCPClient({
-      transport: {
-        type: "http",
-        url: "https://mcp.exa.ai/mcp?tools=web_search_exa",
-        redirect: "follow",
-        ...(process.env.EXA_API_KEY ? { headers: { "x-api-key": process.env.EXA_API_KEY } } : {}),
-      },
-    });
-    const tools = await client.tools({
-      schemas: {
-        web_search_exa: {
-          inputSchema: z.object({
-            query: z.string(),
-            numResults: z.number().optional(),
-          }),
-        },
-      },
-    });
-    const result = await generateText({
-      model: createGateway({ apiKey: process.env.AI_GATEWAY_API_KEY }).chat(
-        process.env.CHAT_MODEL ?? "google/gemini-2.5-flash-lite",
-      ),
-      tools,
-      toolChoice: { type: "tool", toolName: "web_search_exa" },
-      stopWhen: stepCountIs(2),
-      timeout: { totalMs: 12_000, toolMs: 8_000 },
-      system:
-        "Use Exa to find current official Philippine government sources. Search only for evidence; never provide citizen-facing prose.",
-      prompt: `Find official Philippine government pages supporting the registration route for a ${plan.registrationType} ${plan.category} business in ${city}. Include BIR RDO jurisdiction and relevant DTI or SEC, LGU, FDA, BFP, LTO, or employer requirements. Prefer .gov.ph sources.`,
-    });
-    const strings: string[] = [];
-    const visit = (value: unknown) => {
-      if (typeof value === "string") strings.push(value);
-      else if (Array.isArray(value)) value.forEach(visit);
-      else if (value && typeof value === "object") Object.values(value).forEach(visit);
-    };
-    visit(result.steps.flatMap((step) => step.toolResults));
-    const citations: PlanCitation[] = [];
-    for (const text of strings) {
-      for (const match of text.matchAll(/Title:\s*(.+?)\nURL:\s*(https?:\/\/[^\s]+)/g)) {
-        const title = match[1].trim();
-        const url = match[2].trim();
-        if (!/\.gov\.ph\b|bir\.gov\.ph\b|bfp\.gov\.ph\b/i.test(url)) continue;
-        const host = new URL(url).hostname.replace(/^www\./, "");
-        citations.push({
-          id: `exa-${citations.length + 1}`,
-          title,
-          agency: host,
-          url,
-          note: "Official source found for this plan.",
-        });
-      }
-    }
-    return citations
-      .filter(
-        (citation, index) => citations.findIndex((item) => item.url === citation.url) === index,
-      )
-      .slice(0, 5);
-  } catch (error) {
-    console.warn("Exa MCP research unavailable", error);
-    return [] as PlanCitation[];
-  } finally {
-    await client?.close();
-  }
+  const gateway = createGateway({ apiKey: process.env.AI_GATEWAY_API_KEY });
+  const run = await runExaSearch({
+    gateway,
+    model: gateway.chat(process.env.CHAT_MODEL ?? "google/gemini-2.5-flash-lite"),
+    system:
+      "Search for current official Philippine government sources. Search only for evidence; never write citizen-facing prose.",
+    prompt: `Find official Philippine government pages supporting the registration route for a ${plan.registrationType} ${plan.category} business in ${city}. Include BIR RDO jurisdiction and relevant DTI or SEC, LGU, FDA, BFP, LTO, or employer requirements. Prefer .gov.ph sources.`,
+  });
+  // Exa returns typed results, so titles and URLs are read off the response
+  // rather than scraped out of a stringified tool payload.
+  return officialSourcesFrom(run.results, 5).map((source, index) => ({
+    id: `exa-${index + 1}`,
+    title: source.title,
+    agency: new URL(source.url).hostname.replace(/^www\./, ""),
+    url: source.url,
+    note: "Official source found for this plan.",
+  })) satisfies PlanCitation[];
 }
 
 function enrichPlan(

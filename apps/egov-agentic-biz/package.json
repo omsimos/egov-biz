@@ -23,7 +23,6 @@
     "db:reset:data": "bun --env-file=../../.env --env-file=.env scripts/reset-data.ts"
   },
   "dependencies": {
-    "@ai-sdk/mcp": "^2.0.15",
     "@ai-sdk/react": "^4.0.35",
     "@base-ui/react": "^1.6.0",
     "@libsql/client": "^0.17.4",

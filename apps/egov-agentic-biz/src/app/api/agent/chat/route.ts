@@ -1,4 +1,3 @@
-import { createMCPClient } from "@ai-sdk/mcp";
 import type { EgovSsoCitizenProfile } from "egov.js";
 import {
   BnrsError,
@@ -21,6 +20,7 @@ import {
   type UIMessageStreamWriter,
 } from "ai";
 import { z } from "zod";
+import { officialSourcesFrom, runExaSearch } from "@/lib/web-search";
 import { generateBirFormInputSchema } from "@repo/dx/bir";
 import { LguError, type LguApplicationStatus, type LguIssuedDocuments } from "@repo/dx/lgu";
 import { fallbackQuestionFor, inferCategory } from "@/lib/business-rules";
@@ -1299,36 +1299,16 @@ function deterministicNext(
 }
 
 async function searchOfficialWeb(query: string, numResults = 5) {
-  let client: Awaited<ReturnType<typeof createMCPClient>> | null = null;
-  try {
-    client = await createMCPClient({
-      transport: {
-        type: "http",
-        url: "https://mcp.exa.ai/mcp?tools=web_search_exa",
-        redirect: "follow",
-        ...(process.env.EXA_API_KEY ? { headers: { "x-api-key": process.env.EXA_API_KEY } } : {}),
-      },
-    });
-    const result = await client.callTool({
-      name: "web_search_exa",
-      arguments: { query, numResults },
-      options: { timeout: 8_000 },
-    });
-    const text = JSON.stringify(result);
-    const results: { title: string; url: string }[] = [];
-    for (const match of text.matchAll(
-      /Title:\\?n?([^"\\]+).*?URL:\\?n?(https?:\\?\/\\?\/[^"\\\s]+)/gi,
-    )) {
-      const url = match[2].replaceAll("\\/", "/");
-      if (/\.gov\.ph\b|bir\.gov\.ph\b|dti\.gov\.ph\b/i.test(url))
-        results.push({ title: match[1].trim(), url });
-    }
-    return { results: results.slice(0, 5) };
-  } catch {
-    return { results: [] };
-  } finally {
-    await client?.close();
-  }
+  const gateway = createGateway({ apiKey: process.env.AI_GATEWAY_API_KEY });
+  const run = await runExaSearch({
+    gateway,
+    model: gateway.chat(process.env.CHAT_MODEL ?? "google/gemini-2.5-flash-lite"),
+    system:
+      "Search official Philippine government sources. Pass the supplied query to exa_search unchanged; do not rewrite or expand it.",
+    prompt: query,
+    numResults,
+  });
+  return { results: officialSourcesFrom(run.results, 5) };
 }
 
 type EMessageToolsOptions = {
