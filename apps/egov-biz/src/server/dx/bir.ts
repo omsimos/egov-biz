@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
-import { createBirFormService, type BirFormService } from "@repo/dx/bir";
-import { createFileStorage } from "@repo/utils/files";
+import { createBirFormService, type BirFormService } from "@omsimos/dx/bir";
+import { createFileStorage } from "@omsimos/utils/files";
 
 const globalCache = globalThis as typeof globalThis & {
   __egovBizBir?: BirFormService;

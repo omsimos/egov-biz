@@ -1,5 +1,5 @@
 import { and, desc, eq } from "drizzle-orm";
-import type { BirFormArtifact } from "@repo/dx/bir";
+import type { BirFormArtifact } from "@omsimos/dx/bir";
 import { getDatabase, schema } from "@/server/db";
 
 export type LinkedBirArtifact = {

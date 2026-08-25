@@ -18,5 +18,5 @@ export type {
   Bir1905Data,
   Bir1905FormInput,
   GenerateBirFormInput,
-} from "@repo/utils/bir-form";
-export { generateBirFormInputSchema } from "@repo/utils/bir-form";
+} from "@omsimos/utils/bir-form";
+export { generateBirFormInputSchema } from "@omsimos/utils/bir-form";

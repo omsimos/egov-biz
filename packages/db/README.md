@@ -11,7 +11,7 @@ Override it with `DX_TURSO_DATABASE_URL`; a remote Turso database also requires
 accidentally connect to the app database.
 
 ```ts
-import { createDatabaseFromEnv } from "@repo/db";
+import { createDatabaseFromEnv } from "@omsimos/db";
 
 const database = createDatabaseFromEnv();
 
@@ -27,10 +27,10 @@ Add tables and relations to `src/schema.ts`, then use the package scripts from t
 root:
 
 ```sh
-bun --filter @repo/db db:generate
-bun --filter @repo/db db:migrate
-bun --filter @repo/db db:push
-bun --filter @repo/db db:studio
+bun --filter @omsimos/db db:generate
+bun --filter @omsimos/db db:migrate
+bun --filter @omsimos/db db:push
+bun --filter @omsimos/db db:studio
 ```
 
 The repository contains one fresh SQLite migration baseline in `packages/db/drizzle`. DX

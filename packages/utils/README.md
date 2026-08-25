@@ -2,16 +2,16 @@
 
 ## BIR form generation
 
-`@repo/utils/bir-form` contains the shared BIR Form 1901 and 1905 PDF
+`@omsimos/utils/bir-form` contains the shared BIR Form 1901 and 1905 PDF
 generators, their input schemas, and their rendering helpers. Applications use
-these through the owner-scoped `@repo/dx/bir` service.
+these through the owner-scoped `@omsimos/dx/bir` service.
 
 Both generators require an explicit PDF template path when rendering. The
 package does not bundle the PDF templates, so the runtime that owns the
 templates supplies their paths.
 
 ```ts
-import { generateBir1901Pdf } from "@repo/utils/bir-form";
+import { generateBir1901Pdf } from "@omsimos/utils/bir-form";
 
 const generated = await generateBir1901Pdf(
   {
@@ -26,7 +26,7 @@ const generated = await generateBir1901Pdf(
 
 ## File storage
 
-`@repo/utils/files` provides one private artifact-storage API with Cloudflare R2
+`@omsimos/utils/files` provides one private artifact-storage API with Cloudflare R2
 and local-filesystem backends. Cloudflare R2 exposes an S3-compatible API, so the
 R2 backend uses the AWS JavaScript S3 client with the configured R2 endpoint; it
 does not shell out to the AWS CLI.
@@ -41,7 +41,7 @@ Backend selection is automatic:
   to local disk.
 
 ```ts
-import { createFileStorage } from "@repo/utils/files";
+import { createFileStorage } from "@omsimos/utils/files";
 
 const files = createFileStorage();
 await files.put({

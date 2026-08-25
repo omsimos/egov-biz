@@ -22,7 +22,7 @@ isolated `packages/db/data/egov-dx.sqlite`; initialize it once before using the
 registration flow:
 
 ```sh
-bun --env-file=.env --filter @repo/db db:migrate
+bun --env-file=.env --filter @omsimos/db db:migrate
 ```
 
 ### Running against a local libSQL server
@@ -108,7 +108,7 @@ drizzle/      # generated migrations (committed)
 
 Repositories in `src/server/` (`conversations` and `auth-sessions`) are the only
 callers of the app's `getDatabase`. The server-only DX composition roots use
-`@repo/db` separately for BNRS and LGU workflows, while DX BIR uses the shared
+`@omsimos/db` separately for BNRS and LGU workflows, while DX BIR uses the shared
 private artifact store. All repositories are async — libSQL is a network client
 even when pointed at a file.
 
@@ -116,12 +116,12 @@ even when pointed at a file.
 
 The registration path now uses the shared DX modules end to end:
 
-1. `@repo/dx/bnrs` validates the application, owns payment state, and issues the
+1. `@omsimos/dx/bnrs` validates the application, owns payment state, and issues the
    business-name certificate.
-2. The freshly fetched certificate is passed to `@repo/dx/lgu`, which creates
+2. The freshly fetched certificate is passed to `@omsimos/dx/lgu`, which creates
    one ₱2,500 assessment and issues the business permit and barangay clearance
    together after payment.
-3. `@repo/dx/bir` generates and stores owner-scoped Forms 1901/1905.
+3. `@omsimos/dx/bir` generates and stores owner-scoped Forms 1901/1905.
 
 The app does not synthesize a BIR registration, books, invoices, tax calendar,
 sector permits, or employer registrations. Those remain pending until a DX

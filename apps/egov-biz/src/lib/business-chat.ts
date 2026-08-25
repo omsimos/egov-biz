@@ -1,5 +1,5 @@
 import type { UIMessage } from "ai";
-import type { GenerateBirFormInput } from "@repo/dx/bir";
+import type { GenerateBirFormInput } from "@omsimos/dx/bir";
 import type { BirFormArtifact } from "@/lib/bir-form/artifact";
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import type {

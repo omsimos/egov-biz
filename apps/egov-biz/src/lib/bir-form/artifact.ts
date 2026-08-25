@@ -4,7 +4,7 @@ import type {
   Bir1905Data,
   BirFormArtifact as DxBirFormArtifact,
   GenerateBirFormInput,
-} from "@repo/dx/bir";
+} from "@omsimos/dx/bir";
 import { mapEgovProfileToBir1901, mapEgovProfileToBir1905 } from "@/lib/bir-form/profile";
 import type { BusinessPlan } from "@/lib/questions";
 import { linkBirArtifact } from "@/server/dx/bir-artifacts";

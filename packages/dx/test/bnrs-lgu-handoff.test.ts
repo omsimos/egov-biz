@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { createDatabase, migrateDatabase } from "@repo/db";
+import { createDatabase, migrateDatabase } from "@omsimos/db";
 
 import { createBnrsService, createDrizzleBnrsRepository } from "../src/bnrs/index.js";
 import { createDrizzleLguRepository, createLguService } from "../src/lgu/index.js";

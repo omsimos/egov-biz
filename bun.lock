@@ -18,10 +18,10 @@
         "@ai-sdk/react": "^4.0.35",
         "@base-ui/react": "^1.6.0",
         "@libsql/client": "^0.17.4",
+        "@omsimos/db": "workspace:*",
+        "@omsimos/dx": "workspace:*",
+        "@omsimos/utils": "workspace:*",
         "@phosphor-icons/react": "^2.1.10",
-        "@repo/db": "workspace:*",
-        "@repo/dx": "workspace:*",
-        "@repo/utils": "workspace:*",
         "ai": "^7.0.32",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
@@ -66,7 +66,7 @@
       },
     },
     "packages/db": {
-      "name": "@repo/db",
+      "name": "@omsimos/db",
       "version": "0.0.0",
       "dependencies": {
         "@libsql/client": "^0.17.4",
@@ -79,11 +79,11 @@
       },
     },
     "packages/dx": {
-      "name": "@repo/dx",
+      "name": "@omsimos/dx",
       "version": "0.0.0",
       "dependencies": {
-        "@repo/db": "workspace:*",
-        "@repo/utils": "workspace:*",
+        "@omsimos/db": "workspace:*",
+        "@omsimos/utils": "workspace:*",
         "drizzle-orm": "0.45.2",
         "egov.js": "0.2.0",
       },
@@ -94,14 +94,14 @@
       },
     },
     "packages/transcript-scraper": {
-      "name": "@repo/transcript-scraper",
+      "name": "@omsimos/transcript-scraper",
       "version": "0.0.0",
       "devDependencies": {
         "typescript": "7.0.2",
       },
     },
     "packages/utils": {
-      "name": "@repo/utils",
+      "name": "@omsimos/utils",
       "version": "0.0.0",
       "dependencies": {
         "@aws-sdk/client-s3": "^3.1097.0",
@@ -464,6 +464,14 @@
 
     "@nodelib/fs.walk": ["@nodelib/fs.walk@1.2.8", "", { "dependencies": { "@nodelib/fs.scandir": "2.1.5", "fastq": "^1.6.0" } }, "sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg=="],
 
+    "@omsimos/db": ["@omsimos/db@workspace:packages/db"],
+
+    "@omsimos/dx": ["@omsimos/dx@workspace:packages/dx"],
+
+    "@omsimos/transcript-scraper": ["@omsimos/transcript-scraper@workspace:packages/transcript-scraper"],
+
+    "@omsimos/utils": ["@omsimos/utils@workspace:packages/utils"],
+
     "@opentelemetry/api": ["@opentelemetry/api@1.9.0", "", {}, "sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg=="],
 
     "@oxfmt/binding-android-arm-eabi": ["@oxfmt/binding-android-arm-eabi@0.59.0", "", { "os": "android", "cpu": "arm" }, "sha512-bNTnfbuG7sAwb2PakMNaDukx5kXeW9duXOBeWtTOiLz3fXz3q2DlWguufPZ+c2IHEVrRXHD+M4aUgEWm841LDA=="],
@@ -567,14 +575,6 @@
     "@protobufjs/pool": ["@protobufjs/pool@1.1.0", "", {}, "sha512-0kELaGSIDBKvcgS4zkjz1PeddatrjYcmMWOlAuAPwAeccUrPHdUqo/J6LiymHHEiJT5NrF1UVwxY14f+fy4WQw=="],
 
     "@protobufjs/utf8": ["@protobufjs/utf8@1.1.2", "", {}, "sha512-b1UQwcEZ4yCnMCD8DAL1VlbvBJE9/IX4FTIp7BG1xYpf29SLazLSrqUkj4w7Y5y7cCVP6E5tcqqcI0xemPkHug=="],
-
-    "@repo/db": ["@repo/db@workspace:packages/db"],
-
-    "@repo/dx": ["@repo/dx@workspace:packages/dx"],
-
-    "@repo/transcript-scraper": ["@repo/transcript-scraper@workspace:packages/transcript-scraper"],
-
-    "@repo/utils": ["@repo/utils@workspace:packages/utils"],
 
     "@sec-ant/readable-stream": ["@sec-ant/readable-stream@0.4.1", "", {}, "sha512-831qok9r2t8AlxLko40y2ebgSDhenenCatLVeW/uBtnHPyhHOvG0C7TvfgecV+wHzIm5KUICgzmVpWS+IMEAeg=="],
 

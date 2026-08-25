@@ -1,4 +1,4 @@
-import { createDatabaseFromEnv, type Database } from "@repo/db";
+import { createDatabaseFromEnv, type Database } from "@omsimos/db";
 
 const globalCache = globalThis as typeof globalThis & {
   __egovBizDxDatabase?: Database;

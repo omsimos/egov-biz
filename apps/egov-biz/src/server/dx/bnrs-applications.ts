@@ -5,7 +5,7 @@ import {
   type BnrsActor,
   type BnrsBusinessAddressInput,
   type BnrsBusinessScopeId,
-} from "@repo/dx/bnrs";
+} from "@omsimos/dx/bnrs";
 import {
   findConversationByBnrsApplication,
   getBnrsConversationLink,

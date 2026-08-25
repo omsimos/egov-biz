@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { createDatabase, migrateDatabase } from "@repo/db";
+import { createDatabase, migrateDatabase } from "@omsimos/db";
 
 import { getBnrs } from "@/server/dx/bnrs";
 

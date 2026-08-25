@@ -5,7 +5,7 @@ import {
   type BnrsCertificate,
   type BnrsBusinessAddressInput,
   type BnrsResidentialAddressPrefill,
-} from "@repo/dx/bnrs";
+} from "@omsimos/dx/bnrs";
 import {
   convertToModelMessages,
   createGateway,
@@ -21,8 +21,8 @@ import {
 } from "ai";
 import { z } from "zod";
 import { officialSourcesFrom, runExaSearch } from "@/lib/web-search";
-import { generateBirFormInputSchema } from "@repo/dx/bir";
-import { LguError, type LguApplicationStatus, type LguIssuedDocuments } from "@repo/dx/lgu";
+import { generateBirFormInputSchema } from "@omsimos/dx/bir";
+import { LguError, type LguApplicationStatus, type LguIssuedDocuments } from "@omsimos/dx/lgu";
 import { fallbackQuestionFor, inferCategory } from "@/lib/business-rules";
 import {
   fallbackBnrsDescriptorSuggestion,

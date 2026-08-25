@@ -1,5 +1,5 @@
-import type { Database } from "@repo/db";
-import { lguApplicantInformation, lguApplications, lguPayments } from "@repo/db/schema";
+import type { Database } from "@omsimos/db";
+import { lguApplicantInformation, lguApplications, lguPayments } from "@omsimos/db/schema";
 import { and, desc, eq, inArray, ne } from "drizzle-orm";
 
 import { databaseErrorContains } from "../drizzle-errors.js";

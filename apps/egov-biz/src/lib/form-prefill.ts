@@ -1,7 +1,7 @@
 import type { CitizenProfile } from "@/lib/citizen-profile";
 import type { UserInfoOutput } from "@/lib/business-chat";
 import type { BusinessPlan } from "@/lib/questions";
-import type { BnrsBusinessAddressInput, BnrsResidentialAddressPrefill } from "@repo/dx/bnrs";
+import type { BnrsBusinessAddressInput, BnrsResidentialAddressPrefill } from "@omsimos/dx/bnrs";
 
 export const structuredBusinessAddressQuestionFields = {
   "business-address-line-1": "addressLine1",

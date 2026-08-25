@@ -1,10 +1,10 @@
-import type { Database } from "@repo/db";
+import type { Database } from "@omsimos/db";
 import {
   bnrsApplications,
   bnrsBusinessAddresses,
   bnrsOwnerInformation,
   bnrsPayments,
-} from "@repo/db/schema";
+} from "@omsimos/db/schema";
 import { and, desc, eq, inArray, ne, notInArray } from "drizzle-orm";
 
 import { databaseErrorContains } from "../drizzle-errors.js";

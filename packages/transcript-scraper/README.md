@@ -6,7 +6,7 @@ public YouTube video.
 ## Usage
 
 ```ts
-import { extractTranscript } from "@repo/transcript-scraper";
+import { extractTranscript } from "@omsimos/transcript-scraper";
 
 const transcript = await extractTranscript("https://www.youtube.com/watch?v=VIDEO_ID");
 

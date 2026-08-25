@@ -35,7 +35,7 @@ Start the target app’s Redis dependency and dev server first:
 
 ```bash
 docker compose -f apps/egov-biz/docker-compose.yml up -d redis
-bun --filter @repo/db db:migrate
+bun --filter @omsimos/db db:migrate
 bun run dev:business
 ```
 

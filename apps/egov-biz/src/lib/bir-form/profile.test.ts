@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { EgovSsoCitizenProfile } from "egov.js";
-import { bir1901DataSchema, bir1905DataSchema } from "@repo/utils/bir-form";
+import { bir1901DataSchema, bir1905DataSchema } from "@omsimos/utils/bir-form";
 import {
   completeEgovSsoTestProfile,
   mapEgovProfileToBir1901,

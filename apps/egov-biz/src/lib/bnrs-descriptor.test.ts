@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BNRS_DESCRIPTORS } from "@repo/dx/bnrs";
+import { BNRS_DESCRIPTORS } from "@omsimos/dx/bnrs";
 import {
   fallbackBnrsDescriptorSuggestion,
   orderBnrsDescriptorsWithSuggestionFirst,

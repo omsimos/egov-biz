@@ -1,5 +1,5 @@
 import type { EgovSsoCitizenProfile } from "egov.js";
-import type { Bir1901Data, Bir1905Data } from "@repo/dx/bir";
+import type { Bir1901Data, Bir1905Data } from "@omsimos/dx/bir";
 import { resolveSsoTin } from "@/lib/tin";
 
 const syntheticSignature =

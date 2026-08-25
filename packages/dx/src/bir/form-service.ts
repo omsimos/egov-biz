@@ -1,11 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import type { FileStorage, FileTransferOptions, StoredFile } from "@repo/utils/files";
+import type { FileStorage, FileTransferOptions, StoredFile } from "@omsimos/utils/files";
 import {
   generateBir1901Pdf,
   generateBir1905Pdf,
   generateBirFormInputSchema,
-} from "@repo/utils/bir-form";
+} from "@omsimos/utils/bir-form";
 
 import { BirError } from "./errors.js";
 import type {

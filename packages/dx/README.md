@@ -1,6 +1,6 @@
 # DX BNRS
 
-`@repo/dx/bnrs` models the sole-proprietorship business-name registration flow used by DX. BNRS operations are local and database-backed; hosted payment is delegated to the existing eGovPay SDK.
+`@omsimos/dx/bnrs` models the sole-proprietorship business-name registration flow used by DX. BNRS operations are local and database-backed; hosted payment is delegated to the existing eGovPay SDK.
 
 ## Flow
 
@@ -45,15 +45,15 @@ Business addresses are stored separately as PII. Status responses expose only `{
 ## Setup and usage
 
 ```ts
-import { createDatabaseFromEnv } from "@repo/db";
+import { createDatabaseFromEnv } from "@omsimos/db";
 import { createClient } from "egov.js";
-import { createEgovPayClient } from "@repo/dx";
+import { createEgovPayClient } from "@omsimos/dx";
 import {
   createBnrsService,
   createDrizzleBnrsRepository,
   createEgovPayBnrsPaymentProvider,
   mapEgovSsoProfileToBnrsResidentialAddress,
-} from "@repo/dx/bnrs";
+} from "@omsimos/dx/bnrs";
 
 const database = createDatabaseFromEnv();
 const repository = createDrizzleBnrsRepository(database);
@@ -132,7 +132,7 @@ The Drizzle schema uses four tables:
 - `bnrs_business_addresses` for the one-to-one required business-address PII record and its source
 - `bnrs_payments` for every hosted-payment attempt and provider reference
 
-Run the generated migration through the `@repo/db` migration command before using the module.
+Run the generated migration through the `@omsimos/db` migration command before using the module.
 
 ## Deferred
 
@@ -146,7 +146,7 @@ Run the generated migration through the `@repo/db` migration command before usin
 
 # DX BIR forms
 
-`@repo/dx/bir` fills BIR Form 1901 or 1905, saves the generated PDF through the
+`@omsimos/dx/bir` fills BIR Form 1901 or 1905, saves the generated PDF through the
 shared private file-storage module, and reads it back for the authenticated
 owner. It does not store the structured form data separately. Storage uses
 Cloudflare R2 when its environment variables are configured and local artifact
@@ -165,8 +165,8 @@ eGov user ID from browser or agent input.
 
 ```ts
 import { resolve } from "node:path";
-import { createBirFormService } from "@repo/dx/bir";
-import { createFileStorage } from "@repo/utils/files";
+import { createBirFormService } from "@omsimos/dx/bir";
+import { createFileStorage } from "@omsimos/utils/files";
 
 const bir = createBirFormService({
   storage: createFileStorage(),
@@ -193,7 +193,7 @@ const artifact = await bir.fillOutAndSaveForm({
 const saved = await bir.getSavedForm({ actor, artifactId: artifact.artifactId });
 ```
 
-Both form types use the copied generators in `@repo/utils/bir-form`. Template
+Both form types use the copied generators in `@omsimos/utils/bir-form`. Template
 paths are required configuration because the utility package does not own the
 PDF assets. Form input is validated before rendering, and a render failure is
 never saved. Retrieval derives the private storage key from the trusted actor,
@@ -227,7 +227,7 @@ store business records; callers decide whether to persist its result.
 
 # DX LGU business permits
 
-`@repo/dx/lgu` is a separate, local mock of a straightforward sole-proprietor LGU business-permit flow. It accepts a structured business-name certificate credential containing the BNRS business address, derives the issuing city from that address, charges one fixed demo fee, and immediately issues both a business permit and barangay clearance after authoritative payment confirmation.
+`@omsimos/dx/lgu` is a separate, local mock of a straightforward sole-proprietor LGU business-permit flow. It accepts a structured business-name certificate credential containing the BNRS business address, derives the issuing city from that address, charges one fixed demo fee, and immediately issues both a business permit and barangay clearance after authoritative payment confirmation.
 
 ## Agency isolation and handoff
 
@@ -276,14 +276,14 @@ The actor ID is authorization context and is stored separately from applicant da
 Use an LGU-owned repository and an independently configured eGovPay client. The SDK can be the same library used elsewhere, but credentials, settlement template, provider instance, and environment configuration belong to LGU:
 
 ```ts
-import { createDatabaseFromEnv } from "@repo/db";
+import { createDatabaseFromEnv } from "@omsimos/db";
 import { createClient } from "egov.js";
-import { createEgovPayClient } from "@repo/dx";
+import { createEgovPayClient } from "@omsimos/dx";
 import {
   createDrizzleLguRepository,
   createEgovPayLguPaymentProvider,
   createLguService,
-} from "@repo/dx/lgu";
+} from "@omsimos/dx/lgu";
 
 const database = createDatabaseFromEnv();
 const repository = createDrizzleLguRepository(database);
@@ -348,7 +348,7 @@ The generated Drizzle migration adds three LGU-owned tables:
 - `lgu_applicant_information` stores the separate one-to-one owner name and optional TIN.
 - `lgu_payments` stores every LGU hosted-payment attempt and provider reference.
 
-No JSON document blob or separate barangay-clearance table is used. Run the `@repo/db` migration command before using the module.
+No JSON document blob or separate barangay-clearance table is used. Run the `@omsimos/db` migration command before using the module.
 
 ## LGU deferred and out of scope
 
