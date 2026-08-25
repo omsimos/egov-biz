@@ -1,6 +1,10 @@
 import type { EgovSsoCitizenProfile } from "egov.js";
-import type { BnrsCertificate } from "@repo/dx/bnrs";
-import { LguError, mapEgovSsoProfileToLguApplicantInformation, type LguActor } from "@repo/dx/lgu";
+import type { BnrsCertificate } from "@omsimos/dx/bnrs";
+import {
+  LguError,
+  mapEgovSsoProfileToLguApplicantInformation,
+  type LguActor,
+} from "@omsimos/dx/lgu";
 import { resolveSsoTin } from "@/lib/tin";
 import {
   findConversationByLguApplication,

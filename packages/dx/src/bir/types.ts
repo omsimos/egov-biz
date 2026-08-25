@@ -1,4 +1,4 @@
-import type { GenerateBirFormInput } from "@repo/utils/bir-form";
+import type { GenerateBirFormInput } from "@omsimos/utils/bir-form";
 
 export type BirActor = {
   egovUserId: string;

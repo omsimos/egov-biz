@@ -1,5 +1,5 @@
-import { BnrsError } from "@repo/dx/bnrs";
-import { LguError } from "@repo/dx/lgu";
+import { BnrsError } from "@omsimos/dx/bnrs";
+import { LguError } from "@omsimos/dx/lgu";
 import { z } from "zod";
 import { readSession } from "@/lib/auth/session";
 import { getConversation, markPaymentCheckpointComplete } from "@/server/conversations";

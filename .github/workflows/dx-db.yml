@@ -52,22 +52,22 @@ jobs:
       - name: Install
         run: bun install --frozen-lockfile
 
-      # @repo/dx consumes @repo/db through its published types in dist/, and
+      # @omsimos/dx consumes @omsimos/db through its published types in dist/, and
       # turbo.json has check-types depending on the no-op "transit" task rather
       # than ^build. Without compiling first, tsc cannot resolve
-      # @repo/db/schema. This is the same ordering constraint the
+      # @omsimos/db/schema. This is the same ordering constraint the
       # egov-biz workflow has.
       - name: Build
-        run: bunx turbo run build --filter=@repo/db --filter=@repo/dx
+        run: bunx turbo run build --filter=@omsimos/db --filter=@omsimos/dx
 
       - name: Types
-        run: bunx turbo run check-types --filter=@repo/db --filter=@repo/dx
+        run: bunx turbo run check-types --filter=@omsimos/db --filter=@omsimos/dx
 
       - name: Lint
         run: bunx turbo run //#lint
 
       - name: Test
-        run: bunx turbo run test --filter=@repo/db --filter=@repo/dx
+        run: bunx turbo run test --filter=@omsimos/db --filter=@omsimos/dx
 
   migrate:
     name: Migrate DX Turso

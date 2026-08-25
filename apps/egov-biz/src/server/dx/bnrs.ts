@@ -1,11 +1,11 @@
-import { createEgovPayClient } from "@repo/dx";
+import { createEgovPayClient } from "@omsimos/dx";
 import {
   createBnrsService,
   createDrizzleBnrsRepository,
   createEgovPayBnrsPaymentProvider,
   type BnrsPaymentProvider,
   type BnrsService,
-} from "@repo/dx/bnrs";
+} from "@omsimos/dx/bnrs";
 import { createClient, type EgovSsoCitizenProfile } from "egov.js";
 import { getDxDatabase } from "@/server/dx/database";
 

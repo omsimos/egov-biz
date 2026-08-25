@@ -73,7 +73,7 @@ The DX database is separate and is not migrated on demand. Initialize it once be
 the registration flow:
 
 ```bash
-bun --env-file=.env --filter @repo/db db:migrate
+bun --env-file=.env --filter @omsimos/db db:migrate
 ```
 
 Signing in needs a real eGovPH account. On loopback there is a dev session at
@@ -111,7 +111,7 @@ Two settings cause more trouble than the rest.
 `resumable-stream` requires. `src/lib/env.ts` rejects anything that is not `redis:` or
 `rediss:` up front instead of failing later at connect time.
 
-**The two databases are deliberately separate.** `@repo/db` ignores `TURSO_DATABASE_URL` and
+**The two databases are deliberately separate.** `@omsimos/db` ignores `TURSO_DATABASE_URL` and
 reads only `DX_TURSO_*`, so the DX package cannot reach the app database by accident.
 
 Deployment variables and where each comes from are in the
@@ -159,8 +159,8 @@ Needs a running app. See its [README](./apps/egov-stagehand-e2e/README.md).
 
 ### `packages/dx`
 
-The registration flows: `@repo/dx/bnrs` for sole-proprietorship business names,
-`@repo/dx/lgu` for the combined business permit and barangay clearance, and `@repo/dx/bir`
+The registration flows: `@omsimos/dx/bnrs` for sole-proprietorship business names,
+`@omsimos/dx/lgu` for the combined business permit and barangay clearance, and `@omsimos/dx/bir`
 for owner-scoped Forms 1901 and 1905. BNRS and LGU state is local and database-backed, and
 payment is delegated to eGovPay. The [README](./packages/dx/README.md) documents the
 application state machine.
@@ -173,8 +173,8 @@ data stays separate from any application's, whatever the process working directo
 
 ### `packages/utils`
 
-`@repo/utils/bir-form` generates the BIR Form 1901 and 1905 PDFs and validates their input
-schemas. `@repo/utils/files` is the private artifact store, R2 with a local directory
+`@omsimos/utils/bir-form` generates the BIR Form 1901 and 1905 PDFs and validates their input
+schemas. `@omsimos/utils/files` is the private artifact store, R2 with a local directory
 fallback. [README](./packages/utils/README.md).
 
 ### `packages/transcript-scraper`
@@ -191,7 +191,7 @@ dependencies. [README](./packages/transcript-scraper/README.md).
 with `resumable-stream`, `zod` 4, and Tailwind 4. The interface is `@base-ui/react`,
 `@phosphor-icons/react`, `motion`, `streamdown`, and `cuelume`.
 
-`packages/dx` depends on `@repo/db`, `@repo/utils`, `drizzle-orm`, and `egov.js`.
+`packages/dx` depends on `@omsimos/db`, `@omsimos/utils`, `drizzle-orm`, and `egov.js`.
 `packages/db` on `drizzle-orm` and `@libsql/client`. `packages/utils` on
 `@aws-sdk/client-s3`, `pdf-lib`, and `zod`. `packages/transcript-scraper` has none.
 `apps/egov-stagehand-e2e` uses `@browserbasehq/stagehand` 3.7.1 and `zod`.
@@ -204,7 +204,7 @@ packages build with TypeScript 7; the apps use TypeScript 5.
 ```bash
 bun run test                      # every workspace
 bun run check-types               # every workspace
-bun --filter @repo/dx run test    # one workspace
+bun --filter @omsimos/dx run test    # one workspace
 ```
 
 The E2E suite is separate because it drives a real browser against a running app:

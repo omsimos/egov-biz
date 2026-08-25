@@ -1,5 +1,5 @@
 {
-  "name": "@repo/db",
+  "name": "@omsimos/db",
   "version": "0.0.0",
   "private": true,
   "files": [

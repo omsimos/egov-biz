@@ -1,4 +1,4 @@
-import { createEgovPayClient } from "@repo/dx";
+import { createEgovPayClient } from "@omsimos/dx";
 import { createClient, type EgovPayTransaction } from "egov.js";
 import { egovPayBaseUrl } from "@/lib/payment-urls";
 import {

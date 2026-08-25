@@ -1,4 +1,4 @@
-import { BirError } from "@repo/dx/bir";
+import { BirError } from "@omsimos/dx/bir";
 import { readSession } from "@/lib/auth/session";
 import { getBir } from "@/server/dx/bir";
 import { bnrsActorFromProfile } from "@/server/dx/bnrs";

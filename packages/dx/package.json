@@ -1,5 +1,5 @@
 {
-  "name": "@repo/dx",
+  "name": "@omsimos/dx",
   "version": "0.0.0",
   "private": true,
   "files": [
@@ -31,8 +31,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@repo/db": "workspace:*",
-    "@repo/utils": "workspace:*",
+    "@omsimos/db": "workspace:*",
+    "@omsimos/utils": "workspace:*",
     "drizzle-orm": "0.45.2",
     "egov.js": "0.2.0"
   },

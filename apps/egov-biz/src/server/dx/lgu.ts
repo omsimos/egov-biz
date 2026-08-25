@@ -1,11 +1,11 @@
-import { createEgovPayClient } from "@repo/dx";
+import { createEgovPayClient } from "@omsimos/dx";
 import {
   createDrizzleLguRepository,
   createEgovPayLguPaymentProvider,
   createLguService,
   type LguPaymentProvider,
   type LguService,
-} from "@repo/dx/lgu";
+} from "@omsimos/dx/lgu";
 import { createClient } from "egov.js";
 import { getDxDatabase } from "@/server/dx/database";
 

@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { bir1901TemplatePath, writeBir1901Pdf, type Bir1901Data } from "@repo/utils/bir-form";
+import { bir1901TemplatePath, writeBir1901Pdf, type Bir1901Data } from "@omsimos/utils/bir-form";
 import { completeEgovSsoTestProfile, mapEgovProfileToBir1901 } from "@/lib/bir-form/profile";
 
 const appDirectory = resolve(import.meta.dir, "..");

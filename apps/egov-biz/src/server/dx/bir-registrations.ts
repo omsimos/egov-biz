@@ -1,5 +1,5 @@
 import { and, desc, eq } from "drizzle-orm";
-import { createBirDemoTaxCalendar } from "@repo/dx/bir";
+import { createBirDemoTaxCalendar } from "@omsimos/dx/bir";
 import { createBir2303FileMetadata } from "@/lib/form-generators/bir-2303";
 import type { BusinessPlan } from "@/lib/questions";
 import type {

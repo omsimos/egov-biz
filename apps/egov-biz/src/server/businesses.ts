@@ -1,5 +1,5 @@
-import type { BnrsActor, BnrsCertificate, BnrsRegisteredBusiness } from "@repo/dx/bnrs";
-import type { LguIssuedDocuments } from "@repo/dx/lgu";
+import type { BnrsActor, BnrsCertificate, BnrsRegisteredBusiness } from "@omsimos/dx/bnrs";
+import type { LguIssuedDocuments } from "@omsimos/dx/lgu";
 import { inferCategory } from "@/lib/business-rules";
 import type {
   BusinessFile,
