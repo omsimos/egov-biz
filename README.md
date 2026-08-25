@@ -1,28 +1,32 @@
-# egov-scripts
+# eGOVbusiness
 
-Monorepo for [Omsimos](https://github.com/omsimos)' eGov Hackathon work: an agentic
-business-registration assistant for the Philippines, plus the shared packages it runs on.
+Register a Philippine business by answering questions in a chat. eGOVbusiness handles the
+DTI business name, the local business permit and barangay clearance, and the BIR forms,
+taking one payment per fee along the way. It is the Omsimos eGov Hackathon project, and it
+lives in this `egov-scripts` monorepo alongside the packages it runs on.
+
+The app is [`apps/egov-agentic-biz`](./apps/egov-agentic-biz). A citizen describes the
+business they want to open, and the assistant carries it through registration end to end: a
+DTI business name through BNRS, a combined LGU business permit and barangay clearance, and
+BIR Forms 1901 and 1905 as filled PDFs. Payments run through eGovPay hosted checkout.
+Everything the assistant asserts comes from an authenticated eGov call or a record it wrote
+itself.
+
 Everything here builds on [`egov.js`](https://github.com/omsimos/egov.js), a typed SDK for
 the eGovPH partner services that is developed and versioned separately.
 
-The product is **`apps/egov-agentic-biz`**. A citizen describes the business they want to
-open, and the assistant walks them through registration end to end: a DTI business name
-through BNRS, a combined LGU business permit and barangay clearance, and BIR Forms 1901 and
-1905 as filled PDFs. Payments run through eGovPay hosted checkout. Everything the assistant
-asserts comes from an authenticated eGov call or a record it wrote itself.
-
-> [!WARNING]
-> Base URLs in `.env.sample` point at hackathon and staging hosts (`hackathon-*.e.gov.ph`,
-> `*.oueg.info`). This is prototype work against test infrastructure, not a production
-> government service. Point it at production endpoints only with the corresponding
-> credentials and approval.
+> [!NOTE]
+> eGov partner services are reached through one gateway host,
+> `https://platforms-api.e.gov.ph`, with a path per service. The values in `.env.sample` are
+> the documented gateway URLs and stay environment-configurable. Running this against real
+> citizen data needs the corresponding partner credentials and approval.
 
 ## Layout
 
 ```
 egov-scripts/
 ├── apps/
-│   ├── egov-agentic-biz/    # The assistant. Next.js 16, React 19, AI SDK 7
+│   ├── egov-agentic-biz/    # eGOVbusiness. Next.js 16, React 19, AI SDK 7
 │   └── egov-stagehand-e2e/  # Browser E2E suite driving the four registration routes
 ├── packages/
 │   ├── db/                  # Shared Turso/libSQL persistence for DX (Drizzle)
@@ -76,8 +80,10 @@ Signing in needs a real eGovPH account. On loopback there is a dev session at
 
 ## Environment configuration
 
-Every value is server-side. None are exposed to the browser. `.env.sample` documents each one
-inline; this is the summary.
+Credentials stay server-side. The two exceptions are `EGOVSSO_BASE_URL` and
+`EGOVSSO_PARTNER_CODE`, which the app renders to the browser to initialize login. The partner
+secret never leaves the server. `.env.sample` documents each variable inline; this is the
+summary.
 
 | Group           | Variables                                                                                           | Required     | Without it                                                              |
 | --------------- | --------------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------- |
@@ -93,6 +99,9 @@ inline; this is the summary.
 | Artifacts       | `R2_BASE_URL`, `R2_ACCESS_KEY`, `R2_SECRET_KEY`                                                     | No           | Generated PDFs go to `FILE_STORAGE_DIRECTORY`, default `data/artifacts` |
 | BIR templates   | `BIR_FORM_1901_TEMPLATE_PATH`, `BIR_FORM_1905_TEMPLATE_PATH`                                        | No           | Uses the bundled templates                                              |
 | E2E             | `OPENAI_API_KEY`, `STAGEHAND_MODEL`, `E2E_BASE_URL`, `E2E_HEADLESS`, `E2E_RUN_ID`                   | No           | Defaults suffice against a local app                                    |
+
+`.env.sample` also carries gateway URLs for eVerify, eGov AI, eGovChain, eReport, Face
+Liveness, and Compass. `egov.js` covers those services, and no workspace here reads them yet.
 
 Two settings cause more trouble than the rest.
 
@@ -114,7 +123,7 @@ Turborepo.
 
 | Command                         | What it does                                          |
 | ------------------------------- | ----------------------------------------------------- |
-| `bun run dev:business`          | Start the assistant on port 3000                      |
+| `bun run dev:business`          | Start eGOVbusiness on port 3000                       |
 | `bun run build`                 | Build every package and app                           |
 | `bun run test`                  | Run every workspace's tests                           |
 | `bun run check-types`           | Type-check every workspace                            |
@@ -134,7 +143,7 @@ README.
 
 ### `apps/egov-agentic-biz`
 
-The assistant. Next.js 16 with React 19, AI SDK 7 for the agent loop, Drizzle over
+eGOVbusiness itself. Next.js 16 with React 19, AI SDK 7 for the agent loop, Drizzle over
 Turso/libSQL for durable chats, Redis pub/sub for resumable streams, and Cloudflare R2 for
 generated PDFs. Its [README](./apps/egov-agentic-biz/README.md) covers local setup, schema
 changes, the DX workflow boundary, and Vercel deployment.
@@ -174,7 +183,7 @@ dependencies. [README](./packages/transcript-scraper/README.md).
 
 ## Dependencies
 
-`egov.js` is pinned at `0.1.0` and consumed from npm.
+`egov.js` is pinned at `0.2.0` and consumed from npm.
 
 `apps/egov-agentic-biz` runs `next` 16.2.10, `react` and `react-dom` 19.2.4, `ai` 7 with
 `@ai-sdk/react` 4 and `@ai-sdk/mcp` 2, `drizzle-orm` 0.45.2 over `@libsql/client`, `ioredis`

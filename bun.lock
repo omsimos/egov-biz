@@ -5,7 +5,7 @@
     "": {
       "name": "hackathon-idea-fact-checker",
       "devDependencies": {
-        "egov.js": "0.1.0",
+        "egov.js": "0.2.0",
         "oxfmt": "0.59.0",
         "oxlint": "1.74.0",
         "turbo": "2.10.5",
@@ -28,7 +28,7 @@
         "clsx": "^2.1.1",
         "cuelume": "^0.1.2",
         "drizzle-orm": "0.45.2",
-        "egov.js": "0.1.0",
+        "egov.js": "0.2.0",
         "ioredis": "^5.11.1",
         "motion": "^12.42.2",
         "next": "16.2.10",
@@ -85,7 +85,7 @@
         "@repo/db": "workspace:*",
         "@repo/utils": "workspace:*",
         "drizzle-orm": "0.45.2",
-        "egov.js": "0.1.0",
+        "egov.js": "0.2.0",
       },
       "devDependencies": {
         "@total-typescript/tsconfig": "1.0.4",
@@ -1054,7 +1054,7 @@
 
     "egov-stagehand-e2e": ["egov-stagehand-e2e@workspace:apps/egov-stagehand-e2e"],
 
-    "egov.js": ["egov.js@0.1.0", "", {}, "sha512-fFyIzOiTWcspuHpBtPQVW/UZZAdB+bTrsB7PzI8GTVIII9SGwdiw1Li5Gy4YHxzjmR/JwO/0o5ynNYdsLUqUHw=="],
+    "egov.js": ["egov.js@0.2.0", "", {}, "sha512-SuGrYWW872mtUUuROt6dwvhGA/qCAHEKzmm/LgArBTuXsG7l1o9LRE/ucQUYk91/MzG68/CFRkXA2dzo7xaz4Q=="],
 
     "electron-to-chromium": ["electron-to-chromium@1.5.394", "", {}, "sha512-Wmt2Gm0o8JWBuGgmc4XZ0u9s1RaCRqhxP47phplmfg04+qypTUurpeJGP45A7Fhv7jdrrVH44PLlR9qXo37cVQ=="],
 
