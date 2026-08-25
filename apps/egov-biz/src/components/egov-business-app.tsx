@@ -1171,14 +1171,16 @@ export function EgaphBusinessApp({
     initialConversation ? "chat" : requestedChatId ? "restoring" : "home",
   );
   // Which way the last navigation went, derived from the screens' depth rather
-  // than passed in by each of the eleven setScreen callers. Read during the
-  // render where `screen` has already changed but the ref has not, so it still
-  // holds where we came from; the effect then catches it up after paint.
-  const lastDepth = useRef(SCREEN_DEPTH[screen]);
-  const goingBack = SCREEN_DEPTH[screen] < lastDepth.current;
-  useEffect(() => {
-    lastDepth.current = SCREEN_DEPTH[screen];
-  }, [screen]);
+  // than passed in by each of the eleven setScreen callers. The screen we came
+  // from is held in state and compared during render, so the direction is
+  // settled in the same render that swaps the screen — the render
+  // AnimatePresence takes the exiting screen from — and then holds for the
+  // whole exit rather than being caught up after paint.
+  const [nav, setNav] = useState({ back: false, from: screen });
+  if (nav.from !== screen) {
+    setNav({ back: SCREEN_DEPTH[screen] < SCREEN_DEPTH[nav.from], from: screen });
+  }
+  const goingBack = nav.from === screen ? nav.back : SCREEN_DEPTH[screen] < SCREEN_DEPTH[nav.from];
   const [prompt, setPrompt] = useState(initialConversation?.initialPrompt ?? "");
   const [conversation, setConversation] = useState<BusinessConversation | null>(
     initialConversation,

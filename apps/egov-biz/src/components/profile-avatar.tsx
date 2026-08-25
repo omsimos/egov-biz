@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { CitizenProfile } from "@/lib/citizen-profile";
 
 export function ProfileAvatar({
@@ -11,7 +11,15 @@ export function ProfileAvatar({
   profile: CitizenProfile;
 }) {
   const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [profile.avatarUrl]);
+  // The failure belongs to the URL that failed, so a new photo gets a fresh
+  // attempt. Compared during render rather than cleared in an effect: the
+  // effect would paint the initials for one frame over a URL nothing has tried
+  // yet. Kept here rather than pushed onto callers as a `key`.
+  const [triedUrl, setTriedUrl] = useState(profile.avatarUrl);
+  if (triedUrl !== profile.avatarUrl) {
+    setTriedUrl(profile.avatarUrl);
+    setFailed(false);
+  }
 
   if (!profile.avatarUrl || failed) {
     return (

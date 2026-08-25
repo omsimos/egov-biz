@@ -6,12 +6,21 @@ export function useApi<T>(url: string, enabled = true) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  // Dropping the record the moment the hook is switched off, during the render
+  // that switches it off rather than in the effect below. Masking it at the
+  // return site instead would leave the old record in state, and it would flash
+  // when `enabled` comes back before the refetch resolves.
+  const [wasEnabled, setWasEnabled] = useState(enabled);
+  if (wasEnabled !== enabled) {
+    setWasEnabled(enabled);
     if (!enabled) {
       setData(null);
       setError(null);
-      return;
     }
+  }
+
+  useEffect(() => {
+    if (!enabled) return;
 
     const controller = new AbortController();
     async function load() {

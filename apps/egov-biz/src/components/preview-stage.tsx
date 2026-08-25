@@ -201,12 +201,20 @@ export function PreviewStage() {
   const [screen, setScreenState] = useState<PreviewScreen>("home");
   useEffect(() => {
     const hash = window.location.hash.slice(1);
+    // The deep link (#login, #cards) lives in the URL, which is only readable
+    // after hydration; picking it during render would diverge from the server
+    // markup, so this stays an effect that syncs React with the address bar.
+    // oxlint-disable-next-line react/set-state-in-effect
     if ((screens as readonly string[]).includes(hash)) setScreenState(hash as PreviewScreen);
   }, []);
   // State, not a ref: DialogContent reads it during render to pick its portal
   // container, so the frame mounting has to cause a re-render.
   const [phoneFrame, setPhoneFrame] = useState<HTMLElement | null>(null);
   const setScreen = (next: PreviewScreen) => {
+    // The address bar is this harness's deep link, so navigating writes it
+    // back. window is genuinely the outside value being mutated here, and it
+    // is mutated from a click handler, which is where such a write belongs.
+    // oxlint-disable-next-line react/immutability
     window.location.hash = next;
     setScreenState(next);
   };

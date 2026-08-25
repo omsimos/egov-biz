@@ -844,7 +844,14 @@ function DtiFieldRow({
   value: string;
 }) {
   const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [editing, value]);
+  // Opening the editor, and the agent applying a save, both put the draft back
+  // to the value the row is showing. Adjusting during render instead of in an
+  // effect means the stale draft never paints for a frame first.
+  const [draftSource, setDraftSource] = useState({ editing, value });
+  if (draftSource.editing !== editing || draftSource.value !== value) {
+    setDraftSource({ editing, value });
+    setDraft(value);
+  }
   const note = FIELD_CONSEQUENCES[label];
   const canSave = draft.trim().length > 1 && draft.trim() !== value;
 
@@ -1836,12 +1843,17 @@ export function BusinessChatScreen({
   // A new batch starts at its first question, and the plan checklist yields:
   // the two share the header's progress row, and an open checklist would push
   // the question the citizen has to answer off the top of the thread.
+  // Adjusted during render rather than in an effect: the card is keyed by the
+  // tool call id, so a post-commit reset would mount the new batch on the old
+  // index for a frame — with a shorter batch that index is out of range.
   const pendingToolCallId = pending?.part.toolCallId;
-  useEffect(() => {
+  const [questionBatchId, setQuestionBatchId] = useState(pendingToolCallId);
+  if (questionBatchId !== pendingToolCallId) {
+    setQuestionBatchId(pendingToolCallId);
     setQuestionIndex(0);
     setQuestionValid(false);
     if (pendingToolCallId) setPlanOpen(false);
-  }, [pendingToolCallId]);
+  }
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [visibleMessages, pending, status]);
@@ -1872,6 +1884,10 @@ export function BusinessChatScreen({
   // unmount — a setState on a screen the citizen has already left is a leak.
   useEffect(() => {
     if (!/paid|success|complete/i.test(paymentStatus ?? "")) return;
+    // The checkout redirect is already resolved by the time this screen mounts,
+    // so seeding "paid" at initialisation would render the header spacer at its
+    // full height; showing it one commit later is what makes the spacer animate.
+    // oxlint-disable-next-line react/set-state-in-effect
     setIsland("paid");
     const timer = setTimeout(() => setIsland("idle"), 4500);
     return () => clearTimeout(timer);
@@ -1913,6 +1929,10 @@ export function BusinessChatScreen({
     const questionId = pendingQuestion.questions[0]?.id;
     if (!questionId) return;
     answeredToolCalls.current.add(toolCallId);
+    // No user event to hang this on: the stream delivering a legacy consent
+    // question is what starts the round trip, and this marks it in flight so the
+    // question controls disable while it runs.
+    // oxlint-disable-next-line react/set-state-in-effect
     setAnsweringToolCallId(toolCallId);
     void (async () => {
       try {

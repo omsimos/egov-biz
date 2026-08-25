@@ -97,24 +97,35 @@ export function LoginScreen({
   const [mpin, setMpin] = useState("");
   const [otp, setOtp] = useState("");
   const [otpValidationToken, setOtpValidationToken] = useState("");
+  const [previousInitialError, setPreviousInitialError] = useState(initialError);
   const [ready, setReady] = useState(false);
   const [resendSeconds, setResendSeconds] = useState(0);
   const [step, setStep] = useState<LoginStep>("email");
   const resendActive = step === "otp" && resendSeconds > 0;
 
-  useEffect(() => {
-    setLastAccount(readLastAccount());
-  }, []);
+  // Adjusted while rendering rather than in an effect: the session check hands
+  // down a new initialError after mount, and it has to replace what the form
+  // shows without a second paint. A cleared prop leaves the message in place.
+  if (initialError !== previousInitialError) {
+    setPreviousInitialError(initialError);
+    if (initialError) setError(initialError);
+  }
 
   useEffect(() => {
-    if (initialError) setError(initialError);
-  }, [initialError]);
+    // localStorage only exists after hydration, so the remembered account cannot
+    // be read during render without diverging from the server-rendered markup.
+    // oxlint-disable-next-line react/set-state-in-effect
+    setLastAccount(readLastAccount());
+  }, []);
 
   useEffect(() => {
     let active = true;
     const partnerCode = metaContent("egov-client-id");
     const configuredApiUrl = metaContent("egov-sso-api-url");
     if (!partnerCode || !configuredApiUrl) {
+      // Reads the <meta> tags the server layout injects, so it can only run once
+      // the document exists — the same reason the SSO preflight below is an effect.
+      // oxlint-disable-next-line react/set-state-in-effect
       setError("eGovPH SSO is not configured for this app.");
       return;
     }
