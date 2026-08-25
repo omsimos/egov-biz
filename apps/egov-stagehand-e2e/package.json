@@ -19,7 +19,7 @@
   "devDependencies": {
     "@types/node": "^24",
     "tsx": "^4.23.1",
-    "typescript": "^5"
+    "typescript": "7.0.2"
   },
   "packageManager": "bun@1.4.0"
 }

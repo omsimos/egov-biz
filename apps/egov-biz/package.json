@@ -38,9 +38,9 @@
     "egov.js": "0.2.0",
     "ioredis": "^5.11.1",
     "motion": "^12.42.2",
-    "next": "16.2.10",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
+    "next": "16.3.2",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "resumable-stream": "^2.2.12",
     "shadcn": "^4.14.1",
     "streamdown": "^2.5.0",
@@ -52,12 +52,12 @@
     "@tailwindcss/postcss": "^4.3.3",
     "@types/bun": "1.4.0",
     "@types/node": "^24",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
     "babel-plugin-react-compiler": "1.0.0",
     "drizzle-kit": "0.31.10",
     "tailwindcss": "^4.3.3",
-    "typescript": "^5"
+    "typescript": "7.0.2"
   },
   "packageManager": "bun@1.4.0"
 }
