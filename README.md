@@ -29,7 +29,6 @@ egov-scripts/
 │   ├── dx/                  # BNRS, LGU, and BIR registration flows
 │   ├── utils/               # BIR PDF generation and the private artifact store
 │   └── transcript-scraper/  # Dependency-free YouTube transcript extractor
-├── docs/architecture.md     # eGov API architecture and reference
 ├── scripts/                 # One-off service probes (eMessage, eGovPay)
 ├── .oxlintrc.json           # Lint config, repo-wide
 ├── .oxfmtrc.json            # Format config, repo-wide
@@ -39,9 +38,6 @@ egov-scripts/
 Bun workspaces and Turborepo, with [oxc](https://oxc.rs) for linting and formatting. `oxlint`
 and `oxfmt` run as Turborepo [root tasks](https://turborepo.dev/docs/guides/tools/oxc) over
 the whole repo in one process rather than per package.
-
-`docs/architecture.md` predates the removal of an earlier app and describes a tree that no
-longer matches this one. Read it for the eGov service reference, not the layout.
 
 ## Prerequisites
 
