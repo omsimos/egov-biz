@@ -17,7 +17,7 @@ the eGovPH partner services that is developed and versioned separately.
 
 > [!NOTE]
 > eGov partner services are reached through one gateway host,
-> `https://platforms-api.e.gov.ph`, with a path per service. The values in `.env.sample` are
+> `https://platforms-api.e.gov.ph`, with a path per service. The values in `.env.example` are
 > the documented gateway URLs and stay environment-configurable. Running this against real
 > citizen data needs the corresponding partner credentials and approval.
 
@@ -36,7 +36,7 @@ egov-biz/
 ├── scripts/                 # One-off service probes (eMessage, eGovPay)
 ├── .oxlintrc.json           # Lint config, repo-wide
 ├── .oxfmtrc.json            # Format config, repo-wide
-└── .env.sample              # Every credential slot both apps read
+└── .env.example             # Every credential slot both apps read
 ```
 
 Bun workspaces and Turborepo, with [oxc](https://oxc.rs) for linting and formatting. `oxlint`
@@ -61,7 +61,7 @@ deterministic local questions and skips web search, and the registration flow st
 
 ```bash
 bun install
-cp .env.sample .env                            # fill in the two EGOVSSO_PARTNER_* values
+cp .env.example .env                           # fill in the two EGOVSSO_PARTNER_* values
 bun --filter egov-biz infra:up                 # Redis on 127.0.0.1:6380
 bun run dev:business                           # http://localhost:3000
 ```
@@ -83,7 +83,7 @@ Signing in needs a real eGovPH account. On loopback there is a dev session at
 
 Credentials stay server-side. The two exceptions are `EGOVSSO_BASE_URL` and
 `EGOVSSO_PARTNER_CODE`, which the app renders to the browser to initialize login. The partner
-secret never leaves the server. `.env.sample` documents each variable inline; this is the
+secret never leaves the server. `.env.example` documents each variable inline; this is the
 summary.
 
 | Group           | Variables                                                                                           | Required     | Without it                                                              |
@@ -101,7 +101,7 @@ summary.
 | BIR templates   | `BIR_FORM_1901_TEMPLATE_PATH`, `BIR_FORM_1905_TEMPLATE_PATH`                                        | No           | Uses the bundled templates                                              |
 | E2E             | `OPENAI_API_KEY`, `STAGEHAND_MODEL`, `E2E_BASE_URL`, `E2E_HEADLESS`, `E2E_RUN_ID`                   | No           | Defaults suffice against a local app                                    |
 
-`.env.sample` also carries gateway URLs for eVerify, eGov AI, eGovChain, eReport, Face
+`.env.example` also carries gateway URLs for eVerify, eGov AI, eGovChain, eReport, Face
 Liveness, and Compass. `egov.js` covers those services, and no workspace here reads them yet.
 
 Two settings cause more trouble than the rest.
