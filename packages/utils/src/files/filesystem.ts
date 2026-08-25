@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { z } from "zod";
 
 import type { FilesystemStorageConfig } from "./config.js";
 import type {
@@ -21,8 +22,17 @@ type FilesystemManifest = {
 
 const objectNamePattern = /^[0-9a-f-]{36}\.blob$/;
 
-function isMissingFile(error: unknown) {
-  if (!error || typeof error !== "object") return false;
+const objectNameSchema = z.string().regex(objectNamePattern);
+
+/** The on-disk manifest contract; anything else on disk is a corrupt artifact. */
+const filesystemManifestSchema = z.object({
+  contentType: z.string(),
+  garbage: z.array(objectNameSchema),
+  metadata: z.record(z.string(), z.string()),
+  objectName: objectNameSchema,
+});
+
+function isMissingFile(error: Error) {
   return "code" in error && error.code === "ENOENT";
 }
 
@@ -141,7 +151,8 @@ export class FilesystemFileStorage implements FileStorage {
         await readFile(join(paths.objectDirectory, manifest.objectName), { signal }),
       );
     } catch (error) {
-      if (isMissingFile(error)) throw new Error(`Artifact object is missing for key "${key}"`);
+      if (error instanceof Error && isMissingFile(error))
+        throw new Error(`Artifact object is missing for key "${key}"`);
       throw error;
     }
     return {
@@ -157,35 +168,20 @@ export class FilesystemFileStorage implements FileStorage {
     manifestPath: string,
     signal?: AbortSignal,
   ): Promise<FilesystemManifest | undefined> {
-    let parsed: unknown;
+    let contents: string;
     try {
-      parsed = JSON.parse(await readFile(manifestPath, { encoding: "utf8", signal })) as unknown;
+      contents = await readFile(manifestPath, { encoding: "utf8", signal });
     } catch (error) {
-      if (isMissingFile(error)) return undefined;
+      if (error instanceof Error && isMissingFile(error)) return undefined;
       throw error;
     }
-    if (!parsed || typeof parsed !== "object") throw new Error("Artifact manifest is invalid");
-    const candidate = parsed as Partial<FilesystemManifest>;
-    if (
-      typeof candidate.contentType !== "string" ||
-      !Array.isArray(candidate.garbage) ||
-      candidate.garbage.some(
-        (objectName) => typeof objectName !== "string" || !objectNamePattern.test(objectName),
-      ) ||
-      !candidate.metadata ||
-      typeof candidate.metadata !== "object" ||
-      Array.isArray(candidate.metadata) ||
-      Object.values(candidate.metadata).some((value) => typeof value !== "string") ||
-      typeof candidate.objectName !== "string" ||
-      !objectNamePattern.test(candidate.objectName)
-    ) {
-      throw new Error("Artifact manifest is invalid");
-    }
+    const manifest = filesystemManifestSchema.safeParse(JSON.parse(contents));
+    if (!manifest.success) throw new Error("Artifact manifest is invalid");
     return {
-      contentType: normalizeContentType(candidate.contentType),
-      garbage: candidate.garbage,
-      metadata: normalizeMetadata(candidate.metadata),
-      objectName: candidate.objectName,
+      contentType: normalizeContentType(manifest.data.contentType),
+      garbage: manifest.data.garbage,
+      metadata: normalizeMetadata(manifest.data.metadata),
+      objectName: manifest.data.objectName,
     };
   }
 

@@ -12,8 +12,11 @@ type TextField = {
   y: number;
 };
 
+/** The scalar a parsed 1905 field can hold; an absent field prints as an empty cell. */
+type PdfFieldValue = number | string | undefined;
+
 type ContinuationEntry = {
-  fields: Array<readonly [label: string, value: unknown]>;
+  fields: Array<readonly [label: string, value: PdfFieldValue]>;
   heading: string;
 };
 
@@ -23,12 +26,41 @@ type Address = NonNullable<
   >["newAddress"]
 >;
 
+type FacilityRow = NonNullable<
+  NonNullable<
+    NonNullable<Bir1905Data["registrationInformationUpdate"]>["facilityDetails"]
+  >["facilities"]
+>[number];
+
+type FacilityType = NonNullable<FacilityRow["facilityTypes"]>[number];
+
+type DocumentaryCheck = readonly [selected: boolean | undefined, x: number, y: number];
+
+/** These have no cell representation, so `printable` blanks them like a missing field. */
+const UNPRINTABLE_NUMBERS: ReadonlySet<PdfFieldValue> = new Set<PdfFieldValue>([
+  Number.NaN,
+  Number.POSITIVE_INFINITY,
+  Number.NEGATIVE_INFINITY,
+]);
+
 const INK = rgb(0.05, 0.12, 0.3);
 const BOOK_TYPE_LABELS = {
   computerized: "CBA",
   looseLeaf: "Loose",
   manual: "Manual",
 } as const;
+
+/** Item 7E facility-type checkbox columns, in the order the template prints them. */
+const FACILITY_TYPE_COLUMNS: ReadonlyArray<readonly [FacilityType, number]> = [
+  ["placeOfProduction", 134],
+  ["storagePlace", 149],
+  ["warehouse", 164],
+  ["showroom", 179],
+  ["garage", 194],
+  ["busTerminal", 209],
+  ["realPropertyForLease", 224],
+  ["other", 239],
+];
 
 export const DEFAULT_BIR_1905_TEMPLATE = "public/forms/bir-form-1905.pdf";
 
@@ -38,10 +70,9 @@ export function bir1905TemplatePath() {
   return join(process.cwd(), "public", "forms", "bir-form-1905.pdf");
 }
 
-function printable(value: unknown) {
-  if (typeof value === "string") return value.trim();
-  if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  return "";
+function printable(value: PdfFieldValue) {
+  if (value === undefined || UNPRINTABLE_NUMBERS.has(value)) return "";
+  return String(value).trim();
 }
 
 function bookTypeLabel(type: "computerized" | "looseLeaf" | "manual" | undefined) {
@@ -58,7 +89,7 @@ function fitFontSize(font: PDFFont, value: string, requested: number, maxWidth: 
   return size;
 }
 
-function drawText(page: PDFPage, font: PDFFont, value: unknown, field: TextField) {
+function drawText(page: PDFPage, font: PDFFont, value: PdfFieldValue, field: TextField) {
   const text = standardFontText(font, printable(value));
   if (!text) return;
   const fontSize = fitFontSize(font, text, field.fontSize ?? 7, field.maxWidth);
@@ -72,7 +103,7 @@ function drawText(page: PDFPage, font: PDFFont, value: unknown, field: TextField
   });
 }
 
-function drawCenteredText(page: PDFPage, font: PDFFont, value: unknown, field: TextField) {
+function drawCenteredText(page: PDFPage, font: PDFFont, value: PdfFieldValue, field: TextField) {
   const text = standardFontText(font, printable(value));
   if (!text) return;
   const fontSize = fitFontSize(font, text, field.fontSize ?? 7, field.maxWidth);
@@ -87,7 +118,7 @@ function drawCenteredText(page: PDFPage, font: PDFFont, value: unknown, field: T
 function drawMultiline(
   page: PDFPage,
   font: PDFFont,
-  value: unknown,
+  value: PdfFieldValue,
   field: TextField & { lineHeight?: number; maxLines?: number },
 ) {
   const text = standardFontText(font, printable(value));
@@ -114,7 +145,13 @@ function drawMultiline(
   }
 }
 
-function drawCheck(page: PDFPage, font: PDFFont, selected: unknown, x: number, y: number) {
+function drawCheck(
+  page: PDFPage,
+  font: PDFFont,
+  selected: boolean | undefined,
+  x: number,
+  y: number,
+) {
   if (selected === true) page.drawText("X", { color: INK, font, size: 8.5, x, y });
 }
 
@@ -336,17 +373,8 @@ function drawPageOne(page: PDFPage, font: PDFFont, bold: PDFFont, data: Bir1905D
       y,
     });
     const types = new Set(facility.facilityTypes ?? []);
-    for (const [type, x] of Object.entries({
-      placeOfProduction: 134,
-      storagePlace: 149,
-      warehouse: 164,
-      showroom: 179,
-      garage: 194,
-      busTerminal: 209,
-      realPropertyForLease: 224,
-      other: 239,
-    })) {
-      drawCheck(page, bold, types.has(type as never), x, y);
+    for (const [type, x] of FACILITY_TYPE_COLUMNS) {
+      drawCheck(page, bold, types.has(type), x, y);
     }
     drawText(page, font, facility.otherFacilityType, { fontSize: 5.5, maxWidth: 57, x: 247, y });
   }
@@ -532,7 +560,7 @@ function drawPageThree(page: PDFPage, font: PDFFont, bold: PDFFont, data: Bir190
 
 function drawPageFour(page: PDFPage, bold: PDFFont, data: Bir1905Data) {
   const requirements = data.documentaryRequirements;
-  const checks: Array<[unknown, number, number]> = [
+  const checks: DocumentaryCheck[] = [
     [requirements?.tinCardIssuance?.photoId, 25, 859],
     [requirements?.tinCardIssuance?.governmentIssuedId, 25, 849],
     [requirements?.tinCardIssuance?.affidavitOfLoss, 25, 821],

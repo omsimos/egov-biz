@@ -36,6 +36,7 @@ export type {
   FileTransferOptions,
   PutFileInput,
   R2ClientLike,
+  R2CommandOutput,
   StoredFile,
   StoredFileReference,
 } from "./types.js";

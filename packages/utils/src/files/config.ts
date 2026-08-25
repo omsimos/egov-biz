@@ -66,10 +66,10 @@ export function resolveFileStorageConfig(
   environment: FileStorageEnvironment = process.env,
   options: FileStorageConfigOptions = {},
 ): FileStorageConfig {
-  const values = Object.fromEntries(
-    r2EnvironmentNames.map((name) => [name, configuredValue(environment[name])]),
-  ) as Record<(typeof r2EnvironmentNames)[number], string | undefined>;
-  const configuredCount = r2EnvironmentNames.filter((name) => values[name]).length;
+  const values = new Map(
+    r2EnvironmentNames.map((name) => [name, configuredValue(environment[name])] as const),
+  );
+  const configuredCount = r2EnvironmentNames.filter((name) => values.get(name)).length;
 
   if (configuredCount === 0) {
     const workingDirectory = options.workingDirectory ?? process.cwd();
@@ -84,13 +84,13 @@ export function resolveFileStorageConfig(
   }
 
   if (configuredCount !== r2EnvironmentNames.length) {
-    const missing = r2EnvironmentNames.filter((name) => !values[name]);
+    const missing = r2EnvironmentNames.filter((name) => !values.get(name));
     throw new Error(`Incomplete Cloudflare R2 configuration; missing ${missing.join(", ")}`);
   }
 
-  const baseUrl = values.R2_BASE_URL;
-  const accessKeyId = values.R2_ACCESS_KEY;
-  const secretAccessKey = values.R2_SECRET_KEY;
+  const baseUrl = values.get("R2_BASE_URL");
+  const accessKeyId = values.get("R2_ACCESS_KEY");
+  const secretAccessKey = values.get("R2_SECRET_KEY");
   if (!baseUrl || !accessKeyId || !secretAccessKey)
     throw new Error("Incomplete Cloudflare R2 configuration");
 
