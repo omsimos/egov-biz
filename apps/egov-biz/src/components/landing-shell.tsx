@@ -42,7 +42,7 @@ export function LandingHeader({ collapsed, onStart }: { collapsed: boolean; onSt
       <div className="flex items-center gap-3">
         <BrandLogo height={28} priority />
         <span className="hidden items-center border-l-[1.5px] border-gray-200 pl-3 min-[900px]:flex">
-          {/* Box-centred, this reads high: the ink centroid of "eGOVbusiness"
+          {/* Box-centred, this reads high: the ink centroid of "eGov Business"
               sits ~3px below its box centre, since "business" is all x-height.
               The hairline stays centred on the row; only the type moves. */}
           <span className="flex translate-y-[3px] items-center gap-[7px]">
@@ -65,7 +65,7 @@ export function LandingHeader({ collapsed, onStart }: { collapsed: boolean; onSt
           </span>
         </span>
       </div>
-      <nav aria-label="About eGOVbusiness" className="flex items-center gap-[34px]">
+      <nav aria-label="About eGov Business" className="flex items-center gap-[34px]">
         {navItems.map(({ href, label }) => (
           <a
             className={cn(
@@ -151,7 +151,7 @@ export function LandingCopy({
         Register your business in one conversation.
       </h1>
       <p className="mt-5 max-w-[520px] text-[clamp(17px,1.6vw,21px)] leading-[1.55] text-pretty text-gray-800">
-        eGOVbusiness handles DTI, BIR, and local permits for you. Answer a few questions, pay once,
+        eGov Business handles DTI, BIR, and local permits for you. Answer a few questions, pay once,
         and get your certificates in the app.
       </p>
       <div className="mt-[30px] flex flex-wrap items-center gap-3.5">

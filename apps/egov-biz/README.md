@@ -1,4 +1,4 @@
-# egov-agentic-biz
+# egov-biz
 
 Agentic business-registration prototype. Durable state lives in **Turso**
 (libSQL, accessed through Drizzle), generated BIR PDFs live in **Cloudflare
@@ -13,7 +13,7 @@ bun run infra:up             # Redis on 127.0.0.1:6380
 bun run dev
 ```
 
-With the default `TURSO_DATABASE_URL=file:./data/egov-agentic-biz.sqlite` there
+With the default `TURSO_DATABASE_URL=file:./data/egov-biz.sqlite` there
 is nothing else to start: the file is created on demand and pending migrations
 are applied on the first query.
 
@@ -77,8 +77,8 @@ Create the database once, then run `bun run db:migrate` against it as part of
 releasing:
 
 ```sh
-turso db create egov-agentic-biz
-bun --filter egov-agentic-biz run db:migrate
+turso db create egov-biz
+bun --filter egov-biz run db:migrate
 ```
 
 Provision and migrate the DX database separately with the migration command in

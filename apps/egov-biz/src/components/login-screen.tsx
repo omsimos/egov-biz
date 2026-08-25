@@ -255,7 +255,7 @@ export function LoginScreen({
           scrolled away with the form. */}
       {onBack ? (
         <button
-          aria-label="Back to eGOVbusiness"
+          aria-label="Back to eGov Business"
           className={cn(
             "absolute top-[52px] left-[14px] z-10 grid size-[38px] place-items-center rounded-full bg-muted text-foreground",
             "transition-[background-color,scale] duration-150 ease-[var(--ease-out)] hover:bg-gray-200 active:scale-[var(--press-sm)] motion-reduce:transition-none",

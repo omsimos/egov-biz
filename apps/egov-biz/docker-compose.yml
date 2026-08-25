@@ -3,7 +3,7 @@
 services:
   redis:
     image: redis:7-alpine
-    container_name: egov-agentic-biz-redis
+    container_name: egov-biz-redis
     restart: unless-stopped
     ports:
       - "127.0.0.1:6380:6379"

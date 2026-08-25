@@ -1,6 +1,6 @@
 name: dx-db
 
-# Mirrors .github/workflows/egov-agentic-biz.yml: pull requests cover every
+# Mirrors .github/workflows/egov-biz.yml: pull requests cover every
 # branch, main only runs on push, so no commit is verified twice.
 on:
   pull_request:
@@ -56,7 +56,7 @@ jobs:
       # turbo.json has check-types depending on the no-op "transit" task rather
       # than ^build. Without compiling first, tsc cannot resolve
       # @repo/db/schema. This is the same ordering constraint the
-      # egov-agentic-biz workflow has.
+      # egov-biz workflow has.
       - name: Build
         run: bunx turbo run build --filter=@repo/db --filter=@repo/dx
 

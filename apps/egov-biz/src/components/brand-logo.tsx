@@ -37,7 +37,7 @@ export function BrandLogo({
           of `auto` to the container's width (once rendered this at 13.7:1), and
           next/image sizes its srcset from what it gets. */}
       <Image
-        alt="eGOVbusiness"
+        alt="eGov Business"
         height={fileHeight}
         priority={priority}
         src={logo}
