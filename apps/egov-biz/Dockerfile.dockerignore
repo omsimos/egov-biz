@@ -2,7 +2,7 @@
 .DS_Store
 .env
 .env.*
-!.env.sample
+!.env.example
 !apps/egov-biz/.env.example
 
 **/.next

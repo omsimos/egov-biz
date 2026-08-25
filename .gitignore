@@ -1,7 +1,7 @@
 .DS_Store
 .env
 .env.*
-!.env.sample
+!.env.example
 .tmp/
 .scratch/
 .worklogs/
