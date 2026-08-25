@@ -7,31 +7,43 @@ export type PaymentNetworkErrorCode =
   | "TLS_ERROR"
   | "FETCH_FAILED";
 
-function errorChain(error: unknown) {
-  const chain: unknown[] = [];
+/**
+ * A caught value is `unknown` by the language's rules: anything can be thrown,
+ * and a failed fetch reports the operating-system error through a `cause` link
+ * rather than through its own message. Reading that chain out into text is the
+ * one place this file needs to look at an untyped value.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters
+function errorChainText(error: unknown): string {
+  const parts: string[] = [];
   const seen = new Set<unknown>();
   let current = error;
-  while (current && !seen.has(current) && chain.length < 6) {
-    chain.push(current);
+  while (current && !seen.has(current) && seen.size < 6) {
     seen.add(current);
-    current =
-      typeof current === "object" && current !== null && "cause" in current
-        ? (current as { cause?: unknown }).cause
-        : null;
+    // A thrown value carries no tag but its runtime type; a string, a number and
+    // an error object are all reachable here.
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof
+    if (typeof current !== "object" || current === null) {
+      parts.push("", "", "");
+      break;
+    }
+    parts.push(
+      "code" in current ? String(current.code ?? "") : "",
+      "name" in current ? String(current.name ?? "") : "",
+      "message" in current ? String(current.message ?? "") : "",
+    );
+    current = "cause" in current ? current.cause : null;
   }
-  return chain;
+  return parts.join(" ").toUpperCase();
 }
 
-function value(error: unknown, key: "code" | "name" | "message") {
-  if (typeof error !== "object" || error === null || !(key in error)) return "";
-  return String((error as Record<string, unknown>)[key] ?? "");
-}
-
+/**
+ * Called from a `catch`, so its argument is `unknown` by the language's rules:
+ * the payment route hands over whatever the failed request threw.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters
 export function classifyPaymentNetworkError(error: unknown): PaymentNetworkErrorCode | null {
-  const values = errorChain(error)
-    .flatMap((item) => [value(item, "code"), value(item, "name"), value(item, "message")])
-    .join(" ")
-    .toUpperCase();
+  const values = errorChainText(error);
   if (/ENOTFOUND|DNS_NOT_FOUND|GETADDRINFO.*NOTFOUND/.test(values)) return "DNS_NOT_FOUND";
   if (/EAI_AGAIN|DNS_TEMPORARY/.test(values)) return "DNS_TEMPORARY_FAILURE";
   if (/ECONNREFUSED|CONNECTIONREFUSED|CONNECTION REFUSED/.test(values)) return "CONNECTION_REFUSED";

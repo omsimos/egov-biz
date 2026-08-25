@@ -1,5 +1,11 @@
 import type { EgovSsoCitizenProfile } from "egov.js";
 import type { Bir1901Data, Bir1905Data } from "@omsimos/dx/bir";
+import {
+  payloadRecord,
+  payloadText,
+  type EgovProfilePayload,
+  type PayloadValue,
+} from "@/lib/payload";
 import { resolveSsoTin } from "@/lib/tin";
 
 const syntheticSignature =
@@ -107,25 +113,19 @@ export const completeEgovSsoTestProfile = {
   uniqid: "synthetic-complete-egov-user",
 } satisfies EgovSsoCitizenProfile;
 
-function stringValue(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
+function stringValue(value: PayloadValue): string {
+  return payloadText(value).trim();
 }
 
-function recordValue(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-function joinNonEmpty(parts: ReadonlyArray<unknown>, separator = " ") {
+function joinNonEmpty(parts: ReadonlyArray<PayloadValue>, separator = " ") {
   return parts.map(stringValue).filter(Boolean).join(separator);
 }
 
-function optionalString(value: unknown) {
+function optionalString(value: PayloadValue) {
   return stringValue(value) || undefined;
 }
 
-function splitStreet(value: unknown) {
+function splitStreet(value: PayloadValue) {
   const street = stringValue(value);
   const match = /^(\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?)\s+(.+)$/.exec(street);
   return {
@@ -134,33 +134,39 @@ function splitStreet(value: unknown) {
   };
 }
 
-function foreignAddressFromUnknown(value: unknown): string {
-  if (typeof value === "string") return value.trim();
-  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+/** The field names partners use inside a foreign-address object, in reading order. */
+const FOREIGN_ADDRESS_FIELDS = [
+  "address",
+  "address_line_1",
+  "address_line_2",
+  "city",
+  "municipality",
+  "province",
+  "postal",
+  "country",
+];
 
-  const record = value as Record<string, unknown>;
-  const parts = [
-    "address",
-    "address_line_1",
-    "address_line_2",
-    "city",
-    "municipality",
-    "province",
-    "postal",
-    "country",
-  ].flatMap((key) => (typeof record[key] === "string" ? [record[key].trim()] : []));
-  return [...new Set(parts.filter(Boolean))].join(", ");
+function foreignAddressText(value: PayloadValue): string {
+  const single = payloadText(value);
+  if (single) return single.trim();
+
+  const record = payloadRecord(value);
+  const parts = FOREIGN_ADDRESS_FIELDS.flatMap((field) => {
+    const part = payloadText(record[field]).trim();
+    return part ? [part] : [];
+  });
+  return [...new Set(parts)].join(", ");
 }
 
-export function mapEgovProfileToBir1901(profile: unknown): Bir1901Data {
-  const rawProfile = recordValue(profile);
-  const additional = recordValue(rawProfile.additional_information);
-  const birthPlace = recordValue(additional.birth_place);
-  const father = recordValue(additional.father_details);
-  const mother = recordValue(additional.mother_details);
-  const otherPersonalInformation = recordValue(additional.other_personal_information);
-  const nationalId = recordValue(rawProfile.national_id);
-  const passport = recordValue(rawProfile.passport);
+export function mapEgovProfileToBir1901(profile: EgovProfilePayload): Bir1901Data {
+  const rawProfile = payloadRecord(profile);
+  const additional = payloadRecord(rawProfile.additional_information);
+  const birthPlace = payloadRecord(additional.birth_place);
+  const father = payloadRecord(additional.father_details);
+  const mother = payloadRecord(additional.mother_details);
+  const otherPersonalInformation = payloadRecord(additional.other_personal_information);
+  const nationalId = payloadRecord(rawProfile.national_id);
+  const passport = payloadRecord(rawProfile.passport);
   const fullName = joinNonEmpty([
     rawProfile.first_name,
     rawProfile.middle_name,
@@ -177,7 +183,7 @@ export function mapEgovProfileToBir1901(profile: unknown): Bir1901Data {
     mother.mother_maiden_middlename,
     mother.mother_maiden_lastname,
   ]);
-  const foreignAddress = foreignAddressFromUnknown(rawProfile.foreign_address);
+  const foreignAddress = foreignAddressText(rawProfile.foreign_address);
   const signatureSource = [rawProfile.signature, nationalId.signature]
     .map(stringValue)
     .find(Boolean);
@@ -251,9 +257,9 @@ export function mapEgovProfileToBir1901(profile: unknown): Bir1901Data {
   };
 }
 
-export function mapEgovProfileToBir1905(profile: unknown): Bir1905Data {
-  const rawProfile = recordValue(profile);
-  const nationalId = recordValue(rawProfile.national_id);
+export function mapEgovProfileToBir1905(profile: EgovProfilePayload): Bir1905Data {
+  const rawProfile = payloadRecord(profile);
+  const nationalId = payloadRecord(rawProfile.national_id);
   const registeredName = joinNonEmpty(
     [rawProfile.last_name, rawProfile.first_name, rawProfile.middle_name, rawProfile.suffix],
     ", ",

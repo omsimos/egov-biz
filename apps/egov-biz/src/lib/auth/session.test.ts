@@ -31,6 +31,9 @@ const {
   sessionCookieOptions,
 } = await import("@/lib/auth/session");
 
+// SAFETY: mirrors how @/lib/auth/session stores its registry on globalThis — the
+// same property name, cleared here to prove a session is restored from storage
+// rather than from the in-process cache.
 const globalSessionRegistry = globalThis as typeof globalThis & {
   egovAgenticBizSessions?: Map<string, unknown>;
 };
@@ -57,7 +60,7 @@ describe("authenticated session", () => {
         email: "persistent@example.test",
         first_name: "Persistent",
         last_name: "Citizen",
-      } as EgovSsoCitizenProfile);
+      });
       createdSessionIds.push(sessionId);
 
       expect(maxAge).toBe(DEFAULT_SESSION_TTL_SECONDS);
@@ -68,12 +71,12 @@ describe("authenticated session", () => {
   });
 
   test("restores the session from persistent storage after the process cache is cleared", async () => {
-    const rawProfile = {
+    const rawProfile: EgovSsoCitizenProfile = {
       email: "juan@example.test",
       first_name: "Juan",
       last_name: "Dela Cruz",
       uniqid: `session-test-${crypto.randomUUID()}`,
-    } as EgovSsoCitizenProfile;
+    };
     const { sessionId } = await createSession(rawProfile);
     createdSessionIds.push(sessionId);
 
@@ -95,7 +98,7 @@ describe("authenticated session", () => {
       email: "no-id@example.test",
       first_name: "No",
       last_name: "ID",
-    } as EgovSsoCitizenProfile);
+    });
     createdSessionIds.push(sessionId);
 
     const session = await readSession(requestFor(sessionId));

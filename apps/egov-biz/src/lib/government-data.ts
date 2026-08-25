@@ -9,7 +9,7 @@ export type ResolvedLocation = {
 
 const BIR_DIRECTORY_URL = "https://web-services.bir.gov.ph/trraportal/";
 
-export const officialSources: Record<string, PlanCitation> = {
+export const officialSources = {
   dti: {
     id: "dti-registration",
     title: "Business Registration and Permits",
@@ -45,7 +45,10 @@ export const officialSources: Record<string, PlanCitation> = {
     url: "https://bfp.gov.ph/fsed-forms/",
     note: "BFP provides the Fire Safety Inspection Certificate used for new business permits.",
   },
-};
+} satisfies Record<string, PlanCitation>;
+
+/** The agencies the plan can cite; the keys of the table above. */
+type OfficialSourceId = keyof typeof officialSources;
 
 const cityCatalog = [
   {
@@ -183,11 +186,11 @@ export function citationsForPlan(
   registrationType: BusinessPlan["registrationType"],
   flags: RegulatoryFlag[],
 ) {
-  const ids = new Set<string>(["bir", "rdo"]);
+  const ids = new Set<OfficialSourceId>(["bir", "rdo"]);
   if (registrationType !== "Self-employed") ids.add("dti");
   if (flags.includes("food-manufacturing")) ids.add("fda");
   if (flags.includes("physical-premises")) ids.add("bfp");
-  return [...ids].map((id) => officialSources[id]);
+  return [...ids].map((id): PlanCitation => officialSources[id]);
 }
 
 export function buildRationale(

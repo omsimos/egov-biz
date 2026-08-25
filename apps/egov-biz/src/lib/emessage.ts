@@ -120,11 +120,16 @@ function createClient(env: NodeJS.ProcessEnv): SmsSender {
 
   return {
     sendSms(request, options) {
+      // The SDK distinguishes "no signal" from "a signal", so an aborted-less
+      // call passes no `signal` key at all rather than an undefined one.
+      const signal = options?.signal;
+      if (!signal)
+        return eMessage.sendSms({ auth: accessToken, body: request, client, throwOnError: true });
       return eMessage.sendSms({
         auth: accessToken,
         body: request,
         client,
-        ...(options?.signal ? { signal: options.signal } : {}),
+        signal,
         throwOnError: true,
       });
     },
@@ -366,14 +371,11 @@ export async function simulateTaxPaymentReminder(
   dependencies: SmsDependencies = {},
 ): Promise<SimulateTaxPaymentReminderOutput> {
   const parsed = simulateTaxPaymentReminderInputSchema.parse(input);
-  const output = await sendSmsMessage(
-    {
-      message: buildTaxPaymentReminderMessage(parsed),
-      ...(parsed.number ? { number: parsed.number } : {}),
-    },
-    profileMobile,
-    dependencies,
-  );
+  const reminderSms: SendSmsMessageInput = { message: buildTaxPaymentReminderMessage(parsed) };
+  // An omitted number means "send to the number on the SSO profile", so the key
+  // is only added when the caller actually supplied one.
+  if (parsed.number) reminderSms.number = parsed.number;
+  const output = await sendSmsMessage(reminderSms, profileMobile, dependencies);
   const { number: _number, ...reminder } = parsed;
   return { ...output, reminder, simulation: true };
 }

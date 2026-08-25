@@ -27,6 +27,9 @@ export function useApi<T>(url: string, enabled = true) {
       try {
         const response = await fetch(url, { cache: "no-store", signal: controller.signal });
         if (!response.ok) throw new Error("Request failed");
+        // SAFETY: every eGov record route this hook is pointed at answers with a
+        // `{ data }` envelope, and the non-ok case threw on the line above. T is
+        // the calling component's claim about what that envelope carries.
         const payload = (await response.json()) as { data: T };
         setData(payload.data);
       } catch (loadError) {
