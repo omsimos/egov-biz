@@ -1,5 +1,30 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  // Turborepo hides any variable a task does not declare, so a value set on the
+  // Vercel project never reaches the build unless it is listed here. Wildcards
+  // cover the per-service credential groups in .env.example.
+  "globalEnv": [
+    "NODE_ENV",
+    "APP_URL",
+    "REDIS_URL",
+    "CHAT_MODEL",
+    "AI_GATEWAY_API_KEY",
+    "FILE_STORAGE_DIRECTORY",
+    "TURSO_*",
+    "DX_TURSO_*",
+    "EGOVSSO_*",
+    "EGOVPAY_*",
+    "LGU_EGOVPAY_*",
+    "EMESSAGE_*",
+    "EVERIFY_*",
+    "EGOVAI_*",
+    "EGOVCHAIN_*",
+    "EREPORT_*",
+    "EGOVLIVENESS_*",
+    "EGOVCOMPASS_*",
+    "R2_*",
+    "BIR_FORM_*"
+  ],
   "tasks": {
     "transit": {
       "dependsOn": ["^transit"]
