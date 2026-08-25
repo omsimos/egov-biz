@@ -62,7 +62,7 @@ deterministic local questions and skips web search, and the registration flow st
 ```bash
 bun install
 cp .env.sample .env                            # fill in the two EGOVSSO_PARTNER_* values
-bun --filter egov-biz run infra:up     # Redis on 127.0.0.1:6380
+bun --filter egov-biz run infra:up             # Redis on 127.0.0.1:6380
 bun run dev:business                           # http://localhost:3000
 ```
 
@@ -182,29 +182,12 @@ fallback. [README](./packages/utils/README.md).
 Extracts the public timestamped transcript from a YouTube video as segments and SRT. No
 dependencies. [README](./packages/transcript-scraper/README.md).
 
-## Dependencies
-
-`egov.js` is pinned at `0.2.0` and consumed from npm.
-
-`apps/egov-biz` runs `next` 16.2.10, `react` and `react-dom` 19.2.4, `ai` 7 with
-`@ai-sdk/react` 4 and `@ai-sdk/mcp` 2, `drizzle-orm` 0.45.2 over `@libsql/client`, `ioredis`
-with `resumable-stream`, `zod` 4, and Tailwind 4. The interface is `@base-ui/react`,
-`@phosphor-icons/react`, `motion`, `streamdown`, and `cuelume`.
-
-`packages/dx` depends on `@omsimos/db`, `@omsimos/utils`, `drizzle-orm`, and `egov.js`.
-`packages/db` on `drizzle-orm` and `@libsql/client`. `packages/utils` on
-`@aws-sdk/client-s3`, `pdf-lib`, and `zod`. `packages/transcript-scraper` has none.
-`apps/egov-stagehand-e2e` uses `@browserbasehq/stagehand` 3.7.1 and `zod`.
-
-Tooling is `turbo` 2.10.5, `oxlint` 1.74.0, `oxfmt` 0.59.0, and `drizzle-kit` 0.31.10. The
-packages build with TypeScript 7; the apps use TypeScript 5.
-
 ## Testing
 
 ```bash
 bun run test                      # every workspace
 bun run check-types               # every workspace
-bun --filter @omsimos/dx run test    # one workspace
+bun --filter @omsimos/dx run test # one workspace
 ```
 
 The E2E suite is separate because it drives a real browser against a running app:
@@ -216,19 +199,6 @@ bun run e2e:business              # in another
 
 CI runs build, types, lint, and test on pull requests, split into a workflow per area so an
 unrelated package cannot gate a change. Migrations apply on push to `main`.
-
-## Contributing
-
-Before opening a pull request:
-
-```bash
-bun run format:fix && bun run lint && bun run check-types && bun run test
-```
-
-`.oxlintrc.json` records why each disabled rule is off. Suppress a rule inline only with a
-comment explaining why, next to the `oxlint-disable-next-line`.
-
-Commits follow Conventional Commits, scoped by area where it helps (`fix(biz):`, `chore:`).
 
 ## License
 
