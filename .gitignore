@@ -4,6 +4,7 @@
 !.env.sample
 .tmp/
 .scratch/
+.worklogs/
 .turbo/
 node_modules/
 dist/
