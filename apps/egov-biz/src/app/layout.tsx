@@ -17,7 +17,7 @@ const nunito = Nunito_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "eGOVbusiness — eGovPH",
+  title: "eGov Business — eGovPH",
   description: "One app for Philippine government services.",
 };
 

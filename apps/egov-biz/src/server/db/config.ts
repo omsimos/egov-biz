@@ -29,7 +29,7 @@ export function tursoConfig(environment: Environment = process.env): TursoConfig
     parsedUrl = new URL(url);
   } catch {
     throw new Error(
-      "TURSO_DATABASE_URL must be a valid URL, such as libsql://<database>.turso.io or file:./data/egov-agentic-biz.sqlite",
+      "TURSO_DATABASE_URL must be a valid URL, such as libsql://<database>.turso.io or file:./data/egov-biz.sqlite",
     );
   }
 

@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Build this file from the repository root:
-# docker build -f apps/egov-agentic-biz/Dockerfile -t egov-agentic-biz .
+# docker build -f apps/egov-biz/Dockerfile -t egov-biz .
 
 FROM oven/bun:1.3.14-slim AS dependencies
 
@@ -11,7 +11,7 @@ WORKDIR /repo
 # files change. Bun needs every workspace manifest to honor the frozen lockfile,
 # so a new package under apps/ or packages/ has to be added here too.
 COPY package.json bun.lock ./
-COPY apps/egov-agentic-biz/package.json apps/egov-agentic-biz/package.json
+COPY apps/egov-biz/package.json apps/egov-biz/package.json
 COPY apps/egov-stagehand-e2e/package.json apps/egov-stagehand-e2e/package.json
 COPY apps/rag-hor/package.json apps/rag-hor/package.json
 COPY apps/rag-hor/packages/transcript-scraper/package.json \
@@ -28,9 +28,9 @@ FROM dependencies AS builder
 ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY turbo.json turbo.json
-COPY apps/egov-agentic-biz apps/egov-agentic-biz
+COPY apps/egov-biz apps/egov-biz
 
-RUN bun run turbo build --filter=egov-agentic-biz
+RUN bun run turbo build --filter=egov-biz
 
 FROM node:24-trixie-slim AS runner
 
@@ -39,22 +39,22 @@ ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
     PORT=3000
 
-WORKDIR /app/apps/egov-agentic-biz
+WORKDIR /app/apps/egov-biz
 
 RUN chown -R node:node /app
 
 # Next.js does not copy public or static assets into standalone output.
 COPY --from=builder --chown=node:node \
-  /repo/apps/egov-agentic-biz/.next/standalone /app
+  /repo/apps/egov-biz/.next/standalone /app
 COPY --from=builder --chown=node:node \
-  /repo/apps/egov-agentic-biz/.next/static ./.next/static
+  /repo/apps/egov-biz/.next/static ./.next/static
 COPY --from=builder --chown=node:node \
-  /repo/apps/egov-agentic-biz/public ./public
+  /repo/apps/egov-biz/public ./public
 
 # Migrations ship with the image so `drizzle-kit migrate` can be run against the
 # remote database as a release step.
 COPY --from=builder --chown=node:node \
-  /repo/apps/egov-agentic-biz/drizzle ./drizzle
+  /repo/apps/egov-biz/drizzle ./drizzle
 
 USER node
 

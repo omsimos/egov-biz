@@ -7,10 +7,10 @@ import { generateBir1905Pdf } from "../../src/bir-form/generator-1905.js";
 import { generateBir1901Pdf } from "../../src/bir-form/generator.js";
 
 const template1901Path = fileURLToPath(
-  new URL("../../../../apps/egov-agentic-biz/public/forms/bir-form-1901.pdf", import.meta.url),
+  new URL("../../../../apps/egov-biz/public/forms/bir-form-1901.pdf", import.meta.url),
 );
 const template1905Path = fileURLToPath(
-  new URL("../../../../apps/egov-agentic-biz/public/forms/bir-form-1905.pdf", import.meta.url),
+  new URL("../../../../apps/egov-biz/public/forms/bir-form-1905.pdf", import.meta.url),
 );
 
 async function drawnText(bytes: Uint8Array) {

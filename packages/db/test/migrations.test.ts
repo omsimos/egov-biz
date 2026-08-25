@@ -7,9 +7,7 @@ import { migrate } from "drizzle-orm/libsql/migrator";
 
 import { DX_MIGRATIONS_TABLE, createDatabase, migrateDatabase } from "../src/index.js";
 
-const appMigrations = fileURLToPath(
-  new URL("../../../apps/egov-agentic-biz/drizzle", import.meta.url),
-);
+const appMigrations = fileURLToPath(new URL("../../../apps/egov-biz/drizzle", import.meta.url));
 const dxMigrations = fileURLToPath(new URL("../drizzle", import.meta.url));
 
 describe("database migrations", () => {

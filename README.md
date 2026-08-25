@@ -1,12 +1,12 @@
-# eGOVbusiness
+# eGov Business
 
-Register a Philippine business by answering questions in a chat. eGOVbusiness handles the
+Register a Philippine business by answering questions in a chat. eGov Business handles the
 DTI business name, the local business permit and barangay clearance, and the BIR forms,
-taking one payment per fee along the way. It is the Omsimos eGov Hackathon project, and it
-lives in this `egov-scripts` monorepo alongside the packages it runs on.
+taking one payment per fee along the way. It is the Omsimos eGov Hackathon project, and this
+monorepo holds it alongside the packages it runs on.
 
-The app is [`apps/egov-agentic-biz`](./apps/egov-agentic-biz). A citizen describes the
-business they want to open, and the assistant carries it through registration end to end: a
+The app is [`apps/egov-biz`](./apps/egov-biz). A citizen describes the business
+they want to open, and the assistant carries it through registration end to end: a
 DTI business name through BNRS, a combined LGU business permit and barangay clearance, and
 BIR Forms 1901 and 1905 as filled PDFs. Payments run through eGovPay hosted checkout.
 Everything the assistant asserts comes from an authenticated eGov call or a record it wrote
@@ -24,9 +24,9 @@ the eGovPH partner services that is developed and versioned separately.
 ## Layout
 
 ```
-egov-scripts/
+egov-biz/
 ├── apps/
-│   ├── egov-agentic-biz/    # eGOVbusiness. Next.js 16, React 19, AI SDK 7
+│   ├── egov-biz/            # eGov Business. Next.js 16, React 19, AI SDK 7
 │   └── egov-stagehand-e2e/  # Browser E2E suite driving the four registration routes
 ├── packages/
 │   ├── db/                  # Shared Turso/libSQL persistence for DX (Drizzle)
@@ -62,7 +62,7 @@ deterministic local questions and skips web search, and the registration flow st
 ```bash
 bun install
 cp .env.sample .env                            # fill in the two EGOVSSO_PARTNER_* values
-bun --filter egov-agentic-biz run infra:up     # Redis on 127.0.0.1:6380
+bun --filter egov-biz run infra:up     # Redis on 127.0.0.1:6380
 bun run dev:business                           # http://localhost:3000
 ```
 
@@ -115,7 +115,7 @@ Two settings cause more trouble than the rest.
 reads only `DX_TURSO_*`, so the DX package cannot reach the app database by accident.
 
 Deployment variables and where each comes from are in the
-[app README](./apps/egov-agentic-biz/README.md).
+[app README](./apps/egov-biz/README.md).
 
 ## Scripts
 
@@ -124,7 +124,7 @@ Turborepo.
 
 | Command                         | What it does                                          |
 | ------------------------------- | ----------------------------------------------------- |
-| `bun run dev:business`          | Start eGOVbusiness on port 3000                       |
+| `bun run dev:business`          | Start eGov Business on port 3000                      |
 | `bun run build`                 | Build every package and app                           |
 | `bun run test`                  | Run every workspace's tests                           |
 | `bun run check-types`           | Type-check every workspace                            |
@@ -142,11 +142,11 @@ README.
 
 ## Workspaces
 
-### `apps/egov-agentic-biz`
+### `apps/egov-biz`
 
-eGOVbusiness itself. Next.js 16 with React 19, AI SDK 7 for the agent loop, Drizzle over
+eGov Business itself. Next.js 16 with React 19, AI SDK 7 for the agent loop, Drizzle over
 Turso/libSQL for durable chats, Redis pub/sub for resumable streams, and Cloudflare R2 for
-generated PDFs. Its [README](./apps/egov-agentic-biz/README.md) covers local setup, schema
+generated PDFs. Its [README](./apps/egov-biz/README.md) covers local setup, schema
 changes, the DX workflow boundary, and Vercel deployment.
 
 ### `apps/egov-stagehand-e2e`
@@ -186,7 +186,7 @@ dependencies. [README](./packages/transcript-scraper/README.md).
 
 `egov.js` is pinned at `0.2.0` and consumed from npm.
 
-`apps/egov-agentic-biz` runs `next` 16.2.10, `react` and `react-dom` 19.2.4, `ai` 7 with
+`apps/egov-biz` runs `next` 16.2.10, `react` and `react-dom` 19.2.4, `ai` 7 with
 `@ai-sdk/react` 4 and `@ai-sdk/mcp` 2, `drizzle-orm` 0.45.2 over `@libsql/client`, `ioredis`
 with `resumable-stream`, `zod` 4, and Tailwind 4. The interface is `@base-ui/react`,
 `@phosphor-icons/react`, `motion`, `streamdown`, and `cuelume`.

@@ -34,7 +34,7 @@ continues to use Bun for dependency management and Turborepo orchestration.
 Start the target app’s Redis dependency and dev server first:
 
 ```bash
-docker compose -f apps/egov-agentic-biz/docker-compose.yml up -d redis
+docker compose -f apps/egov-biz/docker-compose.yml up -d redis
 bun --filter @repo/db db:migrate
 bun run dev:business
 ```
@@ -72,17 +72,17 @@ Required for every scenario:
 
 - `AI_GATEWAY_API_KEY` for the default `gateway/google/gemini-2.5-flash`
   Stagehand model, or `OPENAI_API_KEY` when selecting an OpenAI model;
-- a running local `egov-agentic-biz` app and its Redis dependency.
+- a running local `egov-biz` app and its Redis dependency.
 
 Required for `e2e:food` and `e2e:self-employed`:
 
-- the existing eGovPay staging configuration used by `egov-agentic-biz`;
+- the existing eGovPay staging configuration used by `egov-biz`;
 - an `EGOVPAY_API_KEY` beginning with `test_` when that key is visible to this
   process.
 
 Required only for `e2e:self-employed`:
 
-- the target `egov-agentic-biz` dev server must have `R2_BASE_URL`,
+- the target `egov-biz` dev server must have `R2_BASE_URL`,
   `R2_ACCESS_KEY`, and `R2_SECRET_KEY` configured;
 - the scenario generates Form 1901 and writes that PDF artifact to the configured
   remote Cloudflare R2 bucket.

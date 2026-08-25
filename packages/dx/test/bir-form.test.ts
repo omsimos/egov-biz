@@ -11,10 +11,10 @@ import { BirError, createBirFormService } from "../src/bir/index.js";
 
 const templatePaths = {
   "1901": fileURLToPath(
-    new URL("../../../apps/egov-agentic-biz/public/forms/bir-form-1901.pdf", import.meta.url),
+    new URL("../../../apps/egov-biz/public/forms/bir-form-1901.pdf", import.meta.url),
   ),
   "1905": fileURLToPath(
-    new URL("../../../apps/egov-agentic-biz/public/forms/bir-form-1905.pdf", import.meta.url),
+    new URL("../../../apps/egov-biz/public/forms/bir-form-1905.pdf", import.meta.url),
   ),
 };
 

@@ -3,7 +3,7 @@
 .env
 .env.*
 !.env.sample
-!apps/egov-agentic-biz/.env.example
+!apps/egov-biz/.env.example
 
 **/.next
 **/.turbo
@@ -12,5 +12,5 @@
 **/*.log
 **/*.tsbuildinfo
 
-apps/egov-agentic-biz/data
+apps/egov-biz/data
 output

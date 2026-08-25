@@ -17,7 +17,7 @@ describe("database client", () => {
       isLocal: true,
       url: expectedUrl,
     });
-    expect(getTursoConfig({ TURSO_DATABASE_URL: "file:./data/egov-agentic-biz.sqlite" })).toEqual({
+    expect(getTursoConfig({ TURSO_DATABASE_URL: "file:./data/egov-biz.sqlite" })).toEqual({
       authToken: undefined,
       isLocal: true,
       url: expectedUrl,

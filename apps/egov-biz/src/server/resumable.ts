@@ -8,7 +8,7 @@ export function getResumableContext() {
   context ??= createResumableStreamContext({
     publisher: getRedisPublisher(),
     subscriber: getRedisSubscriber(),
-    keyPrefix: "egov-agentic-biz-stream",
+    keyPrefix: "egov-biz-stream",
     // The model keeps producing tokens after the response headers are flushed.
     // On a serverless platform the invocation can be frozen at that point, so
     // `after` is what keeps it alive until the stream finishes writing to

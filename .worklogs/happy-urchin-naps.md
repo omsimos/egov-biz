@@ -56,7 +56,7 @@ sole-proprietor and self-employed registration paths and verify their calendars.
   self-employed registrations.** At the BIR completion checkpoint, the app now
   promotes the assembled BNRS/LGU business into `registeredBusinesses`, adds
   its sole-proprietor calendar, and uses the shared upsert/link helper in
-  `apps/egov-agentic-biz/src/server/dx/bir-registrations.ts`. Continuing to
+  `apps/egov-biz/src/server/dx/bir-registrations.ts`. Continuing to
   serve that business only as a live BNRS/LGU projection was set aside after it
   produced an empty calendar in the completed flow. The existing
   `tax_obligations_json` field already fit the data, so a new schema was not
