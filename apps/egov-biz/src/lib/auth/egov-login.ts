@@ -1,3 +1,11 @@
+import {
+  payloadNumber,
+  payloadRecord,
+  payloadText,
+  type PayloadRecord,
+  type PayloadValue,
+} from "@/lib/payload";
+
 export type EgovSsoFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 type EgovSsoRequestOptions = {
@@ -19,8 +27,6 @@ type EgovSsoMpinRequest = EgovSsoEmailRequest & {
   otpValidationToken: string;
 };
 
-type JsonRecord = Record<string, unknown>;
-
 export class EgovSsoRequestError extends Error {
   readonly retryAfterSeconds?: number;
 
@@ -39,23 +45,20 @@ function requestUrl(apiUrl: string, path: string) {
   return baseUrl;
 }
 
-function stringValue(value: unknown) {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+function stringValue(value: PayloadValue) {
+  return payloadText(value).trim() || undefined;
 }
 
-function retryAfterSeconds(body: JsonRecord) {
-  const meta = body.meta;
-  if (typeof meta !== "object" || meta === null) return undefined;
-  const seconds = Reflect.get(meta, "seconds");
-  return typeof seconds === "number" && Number.isFinite(seconds) && seconds > 0
+function retryAfterSeconds(body: PayloadRecord) {
+  const seconds = payloadNumber(payloadRecord(body.meta).seconds);
+  return seconds !== null && Number.isFinite(seconds) && seconds > 0
     ? Math.ceil(seconds)
     : undefined;
 }
 
-async function readJson(response: Response): Promise<JsonRecord> {
+async function readJson(response: Response): Promise<PayloadRecord> {
   try {
-    const body: unknown = await response.json();
-    return typeof body === "object" && body !== null ? (body as JsonRecord) : {};
+    return payloadRecord(await response.json());
   } catch {
     return {};
   }
@@ -64,7 +67,7 @@ async function readJson(response: Response): Promise<JsonRecord> {
 async function postEgovSso(
   apiUrl: string,
   path: string,
-  body: JsonRecord,
+  body: PayloadRecord,
   fallbackError: string,
   fetcher: EgovSsoFetch = fetch,
 ) {

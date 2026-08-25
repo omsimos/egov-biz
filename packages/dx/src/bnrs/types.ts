@@ -1,3 +1,5 @@
+import type { JsonValue } from "../boundary.js";
+
 export type BnrsActor = {
   egovUserId: string;
 };
@@ -164,7 +166,7 @@ export interface BnrsPaymentProvider {
     callbackUrl: string;
     redirectUrl: string;
     items: readonly BnrsPaymentItem[];
-    description: Readonly<Record<string, unknown>>;
+    description: Readonly<Record<string, JsonValue>>;
   }): Promise<BnrsPaymentCheckout>;
   getTransaction(transactionUuid: string): Promise<BnrsPaymentProviderSnapshot>;
   voidTransaction(transactionUuid: string): Promise<void>;

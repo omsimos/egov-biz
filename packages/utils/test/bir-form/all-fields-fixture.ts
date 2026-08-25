@@ -9,15 +9,30 @@ import {
 const TEST_SIGNATURE =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAAA8CAYAAABYfzddAAAC/klEQVR42u2dy23DMAxAFaGXbtGJOmwn6hY9uqcAgRHbkviRRb53K1okscQnUrTiPrZtKwCwJpUhAEBgAEBgAEBgAAQGAAQGAAQGAAQGQGAAQGAAQGAABAYABAYABAYABAZAYABAYABA4CY+v763s58BovARVV6kBTJw4KzMNQICE8C3rTyQGYHJUIvv+ZEYgZeW8+/358GilGthzjYeYTMw8uYI6NdqI2PlUbNloSiTe1RxZFi4qD4CCXxVOnsEtPfK37tdiBjoV9eURe6asXTWnFzv7m+LvNGzcOsYZ5C4ZphIq4A+en+rwJE06rJuHaJLXCN1Cz0zj3cJ1yvvu99Zfaa7bB0y7f/dBdbuFkqDRvu9LYUZzbyWAX3HrYPXwpVK4FdhLTPVVbBqBfNZIHkFj+RaNBa+lbYO0SWuZcFmw/7vRwNa+r6tDSTNbN97rZpZuPW+s0WTcMZinVZg7UnUkkE7cx29npbEdxpDjcXOs/rIUkpXz+B4dgs1B9fzPq9nFtA8GipduI7m5urgiHafQmOuo0lcvbKuxv1Zi8G/2p9LRNr/nWRLob1QSY9h7ru/2rdxNOY6QyldvbJu6+D2TNzIBEnum2ocVRxZpDQCsbfqGVmMz+ZUetxVs/qIlIWrtbwjMr17TctBb3kEj0cAWWfe1ipotGTWONLp9a2yKBLXGXujXom1J7U3yKQB1CLxrK9Dth6u6fksoxJ7Vh9RJK7eWVdjgD2PRmq915nEnvKOBPPonEorLO/qoyz4DavHtm1qL269P/TuRs4q3ayDzfsM+dXi4LmArZB1e669WjaqLD64ZUacmQE9M4X3MUzvLUvhLLTu7aHC0zxEXdwI1y/tiRSe1NJfQs8S13Pva3FYoOe9nyXkjMCade3evY2zsQ8t8F26o9YCz5ToLo0T72ufuXCmycD7gZ4xydnlYuEAcReagQZYWGAAKDxSBwDKPf87Ic/oBSjunXUyMAB7YABgDwwACAyAwACAwACAwACAwAAIDAAIDABS/gGApcuvEbRK5AAAAABJRU5ErkJggg==";
 
-type JsonSchema = Record<string, unknown>;
+/** zod owns the JSON Schema it emits, so its own document types are the contract here. */
+type SchemaNode = z.core.JSONSchema.BaseSchema;
+type SchemaChild = z.core.JSONSchema._JSONSchema;
+
+/** Every value the walker synthesizes before `schema.parse` turns it into typed form data. */
+type FixtureValue =
+  | boolean
+  | number
+  | string
+  | null
+  | FixtureValue[]
+  | { [key: string]: FixtureValue };
 
 export type AllFieldsFixture<Data> = {
   data: Data;
   markers: Array<{ marker: string; path: string }>;
 };
 
-function record(value: unknown): JsonSchema {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonSchema) : {};
+function isSchemaNode(value: SchemaChild | SchemaChild[] | undefined): value is SchemaNode {
+  return value instanceof Object && !Array.isArray(value);
+}
+
+function record(value: SchemaChild | SchemaChild[] | undefined): SchemaNode {
+  return isSchemaNode(value) ? value : {};
 }
 
 function fixtureFromSchema<Data>(schema: z.ZodType<Data>): AllFieldsFixture<Data> {
@@ -31,14 +46,15 @@ function fixtureFromSchema<Data>(schema: z.ZodType<Data>): AllFieldsFixture<Data
     return marker;
   }
 
-  function valueFor(jsonSchema: JsonSchema, path: string): unknown {
+  function valueFor(jsonSchema: SchemaNode, path: string): FixtureValue {
     const enumValues = jsonSchema.enum;
-    if (Array.isArray(enumValues) && enumValues.length > 0) return enumValues[0];
-    if ("const" in jsonSchema) return jsonSchema.const;
+    if (Array.isArray(enumValues) && enumValues.length > 0) return enumValues[0] ?? null;
+    const constValue = jsonSchema.const;
+    if (constValue !== undefined) return constValue;
 
     switch (jsonSchema.type) {
       case "object": {
-        const properties = record(jsonSchema.properties);
+        const properties = jsonSchema.properties ?? {};
         return Object.fromEntries(
           Object.entries(properties).map(([key, property]) => [
             key,

@@ -1,3 +1,8 @@
+import type { JsonValue } from "../boundary.js";
+
+/** Structured diagnostics attached to a domain error; always JSON-serializable. */
+export type LguErrorDetails = Readonly<Record<string, JsonValue>>;
+
 export type LguErrorCode =
   | "INVALID_ACTOR"
   | "INVALID_APPLICANT"
@@ -16,9 +21,9 @@ export type LguErrorCode =
 
 export class LguError extends Error {
   readonly code: LguErrorCode;
-  readonly details?: Readonly<Record<string, unknown>>;
+  readonly details?: LguErrorDetails;
 
-  constructor(code: LguErrorCode, message: string, details?: Readonly<Record<string, unknown>>) {
+  constructor(code: LguErrorCode, message: string, details?: LguErrorDetails) {
     super(message);
     this.name = "LguError";
     this.code = code;

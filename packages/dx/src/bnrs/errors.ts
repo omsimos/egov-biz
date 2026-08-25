@@ -1,3 +1,8 @@
+import type { JsonValue } from "../boundary.js";
+
+/** Structured diagnostics attached to a domain error; always JSON-serializable. */
+export type BnrsErrorDetails = Readonly<Record<string, JsonValue>>;
+
 export type BnrsErrorCode =
   | "INVALID_ACTOR"
   | "APPLICATION_NOT_FOUND"
@@ -17,9 +22,9 @@ export type BnrsErrorCode =
 
 export class BnrsError extends Error {
   readonly code: BnrsErrorCode;
-  readonly details?: Readonly<Record<string, unknown>>;
+  readonly details?: BnrsErrorDetails;
 
-  constructor(code: BnrsErrorCode, message: string, details?: Readonly<Record<string, unknown>>) {
+  constructor(code: BnrsErrorCode, message: string, details?: BnrsErrorDetails) {
     super(message);
     this.name = "BnrsError";
     this.code = code;

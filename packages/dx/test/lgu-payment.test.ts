@@ -68,12 +68,14 @@ async function prepareApplication(context: ReturnType<typeof setup>) {
   });
 }
 
-async function expectLguError(action: () => Promise<unknown>, code: LguError["code"]) {
+async function expectLguError<T>(action: () => Promise<T>, code: LguError["code"]) {
   try {
     await action();
     throw new Error("Expected an LguError");
   } catch (error) {
     expect(error).toBeInstanceOf(LguError);
+    // SAFETY: the expectation above throws unless `error` is a LguError, so this
+    // line is only reached once that instance check has held.
     expect((error as LguError).code).toBe(code);
   }
 }

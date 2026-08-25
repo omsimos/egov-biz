@@ -9,15 +9,26 @@ import {
 } from "@/server/conversations";
 import { getBnrs } from "@/server/dx/bnrs";
 import { getLgu } from "@/server/dx/lgu";
+import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
+// eGovPay has posted the transaction reference under three different spellings
+// across its environments, so all three are read and the first usable one wins.
+// Each field catches its own failure so an unexpected value under one key does
+// not hide a good reference under another.
+const callbackSchema = z
+  .object({
+    uuid: z.string().min(1).optional().catch(undefined),
+    transaction_uuid: z.string().min(1).optional().catch(undefined),
+    transactionUuid: z.string().min(1).optional().catch(undefined),
+  })
+  .catch({});
+
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as Record<string, unknown>;
-    const transactionUuid = [body.uuid, body.transaction_uuid, body.transactionUuid].find(
-      (value): value is string => typeof value === "string" && value.length > 0,
-    );
+    const body = callbackSchema.parse(await request.json());
+    const transactionUuid = body.uuid ?? body.transaction_uuid ?? body.transactionUuid;
     if (!transactionUuid)
       return Response.json({ error: "Missing transaction reference" }, { status: 400 });
 

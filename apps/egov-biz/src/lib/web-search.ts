@@ -1,4 +1,5 @@
 import { createGateway, stepCountIs, streamText } from "ai";
+import { payloadRecord, payloadText, type PayloadValue } from "@/lib/payload";
 
 /**
  * Exa runs on the AI Gateway, so the gateway key authenticates the search and
@@ -10,7 +11,7 @@ type Gateway = ReturnType<typeof createGateway>;
 
 export type OfficialSource = { title: string; url: string };
 
-type ExaResult = { title?: unknown; url?: unknown };
+type ExaResult = { title?: PayloadValue; url?: PayloadValue };
 
 /**
  * Only .gov.ph hosts count. Matching the hostname rather than the whole URL
@@ -32,13 +33,18 @@ function resultsFrom(outputs: readonly unknown[]) {
   const results: ExaResult[] = [];
   let failed = false;
   for (const output of outputs) {
-    if (!output || typeof output !== "object") continue;
-    if ("error" in output) {
+    const record = payloadRecord(output);
+    if ("error" in record) {
       failed = true;
       continue;
     }
-    const list = (output as { results?: unknown }).results;
-    if (Array.isArray(list)) results.push(...(list as ExaResult[]));
+    const list = record.results;
+    if (Array.isArray(list)) {
+      // SAFETY: ExaResult leaves both of its fields unparsed, so any decoded
+      // array element already satisfies it; officialSourcesFrom below re-reads
+      // each field through the payload parsers before using it.
+      results.push(...(list as ExaResult[]));
+    }
   }
   return { results, failed };
 }
@@ -47,8 +53,8 @@ export function officialSourcesFrom(results: readonly ExaResult[], limit = 5) {
   const sources: OfficialSource[] = [];
   const seen = new Set<string>();
   for (const result of results) {
-    const url = typeof result.url === "string" ? result.url : "";
-    const title = typeof result.title === "string" ? result.title.trim() : "";
+    const url = payloadText(result.url);
+    const title = payloadText(result.title).trim();
     if (!url || !title || seen.has(url) || !isOfficialSource(url)) continue;
     seen.add(url);
     sources.push({ title, url });
@@ -105,8 +111,8 @@ export async function runExaSearch({
     });
     for await (const part of generated.fullStream) {
       if (part.type === "tool-call") {
-        const asked = (part.input as { query?: unknown } | undefined)?.query;
-        query = typeof asked === "string" ? asked.trim().slice(0, 180) : "";
+        const asked = payloadRecord(part.input).query;
+        query = payloadText(asked).trim().slice(0, 180);
         if (query) onQuery?.(query);
       } else if (part.type === "tool-result") outputs.push(part.output);
       else if (part.type === "tool-error") errored = true;

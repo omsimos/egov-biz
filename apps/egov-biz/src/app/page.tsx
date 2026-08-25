@@ -8,7 +8,7 @@ export default async function Home({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const query = await searchParams;
-  const requestedChatId = typeof query.chat === "string" ? query.chat : null;
+  const requestedChatId = Array.isArray(query.chat) ? null : (query.chat ?? null);
   return (
     <main>
       <a className="skip-link" href="#app-content">

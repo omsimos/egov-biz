@@ -131,6 +131,9 @@ export class MemoryBnrsRepository implements BnrsRepository {
     if (
       !application ||
       application.egovUserId !== input.egovUserId ||
+      // SAFETY: `includes` compares by value and never reads the argument as the
+      // narrower type; the assertion is only needed because a `readonly` tuple
+      // types `includes` to its own element union.
       !input.expectedStates.includes(
         application.state as "BUSINESS_ADDRESS_PENDING" | "PAYMENT_READY",
       )

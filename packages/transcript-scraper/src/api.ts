@@ -10,19 +10,24 @@ const WATCH_PAGE_MARKERS = {
   ],
 } as const;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
+/** Every value `JSON.parse` can produce; the watch page ships no narrower contract. */
+type JsonValue = boolean | number | string | null | JsonValue[] | { [key: string]: JsonValue };
+
+type JsonObject = { [key: string]: JsonValue };
+
+function isRecord(value: JsonValue | undefined): value is JsonObject {
+  return value instanceof Object && !Array.isArray(value);
 }
 
-function getRecord(value: unknown): Record<string, unknown> | undefined {
+function getRecord(value: JsonValue | undefined): JsonObject | undefined {
   return isRecord(value) ? value : undefined;
 }
 
-function getArray(value: unknown): unknown[] {
+function getArray(value: JsonValue | undefined): JsonValue[] {
   return Array.isArray(value) ? value : [];
 }
 
-function getPath(value: unknown, path: readonly string[]): unknown {
+function getPath(value: JsonValue | undefined, path: readonly string[]): JsonValue | undefined {
   let current = value;
 
   for (const key of path) {
@@ -34,11 +39,14 @@ function getPath(value: unknown, path: readonly string[]): unknown {
   return current;
 }
 
-function getString(value: unknown): string | undefined {
+function getString(value: JsonValue | undefined): string | undefined {
+  // YouTube publishes no schema for ytInitialData, so there is nothing to parse
+  // this blob against; this is the leaf that turns a JSON scalar into a string.
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof
   return typeof value === "string" ? value : undefined;
 }
 
-function extractAssignedJson(html: string, markers: readonly string[]): unknown {
+function extractAssignedJson(html: string, markers: readonly string[]): JsonValue {
   const marker = markers.find((candidate) => html.includes(candidate));
   if (!marker) throw new Error("YouTube page data was not found");
 
@@ -63,7 +71,7 @@ function extractAssignedJson(html: string, markers: readonly string[]): unknown 
     if (character === '"') inString = true;
     else if (character === "{") depth += 1;
     else if (character === "}" && --depth === 0) {
-      return JSON.parse(html.slice(start, index + 1)) as unknown;
+      return JSON.parse(html.slice(start, index + 1));
     }
   }
 
@@ -71,14 +79,13 @@ function extractAssignedJson(html: string, markers: readonly string[]): unknown 
 }
 
 function findFirst(
-  value: unknown,
-  predicate: (candidate: Record<string, unknown>) => boolean,
-): Record<string, unknown> | undefined {
-  if (value === null || typeof value !== "object") return undefined;
+  value: JsonValue | undefined,
+  predicate: (candidate: JsonObject) => boolean,
+): JsonObject | undefined {
+  const record = getRecord(value);
+  if (record && predicate(record)) return record;
 
-  if (isRecord(value) && predicate(value)) return value;
-
-  const children = Array.isArray(value) ? value : Object.values(value);
+  const children = record ? Object.values(record) : getArray(value);
   for (const child of children) {
     const found = findFirst(child, predicate);
     if (found) return found;
@@ -118,7 +125,7 @@ function isYoutubeHostname(hostname: string): boolean {
   );
 }
 
-function getTrackName(track: Record<string, unknown> | undefined): string {
+function getTrackName(track: JsonObject | undefined): string {
   const simpleText = getString(getPath(track, ["name", "simpleText"]));
   if (simpleText) return simpleText;
 
@@ -131,7 +138,7 @@ function getTrackName(track: Record<string, unknown> | undefined): string {
   return runText || "Transcript";
 }
 
-function readTranscriptSegments(panelData: unknown): TranscriptSegment[] {
+function readTranscriptSegments(panelData: JsonValue): TranscriptSegment[] {
   const sectionContents = getArray(
     getPath(panelData, [
       "content",
@@ -295,7 +302,7 @@ export async function getYouTubeTranscript(
     throw new Error(`YouTube transcript request returned ${panelResponse.status}`);
   }
 
-  const segments = readTranscriptSegments((await panelResponse.json()) as unknown);
+  const segments = readTranscriptSegments(await panelResponse.json());
   if (segments.length === 0) {
     throw new Error("YouTube returned an empty transcript");
   }

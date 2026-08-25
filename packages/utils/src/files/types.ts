@@ -1,4 +1,11 @@
-import type { DeleteObjectCommand, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import type {
+  DeleteObjectCommand,
+  DeleteObjectCommandOutput,
+  GetObjectCommand,
+  GetObjectCommandOutput,
+  PutObjectCommand,
+  PutObjectCommandOutput,
+} from "@aws-sdk/client-s3";
 
 export type FileStorageMetadata = Readonly<Record<string, string>>;
 
@@ -35,6 +42,12 @@ export interface FileStorage {
 
 export type R2Command = DeleteObjectCommand | GetObjectCommand | PutObjectCommand;
 
+/** The S3 response for each command in `R2Command`; only the get response carries a body. */
+export type R2CommandOutput =
+  | DeleteObjectCommandOutput
+  | GetObjectCommandOutput
+  | PutObjectCommandOutput;
+
 export interface R2ClientLike {
-  send(command: R2Command, options?: { abortSignal?: AbortSignal }): Promise<unknown>;
+  send(command: R2Command, options?: { abortSignal?: AbortSignal }): Promise<R2CommandOutput>;
 }

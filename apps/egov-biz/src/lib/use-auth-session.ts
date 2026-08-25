@@ -17,6 +17,9 @@ export function useAuthSession() {
     setError("");
     try {
       const response = await fetch("/api/auth/session", { cache: "no-store" });
+      // SAFETY: /api/auth/session answers with the session envelope or with an
+      // `{ error }` body, and the line below re-checks which of the two arrived
+      // before any profile is read out of it.
       const body = (await response.json()) as AuthSessionResponse | { error: string };
       if (!response.ok || "error" in body) throw new Error("Could not restore the session.");
       if (body.authenticated) {
@@ -35,6 +38,10 @@ export function useAuthSession() {
   }, []);
 
   useEffect(() => {
+    // Synchronising with the eGovPH session cookie held by /api/auth/session:
+    // every value below is that response, and the `setError("")` restore opens
+    // with is what clears a failed attempt when it is called again to retry.
+    // oxlint-disable-next-line react/set-state-in-effect
     void restore();
   }, [restore]);
 

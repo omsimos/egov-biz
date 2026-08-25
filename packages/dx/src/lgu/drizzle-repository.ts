@@ -22,14 +22,23 @@ function applicationRecord(row: typeof lguApplications.$inferSelect): LguApplica
 function applicantRecord(
   row: typeof lguApplicantInformation.$inferSelect,
 ): LguApplicantInformationRecord {
-  return {
+  const applicant: LguApplicantInformationRecord = {
     ownerName: row.ownerName,
     normalizedOwnerName: row.normalizedOwnerName,
-    ...(row.tin === null ? {} : { tin: row.tin }),
   };
+  if (row.tin !== null) applicant.tin = row.tin;
+  return applicant;
 }
 
 class LguTransitionRollback extends Error {}
+
+// A promise rejection reason is `unknown` by the language's own rules; this
+// handler only tests it with `instanceof` and rethrows anything it does not own.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters
+function rollbackToNull(error: unknown): null {
+  if (error instanceof LguTransitionRollback) return null;
+  throw error;
+}
 
 export function createDrizzleLguRepository(database: Database): LguRepository {
   async function findMatchingApplication(input: {
@@ -371,10 +380,7 @@ export function createDrizzleLguRepository(database: Database): LguRepository {
             payment,
           };
         })
-        .catch((error: unknown) => {
-          if (error instanceof LguTransitionRollback) return null;
-          throw error;
-        });
+        .catch(rollbackToNull);
     },
     completePayment(input) {
       return database
@@ -433,10 +439,7 @@ export function createDrizzleLguRepository(database: Database): LguRepository {
             payment,
           };
         })
-        .catch((error: unknown) => {
-          if (error instanceof LguTransitionRollback) return null;
-          throw error;
-        });
+        .catch(rollbackToNull);
     },
   };
 }

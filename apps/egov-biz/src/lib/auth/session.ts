@@ -20,6 +20,9 @@ export type AuthenticatedSession = {
 
 type SessionRegistry = Map<string, AuthenticatedSession>;
 
+// SAFETY: the registry hangs off globalThis under a name only this module reads
+// or writes — that is what lets it survive Next's dev-mode module reloads — so
+// the added optional property describes exactly what is stored there.
 const globalSessionRegistry = globalThis as typeof globalThis & {
   egovAgenticBizSessions?: SessionRegistry;
 };

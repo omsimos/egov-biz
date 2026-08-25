@@ -197,9 +197,12 @@ export async function getConversation(
   const parsed = messageRows.map((message) => ({
     id: message.id,
     role: message.role,
-    parts: JSON.parse(message.partsJson) as UIMessage["parts"],
+    // SAFETY: `saveMessages` below is the only writer of `parts_json`, and it
+    // stores `JSON.stringify(message.parts)` of a `BusinessChatMessage`, so the
+    // round trip returns that same parts array.
+    parts: JSON.parse(message.partsJson) as BusinessChatMessage["parts"],
   }));
-  const plan = latestRegistrationPlan(parsed as Pick<BusinessChatMessage, "parts">[]);
+  const plan = latestRegistrationPlan(parsed);
   const linkedBusinessId =
     row.businessId ??
     (row.bnrsApplicationId && row.bnrsCertificateNumber ? row.bnrsApplicationId : null);
@@ -209,7 +212,7 @@ export async function getConversation(
     paymentStatus: paymentStatuses["dti-business-name"] ?? null,
     paymentStatuses,
     messages: parsed,
-  } as BusinessConversation;
+  } satisfies BusinessConversation;
 }
 
 export async function createConversation(
@@ -364,9 +367,8 @@ export async function markPaymentCheckpointComplete(
   for (const message of [...conversation.messages].reverse()) {
     for (const part of [...message.parts].reverse()) {
       if (part.type !== "tool-updatePlan" || part.state !== "output-available") continue;
-      const output = part.output as {
-        plan?: { title: string; steps: { id: string; label: string; status: string }[] };
-      };
+      const output = part.output;
+      // A plan persisted before `updatePlan` always emitted one can be missing.
       if (!output.plan) continue;
       let nextActivated = false;
       output.plan.steps = output.plan.steps.map((step) => {

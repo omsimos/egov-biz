@@ -13,6 +13,7 @@ import type {
   FileTransferOptions,
   PutFileInput,
   R2ClientLike,
+  R2CommandOutput,
   StoredFile,
   StoredFileReference,
 } from "./types.js";
@@ -25,17 +26,14 @@ function boundedSignal(signal: AbortSignal | undefined) {
   return signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
 }
 
-function cancelBody(body: NonNullable<GetObjectCommandOutput["Body"]>, reason: unknown) {
-  const abortable = body as unknown as {
-    cancel?: (reason?: unknown) => Promise<unknown> | void;
-    destroy?: (error?: Error) => void;
-  };
-  if (typeof abortable.destroy === "function") {
-    abortable.destroy(reason instanceof Error ? reason : new Error("Artifact download aborted"));
+function cancelBody(body: NonNullable<GetObjectCommandOutput["Body"]>, signal: AbortSignal) {
+  const reason = signal.reason;
+  if ("destroy" in body) {
+    body.destroy(reason instanceof Error ? reason : new Error("Artifact download aborted"));
     return;
   }
-  if (typeof abortable.cancel === "function") {
-    const cancellation = abortable.cancel(reason);
+  if ("cancel" in body) {
+    const cancellation = body.cancel(reason);
     if (cancellation instanceof Promise) void cancellation.catch(() => undefined);
   }
 }
@@ -48,7 +46,7 @@ function readBody(
   return new Promise((resolve, reject) => {
     const abort = () => {
       try {
-        cancelBody(body, signal.reason);
+        cancelBody(body, signal);
       } catch {
         // The abort reason remains the primary failure even if stream cleanup fails.
       }
@@ -64,11 +62,16 @@ function readBody(
   });
 }
 
-function isNotFound(error: unknown) {
+/** The not-found evidence R2 carries on failures the S3 SDK does not model as its own exception. */
+type R2FailureEvidence = {
+  $metadata?: { httpStatusCode?: number };
+  name?: string;
+};
+
+function isNotFound(error: Error) {
   if (error instanceof S3ServiceException)
     return error.name === "NoSuchKey" || error.$metadata.httpStatusCode === 404;
-  if (!error || typeof error !== "object") return false;
-  const candidate = error as { $metadata?: { httpStatusCode?: number }; name?: string };
+  const candidate: R2FailureEvidence = error;
   return candidate.name === "NoSuchKey" || candidate.$metadata?.httpStatusCode === 404;
 }
 
@@ -136,18 +139,18 @@ export class R2FileStorage implements FileStorage {
   }
 
   private async download(key: string, signal?: AbortSignal): Promise<StoredFile | undefined> {
-    let response: GetObjectCommandOutput;
+    let response: R2CommandOutput;
     const transferSignal = boundedSignal(signal);
     try {
-      response = (await this.client.send(
+      response = await this.client.send(
         new GetObjectCommand({ Bucket: this.config.bucket, Key: key }),
         { abortSignal: transferSignal },
-      )) as GetObjectCommandOutput;
+      );
     } catch (error) {
-      if (isNotFound(error)) return undefined;
+      if (error instanceof Error && isNotFound(error)) return undefined;
       throw error;
     }
-    if (!response.Body) return undefined;
+    if (!("Body" in response) || !response.Body) return undefined;
     const bytes = await readBody(response.Body, transferSignal);
     return {
       bytes,

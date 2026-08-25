@@ -9,6 +9,9 @@ import {
 import { createClient, type EgovSsoCitizenProfile } from "egov.js";
 import { getDxDatabase } from "@/server/dx/database";
 
+// SAFETY: the added slot is optional, so this view claims nothing about
+// `globalThis` that is not already true — reading `__egovBizBnrs` before the
+// first assignment yields `undefined`. This module is its only writer.
 const globalCache = globalThis as typeof globalThis & {
   __egovBizBnrs?: BnrsService;
 };
@@ -61,7 +64,7 @@ export function getBnrs(): BnrsService {
 }
 
 export function bnrsActorFromProfile(profile: EgovSsoCitizenProfile) {
-  const egovUserId = typeof profile.uniqid === "string" ? profile.uniqid.trim() : "";
+  const egovUserId = profile.uniqid?.trim() ?? "";
   if (!egovUserId) throw new Error("The authenticated eGov profile has no user identifier.");
   return { egovUserId };
 }

@@ -41,6 +41,11 @@ function useLauncherDate() {
     const now = new Date();
     const parts = (options: Intl.DateTimeFormatOptions) =>
       now.toLocaleDateString("en-PH", { timeZone: "Asia/Manila", ...options });
+    // Synchronising with the phone's clock, which only the client has: this
+    // page is rendered ahead of time, so a value read during render or in an
+    // initializer is the prerender's date and the mismatch the null first
+    // render exists to avoid.
+    // oxlint-disable-next-line react/set-state-in-effect
     setDate(
       `${parts({ weekday: "short" })} · ${parts({ day: "numeric", month: "short", year: "numeric" })}`,
     );

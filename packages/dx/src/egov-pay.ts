@@ -2,10 +2,13 @@ import { createHmac } from "node:crypto";
 import {
   egovPay,
   type Client,
+  type EgovPayGeneratePaymentRequest as EgovPayGeneratePaymentBody,
   type EgovPayGeneratePaymentResponse,
   type EgovPayTransactionResponse,
   type EgovPayVoidResponse,
 } from "egov.js";
+
+import type { JsonValue } from "./boundary.js";
 
 export interface EgovPayCallOptions {
   signal?: AbortSignal;
@@ -15,7 +18,7 @@ export interface EgovPayGeneratePaymentRequest {
   amount: number;
   callbackUrl: string;
   currency?: string;
-  description?: Record<string, unknown>;
+  description?: Readonly<Record<string, JsonValue>>;
   email?: string;
   expiresAt?: string;
   items: Array<{ amount: number; name: string }>;
@@ -59,26 +62,25 @@ function signalOption(options: EgovPayCallOptions | undefined) {
 export function createEgovPayClient(options: EgovPayClientOptions): EgovPayClient {
   return {
     generatePayment(request, callOptions) {
+      const body: EgovPayGeneratePaymentBody = {
+        amount: request.amount,
+        callback_url: request.callbackUrl,
+        digest: paymentDigest(request.amount, request.transactionId, options.apiKey),
+        items: request.items,
+        redirect_url: request.redirectUrl,
+        settlement_template_uuid: options.settlementTemplateUuid,
+        txnid: request.transactionId,
+      };
+      if (request.currency !== undefined) body.currency = request.currency;
+      if (request.description !== undefined) body.description = request.description;
+      if (request.email !== undefined) body.email = request.email;
+      if (request.expiresAt !== undefined) body.expires_at = request.expiresAt;
+      if (request.linkExpiresAt !== undefined) body.link_expires_at = request.linkExpiresAt;
+      if (request.mobile !== undefined) body.mobile = request.mobile;
+      if (request.name !== undefined) body.name = request.name;
       return egovPay.generatePayment({
         auth: options.apiKey,
-        body: {
-          amount: request.amount,
-          callback_url: request.callbackUrl,
-          digest: paymentDigest(request.amount, request.transactionId, options.apiKey),
-          items: request.items,
-          redirect_url: request.redirectUrl,
-          settlement_template_uuid: options.settlementTemplateUuid,
-          txnid: request.transactionId,
-          ...(request.currency === undefined ? {} : { currency: request.currency }),
-          ...(request.description === undefined ? {} : { description: request.description }),
-          ...(request.email === undefined ? {} : { email: request.email }),
-          ...(request.expiresAt === undefined ? {} : { expires_at: request.expiresAt }),
-          ...(request.linkExpiresAt === undefined
-            ? {}
-            : { link_expires_at: request.linkExpiresAt }),
-          ...(request.mobile === undefined ? {} : { mobile: request.mobile }),
-          ...(request.name === undefined ? {} : { name: request.name }),
-        },
+        body,
         client: options.client,
         ...signalOption(callOptions),
         throwOnError: true,

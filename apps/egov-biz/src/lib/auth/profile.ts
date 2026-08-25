@@ -1,25 +1,25 @@
 import type { CitizenProfile } from "@/lib/citizen-profile";
+import {
+  payloadRecord,
+  payloadText,
+  type EgovProfilePayload,
+  type PayloadValue,
+} from "@/lib/payload";
 import { maskTin, resolveSsoTin } from "@/lib/tin";
 
-function stringValue(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
+function stringValue(value: PayloadValue): string {
+  return payloadText(value).trim();
 }
 
-function recordValue(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-function joinNonEmpty(parts: ReadonlyArray<unknown>, separator = " ") {
+function joinNonEmpty(parts: ReadonlyArray<PayloadValue>, separator = " ") {
   return parts
     .map(stringValue)
     .filter((part) => part.length > 0)
     .join(separator);
 }
 
-export function mapEgovCitizenProfile(profile: unknown): CitizenProfile {
-  const rawProfile = recordValue(profile);
+export function mapEgovCitizenProfile(profile: EgovProfilePayload): CitizenProfile {
+  const rawProfile = payloadRecord(profile);
   const fullName = joinNonEmpty([
     rawProfile.first_name,
     rawProfile.middle_name,

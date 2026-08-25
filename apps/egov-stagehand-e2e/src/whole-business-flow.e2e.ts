@@ -66,14 +66,16 @@ async function pass(name: string) {
   console.log(`✓ ${name}`);
 }
 
+/** The subset of Stagehand's act options this flow sets. */
+type ActOptions = { timeout: number; variables?: Variables };
+
 async function act(name: string, instruction: string, variables?: Variables) {
   assert(stagehand, "Stagehand has not been initialized.");
   lastStep = name;
   console.log(`→ ${name}`);
-  const result = await stagehand.act(instruction, {
-    timeout: 90_000,
-    ...(variables ? { variables } : {}),
-  });
+  const actOptions: ActOptions = { timeout: 90_000 };
+  if (variables) actOptions.variables = variables;
+  const result = await stagehand.act(instruction, actOptions);
   assert.equal(
     result.success,
     true,
@@ -190,7 +192,7 @@ async function waitFor(
 async function waitForText(description: string, expected: string | RegExp, timeout = 180_000) {
   return waitFor(
     description,
-    ({ text }) => (typeof expected === "string" ? text.includes(expected) : expected.test(text)),
+    ({ text }) => (expected instanceof RegExp ? expected.test(text) : text.includes(expected)),
     timeout,
   );
 }
@@ -198,7 +200,7 @@ async function waitForText(description: string, expected: string | RegExp, timeo
 async function expectBody(expected: string | RegExp, message: string) {
   const text = await bodyText();
   assert(
-    typeof expected === "string" ? text.includes(expected) : expected.test(text),
+    expected instanceof RegExp ? expected.test(text) : text.includes(expected),
     `${message}\nCurrent page text:\n${normalizeText(text).slice(-1_500)}`,
   );
 }

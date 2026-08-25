@@ -1,14 +1,20 @@
 import type { EgovSsoCitizenProfile } from "egov.js";
 
+import { payloadString } from "../boundary.js";
+
 import type {
   BnrsBusinessAddressInput,
   BnrsOwnerInformationInput,
   BnrsResidentialAddressPrefill,
 } from "./types.js";
 
-function normalizedString(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized = value.trim().replace(/\s+/g, " ");
+// Every caller passes a field of `EgovSsoCitizenProfile`, which the eGov SDK
+// types as `string | null | undefined`. The payload still arrives as JSON, so it
+// goes through the boundary parser before it is trimmed.
+function normalizedString(value: string | null | undefined): string | undefined {
+  const text = payloadString(value);
+  if (text === undefined) return undefined;
+  const normalized = text.trim().replace(/\s+/g, " ");
   return normalized.length > 0 ? normalized : undefined;
 }
 
@@ -33,15 +39,15 @@ export function mapEgovSsoProfileToBnrsOwnerInformation(
   const birthDate = normalizedString(profile.birth_date ?? profile.passport?.birth_date);
   const gender = normalizedString(profile.gender);
 
-  return {
-    ...(citizenship === undefined ? {} : { citizenship }),
-    ...(firstName === undefined ? {} : { firstName }),
-    ...(middleName === undefined ? {} : { middleName }),
-    ...(lastName === undefined ? {} : { lastName }),
-    ...(suffix === undefined ? {} : { suffix }),
-    ...(birthDate === undefined ? {} : { birthDate }),
-    ...(gender === undefined ? {} : { gender }),
-  };
+  const owner: BnrsOwnerInformationInput = {};
+  if (citizenship !== undefined) owner.citizenship = citizenship;
+  if (firstName !== undefined) owner.firstName = firstName;
+  if (middleName !== undefined) owner.middleName = middleName;
+  if (lastName !== undefined) owner.lastName = lastName;
+  if (suffix !== undefined) owner.suffix = suffix;
+  if (birthDate !== undefined) owner.birthDate = birthDate;
+  if (gender !== undefined) owner.gender = gender;
+  return owner;
 }
 
 export function mapEgovSsoProfileToBnrsResidentialAddressPrefill(
@@ -58,16 +64,15 @@ export function mapEgovSsoProfileToBnrsResidentialAddressPrefill(
   const rawPostalCode = normalizedString(profile.postal);
   const postalCode = rawPostalCode && /^\d{4}$/.test(rawPostalCode) ? rawPostalCode : undefined;
 
-  return {
-    source: "EGOV_RESIDENTIAL",
-    ...(addressLine1 === undefined ? {} : { addressLine1 }),
-    ...(addressLine2 === undefined ? {} : { addressLine2 }),
-    ...(barangay === undefined ? {} : { barangay }),
-    ...(cityMunicipality === undefined ? {} : { cityMunicipality }),
-    ...(province === undefined ? {} : { province }),
-    ...(region === undefined ? {} : { region }),
-    ...(postalCode === undefined ? {} : { postalCode }),
-  };
+  const prefill: BnrsResidentialAddressPrefill = { source: "EGOV_RESIDENTIAL" };
+  if (addressLine1 !== undefined) prefill.addressLine1 = addressLine1;
+  if (addressLine2 !== undefined) prefill.addressLine2 = addressLine2;
+  if (barangay !== undefined) prefill.barangay = barangay;
+  if (cityMunicipality !== undefined) prefill.cityMunicipality = cityMunicipality;
+  if (province !== undefined) prefill.province = province;
+  if (region !== undefined) prefill.region = region;
+  if (postalCode !== undefined) prefill.postalCode = postalCode;
+  return prefill;
 }
 
 export function mapEgovSsoProfileToBnrsResidentialAddress(
@@ -79,14 +84,15 @@ export function mapEgovSsoProfileToBnrsResidentialAddress(
   if (!addressLine1 || !barangay || !cityMunicipality || !province || !region || !postalCode)
     return null;
 
-  return {
+  const address: BnrsBusinessAddressInput = {
     source: "EGOV_RESIDENTIAL",
     addressLine1,
-    ...(prefill.addressLine2 === undefined ? {} : { addressLine2: prefill.addressLine2 }),
     barangay,
     cityMunicipality,
     province,
     region,
     postalCode,
   };
+  if (prefill.addressLine2 !== undefined) address.addressLine2 = prefill.addressLine2;
+  return address;
 }

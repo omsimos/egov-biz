@@ -499,7 +499,7 @@ function QuestionCard({
 
   const value = values[question.id];
   const selected = Array.isArray(value) ? value : value ? [value] : [];
-  const enteredText = typeof value === "string" ? value.trim() : "";
+  const enteredText = Array.isArray(value) ? "" : (value?.trim() ?? "");
   const savedOptions = (question.options ?? []).map((option) =>
     displayedIntakeOption(question.id, option),
   );
@@ -579,7 +579,7 @@ function QuestionCard({
                 onValueChange={(next) =>
                   setValues((current) => ({ ...current, [question.id]: String(next) }))
                 }
-                value={typeof value === "string" ? value : ""}
+                value={Array.isArray(value) ? "" : (value ?? "")}
               >
                 {displayedOptions.map((option) => (
                   <label
@@ -675,7 +675,7 @@ function QuestionCard({
                 }
                 placeholder={question.placeholder ?? "Type your answer"}
                 type={question.type === "number" ? "number" : "text"}
-                value={typeof value === "string" ? value : ""}
+                value={Array.isArray(value) ? "" : (value ?? "")}
               />
               {enteredText && !complete(question) && (
                 <FieldHint className="mt-0" error role="alert">
@@ -811,6 +811,9 @@ function SearchTool({
   );
 }
 
+/** One label/value pair as the DTI form card renders it. */
+type DtiRow = [string, string];
+
 /**
  * What changing a field actually costs, per field. The draft used to say "to
  * change anything, type it below", which is true and useless: it put the whole
@@ -818,13 +821,16 @@ function SearchTool({
  * which fields are consequential. Each row now opens its own editor and states
  * the consequence of the value it holds.
  */
-const FIELD_CONSEQUENCES: Record<string, string> = {
-  "Business activity": "Changing this can change which permits your plan includes.",
-  "Business address": "Your city hall issues the mayor’s permit for this address.",
-  Owner: "Must match the name on your eGovPH record.",
-  "Proposed business name": "DTI checks this against its name database when you submit.",
-  "Territorial scope": "Scope sets the DTI filing fee — barangay ₱200, city ₱500, national ₱2,000.",
-};
+const FIELD_CONSEQUENCES: ReadonlyMap<string, string> = new Map([
+  ["Business activity", "Changing this can change which permits your plan includes."],
+  ["Business address", "Your city hall issues the mayor’s permit for this address."],
+  ["Owner", "Must match the name on your eGovPH record."],
+  ["Proposed business name", "DTI checks this against its name database when you submit."],
+  [
+    "Territorial scope",
+    "Scope sets the DTI filing fee — barangay ₱200, city ₱500, national ₱2,000.",
+  ],
+]);
 
 function DtiFieldRow({
   edited,
@@ -844,8 +850,15 @@ function DtiFieldRow({
   value: string;
 }) {
   const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [editing, value]);
-  const note = FIELD_CONSEQUENCES[label];
+  // Opening the editor, and the agent applying a save, both put the draft back
+  // to the value the row is showing. Adjusting during render instead of in an
+  // effect means the stale draft never paints for a frame first.
+  const [draftSource, setDraftSource] = useState({ editing, value });
+  if (draftSource.editing !== editing || draftSource.value !== value) {
+    setDraftSource({ editing, value });
+    setDraft(value);
+  }
+  const note = FIELD_CONSEQUENCES.get(label);
   const canSave = draft.trim().length > 1 && draft.trim() !== value;
 
   if (!editing)
@@ -948,9 +961,9 @@ export function DtiFormCard({
   onSubmitPay: () => void;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
-  const rows: [string, string][] = [
-    ...(form.dominantName ? [["Dominant name", form.dominantName] as [string, string]] : []),
-    ...(form.descriptorLabel ? [["Descriptor", form.descriptorLabel] as [string, string]] : []),
+  const rows: DtiRow[] = [
+    ...(form.dominantName ? [["Dominant name", form.dominantName] satisfies DtiRow] : []),
+    ...(form.descriptorLabel ? [["Descriptor", form.descriptorLabel] satisfies DtiRow] : []),
     ["Proposed business name", form.proposedName || "Needs your answer"],
     ["Business activity", form.businessActivity],
     ["Territorial scope", form.territorialScope],
@@ -1223,14 +1236,8 @@ function ToolPart({
           <FilePdf />
         </div>
       );
-    const formType =
-      "input" in part &&
-      part.input &&
-      typeof part.input === "object" &&
-      "type" in part.input &&
-      part.input.type === "1905"
-        ? "1905"
-        : "1901";
+    // Every state of a tool part carries `input`, partial while it streams.
+    const formType = part.input?.type === "1905" ? "1905" : "1901";
     return (
       <div className="chat-tool-row active">
         <CircleNotch className="spin" />
@@ -1404,6 +1411,9 @@ export function PaymentSheet({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ conversationId, serviceType: payment.serviceType }),
       });
+      // SAFETY: the body comes from this app's own `/api/payments/egovpay` route,
+      // which answers with `{ checkoutUrl, payment }` or `{ error }`; every field
+      // read below is declared optional, so a shorter body is still handled.
       const result = (await response.json()) as {
         checkoutUrl?: string;
         error?: string;
@@ -1516,11 +1526,11 @@ export type IslandState = "idle" | "paying" | "paid";
 
 // What the island calls each service. The conversation title is the citizen's
 // own prompt, not a reference number, and using it here read as one.
-const PAID_SERVICE_LABELS: Record<PaymentServiceType, string> = {
+const PAID_SERVICE_LABELS = {
   "bir-documentary-stamp-tax": "BIR documentary stamp tax",
   "dti-business-name": "DTI business name registration",
   "lgu-business-permit": "LGU business permit",
-};
+} satisfies Record<PaymentServiceType, string>;
 
 /**
  * Payment status over the top of the screen instead of a modal in front of it,
@@ -1736,6 +1746,9 @@ export function BusinessChatScreen({
     // pointerdown rather than click, so a press that starts on the scrim of the
     // thread dismisses on the way down instead of waiting for mouseup.
     const dismiss = (event: PointerEvent) => {
+      // SAFETY: this listener is attached to `document`, so its target is always
+      // a DOM node — `EventTarget` is only wider to cover targets such as
+      // `XMLHttpRequest`, which never dispatch a pointerdown.
       if (!headerRef.current?.contains(event.target as Node)) setHistoryOpen(false);
     };
     const escape = (event: KeyboardEvent) => {
@@ -1770,6 +1783,9 @@ export function BusinessChatScreen({
   const paidServices = useMemo(
     () =>
       new Set(
+        // SAFETY: `localPaymentStatuses` is a `Partial<Record<PaymentServiceType,
+        // string>>` filled only from that key set, and `Object.entries` merely
+        // widens the key back to `string`.
         (Object.entries(localPaymentStatuses) as [PaymentServiceType, string][])
           .filter(([, value]) => /paid|success|complete/i.test(value))
           .map(([service]) => service),
@@ -1793,6 +1809,9 @@ export function BusinessChatScreen({
     for (const message of [...visibleMessages].reverse()) {
       for (const part of [...message.parts].reverse()) {
         if (part.type === "tool-askUser" && part.state === "input-available") {
+          // SAFETY: the guard above establishes both members `ReadyAskUserPart`
+          // adds to `AskUserPart`; the `input` shape it restates is the askUser
+          // tool's own declared input.
           const current = part as ReadyAskUserPart;
           return {
             part: current,
@@ -1836,12 +1855,17 @@ export function BusinessChatScreen({
   // A new batch starts at its first question, and the plan checklist yields:
   // the two share the header's progress row, and an open checklist would push
   // the question the citizen has to answer off the top of the thread.
+  // Adjusted during render rather than in an effect: the card is keyed by the
+  // tool call id, so a post-commit reset would mount the new batch on the old
+  // index for a frame — with a shorter batch that index is out of range.
   const pendingToolCallId = pending?.part.toolCallId;
-  useEffect(() => {
+  const [questionBatchId, setQuestionBatchId] = useState(pendingToolCallId);
+  if (questionBatchId !== pendingToolCallId) {
+    setQuestionBatchId(pendingToolCallId);
     setQuestionIndex(0);
     setQuestionValid(false);
     if (pendingToolCallId) setPlanOpen(false);
-  }, [pendingToolCallId]);
+  }
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [visibleMessages, pending, status]);
@@ -1872,6 +1896,10 @@ export function BusinessChatScreen({
   // unmount — a setState on a screen the citizen has already left is a leak.
   useEffect(() => {
     if (!/paid|success|complete/i.test(paymentStatus ?? "")) return;
+    // The checkout redirect is already resolved by the time this screen mounts,
+    // so seeding "paid" at initialisation would render the header spacer at its
+    // full height; showing it one commit later is what makes the spacer animate.
+    // oxlint-disable-next-line react/set-state-in-effect
     setIsland("paid");
     const timer = setTimeout(() => setIsland("idle"), 4500);
     return () => clearTimeout(timer);
@@ -1913,6 +1941,10 @@ export function BusinessChatScreen({
     const questionId = pendingQuestion.questions[0]?.id;
     if (!questionId) return;
     answeredToolCalls.current.add(toolCallId);
+    // No user event to hang this on: the stream delivering a legacy consent
+    // question is what starts the round trip, and this marks it in flight so the
+    // question controls disable while it runs.
+    // oxlint-disable-next-line react/set-state-in-effect
     setAnsweringToolCallId(toolCallId);
     void (async () => {
       try {

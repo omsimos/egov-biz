@@ -21,6 +21,16 @@ type TaxTypeRow = NonNullable<
   NonNullable<NonNullable<Bir1901Data["taxTypes"]>["incomeTax"]>["individualIncomeTax"]
 >;
 
+/** The scalar a parsed 1901 field can hold; an absent field prints as an empty cell. */
+type PdfFieldValue = number | string | undefined;
+
+/** These have no cell representation, so `printable` blanks them like a missing field. */
+const UNPRINTABLE_NUMBERS: ReadonlySet<PdfFieldValue> = new Set<PdfFieldValue>([
+  Number.NaN,
+  Number.POSITIVE_INFINITY,
+  Number.NEGATIVE_INFINITY,
+]);
+
 const INK = rgb(0.05, 0.12, 0.3);
 
 export const DEFAULT_BIR_1901_TEMPLATE = "public/forms/bir-form-1901.pdf";
@@ -31,10 +41,9 @@ export function bir1901TemplatePath() {
   return join(process.cwd(), "public", "forms", "bir-form-1901.pdf");
 }
 
-function printable(value: unknown) {
-  if (typeof value === "string") return value.trim();
-  if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  return "";
+function printable(value: PdfFieldValue) {
+  if (value === undefined || UNPRINTABLE_NUMBERS.has(value)) return "";
+  return String(value).trim();
 }
 
 function money(value: number | undefined) {
@@ -53,7 +62,7 @@ function fitFontSize(
   return size;
 }
 
-function drawText(page: PDFPage, font: PDFFont, value: unknown, field: TextField) {
+function drawText(page: PDFPage, font: PDFFont, value: PdfFieldValue, field: TextField) {
   const text = standardFontText(font, printable(value));
   if (!text) return;
   const fontSize = fitFontSize(
@@ -73,7 +82,7 @@ function drawText(page: PDFPage, font: PDFFont, value: unknown, field: TextField
   });
 }
 
-function drawCenteredText(page: PDFPage, font: PDFFont, value: unknown, field: TextField) {
+function drawCenteredText(page: PDFPage, font: PDFFont, value: PdfFieldValue, field: TextField) {
   const text = standardFontText(font, printable(value));
   if (!text) return;
   const fontSize = fitFontSize(
@@ -91,7 +100,13 @@ function drawCenteredText(page: PDFPage, font: PDFFont, value: unknown, field: T
   });
 }
 
-function drawCheck(page: PDFPage, font: PDFFont, selected: unknown, x: number, y: number) {
+function drawCheck(
+  page: PDFPage,
+  font: PDFFont,
+  selected: boolean | undefined,
+  x: number,
+  y: number,
+) {
   if (selected !== true) return;
   page.drawText("X", { color: INK, font, size: 8.5, x, y });
 }

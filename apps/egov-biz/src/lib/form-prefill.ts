@@ -55,8 +55,15 @@ function resolvedStructuredAddressValues(
   profilePrefill: BnrsResidentialAddressPrefill | null,
   answers: StructuredBusinessAddressAnswers,
 ) {
+  // SAFETY: the entries below come from structuredBusinessAddressQuestionFields
+  // itself, so the object built here carries exactly one string per field name in
+  // that map — which is what the Record names. Object.fromEntries types its
+  // result as an open dictionary and cannot express it.
   return Object.fromEntries(
     Object.entries(structuredBusinessAddressQuestionFields).map(([questionId, field]) => {
+      // SAFETY: questionId is a key of structuredBusinessAddressQuestionFields,
+      // which is the definition of StructuredBusinessAddressQuestionId;
+      // Object.entries widens it to string.
       const answer = normalizedAddressValue(
         answers[questionId as StructuredBusinessAddressQuestionId],
       );
@@ -77,6 +84,9 @@ export function missingStructuredBusinessAddressQuestionIds(
 ): StructuredBusinessAddressQuestionId[] {
   if (!preference) return [];
   const values = resolvedStructuredAddressValues(preference, profilePrefill, answers);
+  // SAFETY: the entries are those of structuredBusinessAddressQuestionFields —
+  // its keys are the question ids and its values are the field names `values` is
+  // keyed by — which Object.entries widens to [string, string].
   return (
     Object.entries(structuredBusinessAddressQuestionFields) as Array<
       [StructuredBusinessAddressQuestionId, keyof typeof values]
@@ -109,19 +119,21 @@ export function resolveStructuredBusinessAddress(
   const hasManualAddressValue = Object.values(answers).some(
     (value) => normalizedAddressValue(value).length > 0,
   );
-  return {
+  const address: BnrsBusinessAddressInput = {
     source:
       preference === "profile" && !hasManualAddressValue ? "EGOV_RESIDENTIAL" : "USER_PROVIDED",
     addressLine1: values.addressLine1,
-    ...(preference === "profile" && profilePrefill?.addressLine2
-      ? { addressLine2: profilePrefill.addressLine2 }
-      : {}),
     barangay: values.barangay,
     cityMunicipality: values.cityMunicipality,
     province: values.province,
     region: values.region,
     postalCode: values.postalCode,
   };
+  // The second address line is only carried over from the profile, and only when
+  // the profile address is the one being used; otherwise the field stays absent.
+  if (preference === "profile" && profilePrefill?.addressLine2)
+    address.addressLine2 = profilePrefill.addressLine2;
+  return address;
 }
 
 export function extractExplicitBusinessAddress(prompt: string) {

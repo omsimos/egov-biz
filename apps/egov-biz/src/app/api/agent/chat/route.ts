@@ -43,6 +43,7 @@ import {
   type DtiBusinessNameForm,
   type LguPermitSummary,
   type PaymentServiceType,
+  type BusinessChatTools,
   type RegistrationPlan,
   type UserInfoOutput,
 } from "@/lib/business-chat";
@@ -73,6 +74,7 @@ import {
   selectTaxReminderObligation,
   sendSmsMessage,
   sendSmsMessageInputSchema,
+  type SendSmsMessageInput,
   simulateTaxPaymentReminder,
   simulateTaxPaymentReminderInputSchema,
   smsNumberMention,
@@ -122,15 +124,46 @@ import {
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
+/**
+ * The tool-context bag `tool()` takes as its third type argument. This route
+ * never passes `experimental_context`, so no tool here can read a context
+ * property — `never` says exactly that, where the SDK's own default only says
+ * the bag holds something.
+ */
+type EmptyToolContext = Record<string, never>;
+
+/** One selectable answer as `IntakeQuestion` declares them. */
+type IntakeOption = NonNullable<IntakeQuestion["options"]>[number];
+
+/** The reminder fields this route pre-fills before the tool asks for a number. */
+type ReminderDefaults = Omit<SimulateTaxPaymentReminderInput, "number">;
+
+/**
+ * How persisted `askUser` parts are read back. Transcripts written before the
+ * current askUser contract can be missing `questions` or `answers`, so every
+ * field is optional here and the readers below supply the fallbacks. Both are
+ * supertypes of the live `AskUserInput`/`AskUserOutput`, so a part assigns into
+ * them without an assertion.
+ */
+type PersistedAskUserInput = { questions?: IntakeQuestion[]; question?: IntakeQuestion };
+type PersistedAskUserOutput = {
+  answers?: { questionId: string; value: string | string[]; labels: string[] }[];
+  value?: string | string[];
+  labels?: string[];
+};
+
+// Provider clients (DX, eGovPay, eMessage, the AI gateway) all surface the
+// upstream HTTP status as a plain `status` property on whatever they throw.
+// Decoding it here keeps the label from depending on which client failed.
+const httpFailureSchema = z.object({ status: z.number() });
+
+// A `catch` binding and a rejected promise both hand over whatever was thrown,
+// which the language types as `unknown`. This only turns it into a log label.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters
 function operationalErrorLabel(error: unknown) {
   const name = error instanceof Error && error.name ? error.name : "UnknownError";
-  const status =
-    typeof error === "object" &&
-    error !== null &&
-    "status" in error &&
-    typeof error.status === "number"
-      ? ` (HTTP ${error.status})`
-      : "";
+  const failure = httpFailureSchema.safeParse(error);
+  const status = failure.success ? ` (HTTP ${failure.data.status})` : "";
   return `${name}${status}`;
 }
 
@@ -484,11 +517,10 @@ function manualResponse(
       await setActiveStream(ownerEgovUserId, conversationId, null);
     },
   });
+  if (options.resumable === false) return createUIMessageStreamResponse({ stream });
   return createUIMessageStreamResponse({
     stream,
-    ...(options.resumable === false
-      ? {}
-      : { consumeSseStream: resumableConsumer(ownerEgovUserId, conversationId) }),
+    consumeSseStream: resumableConsumer(ownerEgovUserId, conversationId),
   });
 }
 
@@ -524,6 +556,10 @@ async function managementResponse(
     process.env.CHAT_MODEL ?? "google/gemini-2.5-flash-lite",
   );
   const obligation = business.taxObligations[0];
+  const reminderDefaults: ReminderDefaults = { businessName: business.name };
+  if (obligation?.title) reminderDefaults.taxTitle = obligation.title;
+  if (obligation?.formCode) reminderDefaults.formCode = obligation.formCode;
+  if (obligation?.dueDate) reminderDefaults.dueDate = obligation.dueDate;
   const tools = emessageTools({
     profileMobile,
     latestPrompt,
@@ -533,12 +569,7 @@ async function managementResponse(
       conversationId,
       userMessageId: latestUser?.message.id ?? conversationId,
     },
-    reminderDefaults: {
-      businessName: business.name,
-      ...(obligation?.title ? { taxTitle: obligation.title } : {}),
-      ...(obligation?.formCode ? { formCode: obligation.formCode } : {}),
-      ...(obligation?.dueDate ? { dueDate: obligation.dueDate } : {}),
-    },
+    reminderDefaults,
   });
   const responseMessageId = crypto.randomUUID();
   const result = streamText({
@@ -602,7 +633,7 @@ function descriptorQuestion(
     suggestedDescriptorId,
     catalog.nameRequirements.descriptors,
   );
-  return {
+  const question: IntakeQuestion = {
     id: "business-descriptor",
     eyebrow: "Business identity",
     title: "Which BNRS descriptor best matches the business?",
@@ -614,13 +645,14 @@ function descriptorQuestion(
     options: orderBnrsDescriptorsWithSuggestionFirst(
       catalog.nameRequirements.descriptors,
       suggestion,
-    ).map(({ id, label }) => ({
-      id,
-      label,
-      ...(id === suggestion ? { description: "Suggested from your conversation" } : {}),
-    })),
-    ...(suggestion ? { suggestedOptionId: suggestion } : {}),
+    ).map(({ id, label }) => {
+      const option: IntakeOption = { id, label };
+      if (id === suggestion) option.description = "Suggested from your conversation";
+      return option;
+    }),
   };
+  if (suggestion) question.suggestedOptionId = suggestion;
+  return question;
 }
 
 async function suggestedBnrsDescriptorId(prompt: string, catalog: BnrsCatalog) {
@@ -754,14 +786,14 @@ function pendingStructuredAddressQuestions(
   residentialAddressPrefill: BnrsResidentialAddressPrefill | null,
 ) {
   const preference = addressPreference(answers);
-  const missing = new Set(
+  const missing = new Set<string>(
     missingStructuredBusinessAddressQuestionIds(
       preference,
       residentialAddressPrefill,
       structuredAddressAnswers(answers),
     ),
   );
-  return structuredAddressQuestions(registrationType).filter(({ id }) => missing.has(id as never));
+  return structuredAddressQuestions(registrationType).filter(({ id }) => missing.has(id));
 }
 
 function promptHasWorkSetup(prompt: string) {
@@ -821,24 +853,13 @@ function intakeBatch(
   return questions.slice(0, 6);
 }
 
-function toolAnswers(messages: UIMessage[]): IntakeAnswer[] {
+function toolAnswers(messages: BusinessChatMessage[]): IntakeAnswer[] {
   const answers = new Map<string, IntakeAnswer>();
   for (const message of messages)
     for (const part of message.parts) {
       if (part.type !== "tool-askUser" || part.state !== "output-available") continue;
-      const input = part.input as {
-        questions?: IntakeQuestion[];
-        question?: IntakeQuestion;
-      };
-      const output = part.output as {
-        answers?: {
-          questionId: string;
-          value: string | string[];
-          labels: string[];
-        }[];
-        value?: string | string[];
-        labels?: string[];
-      };
+      const input: PersistedAskUserInput = part.input;
+      const output: PersistedAskUserOutput = part.output;
       const questions = input.questions ?? (input.question ? [input.question] : []);
       const submitted =
         output.answers ??
@@ -868,24 +889,13 @@ function toolAnswers(messages: UIMessage[]): IntakeAnswer[] {
   return [...answers.values()];
 }
 
-function invalidIntakeAnswerIds(messages: UIMessage[]) {
+function invalidIntakeAnswerIds(messages: BusinessChatMessage[]) {
   const invalid = new Set<string>();
   for (const message of messages)
     for (const part of message.parts) {
       if (part.type !== "tool-askUser" || part.state !== "output-available") continue;
-      const input = part.input as {
-        questions?: IntakeQuestion[];
-        question?: IntakeQuestion;
-      };
-      const output = part.output as {
-        answers?: {
-          questionId: string;
-          value: string | string[];
-          labels: string[];
-        }[];
-        value?: string | string[];
-        labels?: string[];
-      };
+      const input: PersistedAskUserInput = part.input;
+      const output: PersistedAskUserOutput = part.output;
       const questions = input.questions ?? (input.question ? [input.question] : []);
       const submitted =
         output.answers ??
@@ -915,31 +925,29 @@ function invalidIntakeAnswerIds(messages: UIMessage[]) {
   return invalid;
 }
 
-function lastRegistrationPlan(messages: UIMessage[]): RegistrationPlan | null {
+function lastRegistrationPlan(messages: BusinessChatMessage[]): RegistrationPlan | null {
   for (const message of [...messages].reverse())
     for (const part of [...message.parts].reverse()) {
       if (part.type === "tool-updatePlan" && part.state === "output-available")
-        return (part.output as { plan: RegistrationPlan }).plan;
+        return part.output.plan;
     }
   return null;
 }
 
-function emitTool(
-  writer: Parameters<
-    Parameters<typeof createUIMessageStream<BusinessChatMessage>>[0]["execute"]
-  >[0]["writer"],
-  toolName: string,
-  input: unknown,
-  output: unknown,
+/**
+ * Write a complete tool call the route decided on itself, so the transcript is
+ * shaped the same whether the step came from the model or from this file. The
+ * tool name picks the input and output contracts out of `BusinessChatTools`.
+ */
+function emitTool<Name extends keyof BusinessChatTools>(
+  writer: UIMessageStreamWriter<BusinessChatMessage>,
+  toolName: Name,
+  input: BusinessChatTools[Name]["input"],
+  output: BusinessChatTools[Name]["output"],
 ) {
   const toolCallId = crypto.randomUUID();
-  writer.write({
-    type: "tool-input-available",
-    toolCallId,
-    toolName,
-    input,
-  } as never);
-  writer.write({ type: "tool-output-available", toolCallId, output } as never);
+  writer.write({ type: "tool-input-available", toolCallId, toolName, input });
+  writer.write({ type: "tool-output-available", toolCallId, output });
 }
 
 function planForBirPayment(
@@ -1012,7 +1020,7 @@ async function emitBir1901Generation(
       type: "tool-output-error",
       toolCallId,
       errorText: "The PDF could not be generated.",
-    } as never);
+    });
     const textId = crypto.randomUUID();
     writer.write({ type: "text-start", id: textId });
     writer.write({
@@ -1064,11 +1072,11 @@ function planForAnswers(
   });
 }
 
-function lastDtiForm(messages: UIMessage[]) {
+function lastDtiForm(messages: BusinessChatMessage[]) {
   for (const message of [...messages].reverse())
     for (const part of [...message.parts].reverse()) {
       if (part.type === "tool-editDtiBusinessNameForm" && part.state === "output-available")
-        return (part.output as { form: DtiBusinessNameForm }).form;
+        return part.output.form;
     }
   return null;
 }
@@ -1138,7 +1146,7 @@ function makePlan(
 
 function answerValue(answers: IntakeAnswer[], questionId: string) {
   const value = answers.find((answer) => answer.questionId === questionId)?.value;
-  return typeof value === "string" ? value.trim() : "";
+  return Array.isArray(value) ? "" : (value?.trim() ?? "");
 }
 
 function businessAddressFromAnswers(
@@ -1237,7 +1245,7 @@ function makeDtiForm(
     ...(!termsAccepted ? ["BNRS terms acceptance"] : []),
     ...(!businessAddressDetails ? ["Business address"] : []),
   ];
-  return {
+  const form: DtiBusinessNameForm = {
     applicationType: "New registration",
     status: missingFields.length ? "Draft" : "Ready to submit",
     dominantName,
@@ -1249,22 +1257,22 @@ function makeDtiForm(
     territorialScopeId: scope?.id,
     ownerName: profile?.fullName ?? "",
     businessAddress,
-    ...(businessAddressDetails ? { businessAddressDetails } : {}),
     city: plan.city,
     feeLabel: scope ? formatPeso(scope.totalFee) : "",
-    ...(scope
-      ? {
-          feeBreakdown: {
-            documentaryStamp: formatPeso(scope.documentaryStampTax),
-            registration: formatPeso(scope.registrationFee),
-          },
-        }
-      : {}),
     termsAndConditions: catalog.termsAndConditions,
     businessNameRequirements: catalog.nameRequirements.reminders,
     termsAccepted,
     missingFields,
   };
+  // Both stay absent rather than undefined: a draft that never resolved an
+  // address or a scope has no address block and no fee breakdown to show.
+  if (businessAddressDetails) form.businessAddressDetails = businessAddressDetails;
+  if (scope)
+    form.feeBreakdown = {
+      documentaryStamp: formatPeso(scope.documentaryStampTax),
+      registration: formatPeso(scope.registrationFee),
+    };
+  return form;
 }
 
 function deterministicNext(
@@ -1349,10 +1357,10 @@ function emessageTools({
           throw new Error("The latest user message does not authorize sending an SMS");
         const number = authorizedSmsNumber(input.number, latestPrompt);
         const recipient = resolveSmsRecipient(number, profileMobile);
+        const smsInput: SendSmsMessageInput = { message: input.message };
+        if (number) smsInput.number = number;
         return dispatchSmsOnce({ ...dispatchKey, recipient, toolName: "send_sms_message" }, () =>
-          sendSmsMessage({ message: input.message, ...(number ? { number } : {}) }, profileMobile, {
-            signal: abortSignal,
-          }),
+          sendSmsMessage(smsInput, profileMobile, { signal: abortSignal }),
         );
       },
       toModelOutput: ({ output }) => ({ type: "json", value: output }),
@@ -1465,7 +1473,7 @@ function agentTools(
       }),
       execute: ({ query, numResults }) => searchOfficialWeb(query, numResults),
     }),
-    editDtiBusinessNameForm: tool<EditDtiFormInput, EditDtiFormOutput, Record<string, unknown>>({
+    editDtiBusinessNameForm: tool<EditDtiFormInput, EditDtiFormOutput, EmptyToolContext>({
       description:
         "Create or revise a complete DTI Business Name Registration form. Keep the dominant name separate from an exact descriptor and territorial-scope ID in the supplied BNRS catalog. Never call with blank or missing fields; use askUser first for every unresolved required field.",
       inputSchema: z.object({ form: dtiFormSchema(catalog), note: z.string().max(180) }),
@@ -1553,6 +1561,12 @@ export async function POST(request: Request) {
       : null;
   if (conversation.purpose === "management" && !managementBusiness)
     return Response.json({ error: "Chat session not found" }, { status: 404 });
+  // SAFETY: `requestSchema` deliberately leaves the transcript unparsed — a
+  // schema for every tool part would reject histories the client can legitimately
+  // replay. Nothing downstream trusts a part's payload: every reader re-checks
+  // `part.type` and `part.state`, reads payload fields through the optional
+  // `PersistedAskUser*` views, and `convertToModelMessages` runs with
+  // `ignoreIncompleteToolCalls`, so a part that does not match is skipped.
   const messages = uniqueMessagesById(parsed.data.messages as BusinessChatMessage[]);
   await saveMessages(actor.egovUserId, conversation.id, messages);
   await setActiveStream(actor.egovUserId, conversation.id, null);
@@ -1618,12 +1632,11 @@ export async function POST(request: Request) {
           { resumable: false },
         );
       const obligation = selection.kind === "selected" ? selection.obligation : undefined;
-      reminderDefaults = {
-        businessName: managementBusiness.name,
-        ...(obligation?.title ? { taxTitle: obligation.title } : {}),
-        ...(obligation?.formCode ? { formCode: obligation.formCode } : {}),
-        ...(obligation?.dueDate ? { dueDate: obligation.dueDate } : {}),
-      };
+      const selectedDefaults: ReminderDefaults = { businessName: managementBusiness.name };
+      if (obligation?.title) selectedDefaults.taxTitle = obligation.title;
+      if (obligation?.formCode) selectedDefaults.formCode = obligation.formCode;
+      if (obligation?.dueDate) selectedDefaults.dueDate = obligation.dueDate;
+      reminderDefaults = selectedDefaults;
     } else if (retryChangesObligation) {
       return manualResponse(
         actor.egovUserId,
@@ -1646,10 +1659,10 @@ export async function POST(request: Request) {
 
     const suppliedNumber =
       mention.kind === "valid" ? mention.number : mention.kind === "invalid" ? mention.value : null;
-    const reminderInput: SimulateTaxPaymentReminderInput = {
-      ...reminderDefaults,
-      ...(suppliedNumber ? { number: suppliedNumber } : {}),
-    };
+    const reminderInput: SimulateTaxPaymentReminderInput = { ...reminderDefaults };
+    // Omitted rather than set to undefined so the tool falls back to the
+    // authenticated eGov SSO number instead of an explicit empty recipient.
+    if (suppliedNumber) reminderInput.number = suppliedNumber;
 
     return manualResponse(actor.egovUserId, conversation.id, messages, async (writer) => {
       const toolCallId = crypto.randomUUID();
@@ -1694,7 +1707,7 @@ export async function POST(request: Request) {
           type: "tool-output-error",
           toolCallId,
           errorText: "The simulated tax reminder could not be sent.",
-        } as never);
+        });
         const textId = crypto.randomUUID();
         writer.write({ type: "text-start", id: textId });
         writer.write({
@@ -1755,10 +1768,11 @@ export async function POST(request: Request) {
 
     const suppliedNumber =
       mention.kind === "valid" ? mention.number : mention.kind === "invalid" ? mention.value : null;
-    const parsedSmsInput = sendSmsMessageInputSchema.safeParse({
-      message,
-      ...(suppliedNumber ? { number: suppliedNumber } : {}),
-    });
+    const requestedSmsInput: SendSmsMessageInput = { message };
+    // Omitted rather than set to undefined so the send falls back to the
+    // authenticated eGov SSO number instead of an explicit empty recipient.
+    if (suppliedNumber) requestedSmsInput.number = suppliedNumber;
+    const parsedSmsInput = sendSmsMessageInputSchema.safeParse(requestedSmsInput);
     if (!parsedSmsInput.success)
       return manualResponse(
         actor.egovUserId,
@@ -1813,7 +1827,7 @@ export async function POST(request: Request) {
           type: "tool-output-error",
           toolCallId,
           errorText: "The SMS could not be sent.",
-        } as never);
+        });
         const textId = crypto.randomUUID();
         writer.write({ type: "text-start", id: textId });
         writer.write({
@@ -1946,7 +1960,11 @@ export async function POST(request: Request) {
             businessName: finalizedBusiness.name,
             certificateOfRegistrationFileId: "bir-form-2303",
             registrationNumber: finalizedBusiness.registrationNumber,
-            status: finalizedBusiness.status,
+            // SAFETY: both finalize paths build the record with `status:
+            // "Active"`, persist it, and return the row they just wrote.
+            // Nothing in the app writes "Draft" to that column, which is the
+            // only reason the read-back type is wider than the tool contract.
+            status: finalizedBusiness.status as "Active",
           },
         );
         const textId = crypto.randomUUID();
@@ -2122,7 +2140,11 @@ export async function POST(request: Request) {
           businessName: finalizedBusiness.name,
           certificateOfRegistrationFileId: "bir-form-2303",
           registrationNumber: finalizedBusiness.registrationNumber,
-          status: finalizedBusiness.status,
+          // SAFETY: both finalize paths build the record with `status:
+          // "Active"`, persist it, and return the row they just wrote. Nothing
+          // in the app writes "Draft" to that column, which is the only reason
+          // the read-back type is wider than the tool contract.
+          status: finalizedBusiness.status as "Active",
         },
       );
       const textId = crypto.randomUUID();

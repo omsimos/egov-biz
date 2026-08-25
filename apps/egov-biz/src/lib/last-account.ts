@@ -1,4 +1,5 @@
 import type { CitizenProfile } from "@/lib/citizen-profile";
+import { payloadRecord, payloadText } from "@/lib/payload";
 
 // Remembers the last signed-in account (like the real eGovPH app) so the
 // login screen can greet the citizen by name with their masked mobile number.
@@ -46,12 +47,10 @@ export function readLastAccount(): LastAccount | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<LastAccount>;
-    if (typeof parsed.firstName !== "string" || !parsed.firstName) return null;
-    return {
-      firstName: parsed.firstName,
-      maskedMobile: typeof parsed.maskedMobile === "string" ? parsed.maskedMobile : "",
-    };
+    const parsed = payloadRecord(JSON.parse(raw));
+    const firstName = payloadText(parsed.firstName);
+    if (!firstName) return null;
+    return { firstName, maskedMobile: payloadText(parsed.maskedMobile) };
   } catch {
     return null;
   }

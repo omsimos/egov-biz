@@ -1,7 +1,7 @@
 import { createGateway, generateObject } from "ai";
 import { z } from "zod";
 import { officialSourcesFrom, runExaSearch } from "@/lib/web-search";
-import { fallbackQuestionFor, inferCategory, type RegulatoryFlag } from "@/lib/business-rules";
+import { fallbackQuestionFor, inferCategory } from "@/lib/business-rules";
 import {
   buildRationale,
   citationsForPlan,
@@ -59,14 +59,29 @@ const responseSchema = z.object({
 });
 
 type GeneratedPlan = z.infer<typeof generatedPlanSchema>;
-type RequestBody = {
-  prompt?: string;
-  profileCity?: string;
-  city?: string;
-  profileBarangay?: string;
-  profileRdo?: string;
-  answers?: IntakeAnswer[];
-};
+const intakeAnswerSchema = z.object({
+  toolCallId: z.string().optional(),
+  questionId: z.string(),
+  question: z.string(),
+  value: z.union([z.string(), z.array(z.string())]),
+  labels: z.array(z.string()),
+});
+
+// Every field is optional and catches its own failure, so a body this route
+// accepts today still reaches the same code paths; only values it could never
+// have used are dropped.
+const requestBodySchema = z
+  .object({
+    prompt: z.string().optional().catch(undefined),
+    profileCity: z.string().optional().catch(undefined),
+    city: z.string().optional().catch(undefined),
+    profileBarangay: z.string().optional().catch(undefined),
+    profileRdo: z.string().optional().catch(undefined),
+    answers: z.array(intakeAnswerSchema).optional().catch(undefined),
+  })
+  .catch({});
+
+type RequestBody = z.infer<typeof requestBodySchema>;
 
 async function researchWithExa(plan: GeneratedPlan, city: string) {
   const gateway = createGateway({ apiKey: process.env.AI_GATEWAY_API_KEY });
@@ -96,9 +111,7 @@ function enrichPlan(
   const profileCity = body.profileCity ?? body.city ?? "Philippines";
   const location = resolveBusinessLocation(body.prompt ?? "", profileCity, answers);
   const rdo = selectRdo(location, answers, `${body.prompt ?? ""} ${body.profileBarangay ?? ""}`);
-  const flags = [
-    ...new Set([...inferCategory(body.prompt ?? "").flags, ...generated.flags]),
-  ] as RegulatoryFlag[];
+  const flags = [...new Set([...inferCategory(body.prompt ?? "").flags, ...generated.flags])];
   return {
     ...generated,
     city: location.city,
@@ -175,7 +188,7 @@ function fallbackDecision(body: RequestBody, answers: IntakeAnswer[]) {
 }
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as RequestBody;
+  const body = requestBodySchema.parse(await request.json());
   const prompt = body.prompt?.trim();
   const answers = Array.isArray(body.answers) ? body.answers.slice(0, 6) : [];
   if (!prompt) return Response.json({ error: "prompt is required" }, { status: 400 });

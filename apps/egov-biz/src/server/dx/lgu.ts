@@ -9,6 +9,9 @@ import {
 import { createClient } from "egov.js";
 import { getDxDatabase } from "@/server/dx/database";
 
+// SAFETY: the added slot is optional, so this view claims nothing about
+// `globalThis` that is not already true — reading `__egovBizLgu` before the
+// first assignment yields `undefined`. This module is its only writer.
 const globalCache = globalThis as typeof globalThis & {
   __egovBizLgu?: LguService;
 };

@@ -1,0 +1,29 @@
+# Hooks install themselves from the lefthook package's postinstall on
+# `bun install`. lefthook ships in Bun's default-trusted list, so no
+# trustedDependencies entry is needed, and that postinstall no-ops when CI is
+# set, so the GitHub workflows need no changes.
+assert_lefthook_installed: true
+
+pre-commit:
+  # Sequential on purpose. `format` rewrites the same files `lint` then reads,
+  # so under `parallel: true` oxlint can lint pre-format content and the same
+  # commit passes or fails depending on scheduling. Both tools are Rust-fast;
+  # parallelism buys nothing here.
+  parallel: false
+  jobs:
+    # oxfmt covers far more than JS/TS, so this mirrors `bun run format`
+    # rather than letting a misformatted .md or workflow .yml through.
+    # --no-error-on-unmatched-pattern is required: oxfmt exits non-zero when
+    # ignorePatterns drops every path it was handed, which is what a
+    # drizzle-only commit looks like.
+    - name: format
+      glob:
+        - "*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}"
+        - "*.{json,jsonc,css,scss,md,mdx,yml,yaml,html}"
+      run: bunx oxfmt --no-error-on-unmatched-pattern {staged_files}
+      stage_fixed: true
+
+    # Same flag, same reason: oxlint exits non-zero on "no files to lint".
+    - name: lint
+      glob: "*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}"
+      run: bunx oxlint --no-error-on-unmatched-pattern {staged_files}

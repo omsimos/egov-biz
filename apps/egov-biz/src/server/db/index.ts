@@ -18,6 +18,10 @@ type DatabaseCache = {
 // Next.js re-evaluates server modules on every hot reload. Caching on
 // globalThis keeps one libSQL client per process instead of leaking a
 // connection per edit, matching how the Redis clients are cached.
+//
+// SAFETY: both added slots are optional, so this view claims nothing about
+// `globalThis` that is not already true — reading either key before its first
+// assignment yields `undefined`. This module is their only writer.
 const globalCache = globalThis as typeof globalThis & {
   __egovBizDatabase?: DatabaseCache;
   __egovBizMigration?: Promise<void>;
@@ -60,6 +64,9 @@ function ensureLocalSchema(database: Database): Promise<void> {
     await migrate(database, {
       migrationsFolder: path.join(process.cwd(), "drizzle"),
     });
+    // `Promise.catch` receives whatever the body threw, which the language types
+    // as `unknown`; the value is rethrown untouched rather than inspected.
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters
   })().catch((error: unknown) => {
     // Allow the next call to retry instead of caching the failure forever.
     globalCache.__egovBizMigration = undefined;

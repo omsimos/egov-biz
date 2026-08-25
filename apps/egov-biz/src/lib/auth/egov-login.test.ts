@@ -7,6 +7,7 @@ import {
   validateEgovSsoOtp,
   type EgovSsoFetch,
 } from "@/lib/auth/egov-login";
+import type { PayloadRecord } from "@/lib/payload";
 
 const baseRequest = {
   apiUrl: "https://sso.example.test",
@@ -14,10 +15,12 @@ const baseRequest = {
   partnerCode: "partner-code",
 };
 
-function recordingFetch(
-  responseBody: Record<string, unknown>,
-  responseStatus = 200,
-): { fetcher: EgovSsoFetch; requests: Request[] } {
+type RecordingFetch = {
+  fetcher: EgovSsoFetch;
+  requests: Request[];
+};
+
+function recordingFetch(responseBody: PayloadRecord, responseStatus = 200): RecordingFetch {
   const requests: Request[] = [];
   return {
     fetcher: async (input, init) => {
@@ -28,8 +31,8 @@ function recordingFetch(
   };
 }
 
-async function requestBody(request: Request) {
-  return (await request.json()) as Record<string, unknown>;
+async function requestBody(request: Request): Promise<PayloadRecord> {
+  return await request.json();
 }
 
 describe("browser-side eGov SSO login", () => {
@@ -109,6 +112,8 @@ describe("browser-side eGov SSO login", () => {
       throw new Error("Expected requestEgovSsoOtp to reject");
     } catch (error) {
       expect(error).toBeInstanceOf(EgovSsoRequestError);
+      // SAFETY: the assertion above fails the test unless `error` is an
+      // EgovSsoRequestError, so the throttle delay below is read off that class.
       expect((error as EgovSsoRequestError).retryAfterSeconds).toBe(47);
     }
   });

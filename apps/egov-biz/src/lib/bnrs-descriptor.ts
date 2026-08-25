@@ -1,3 +1,5 @@
+import { payloadText, type PayloadValue } from "@/lib/payload";
+
 type DescriptorOption = { id: string; label: string };
 
 const DESCRIPTOR_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = [
@@ -40,17 +42,16 @@ const DESCRIPTOR_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = [
 ];
 
 export function validBnrsDescriptorSuggestion(
-  value: unknown,
+  value: PayloadValue,
   descriptors: readonly DescriptorOption[],
 ): string | null {
-  if (typeof value !== "string") return null;
-  const id = value.trim();
+  const id = payloadText(value).trim();
   return descriptors.some((descriptor) => descriptor.id === id) ? id : null;
 }
 
 export function orderBnrsDescriptorsWithSuggestionFirst<T extends DescriptorOption>(
   descriptors: readonly T[],
-  suggestedDescriptorId: unknown,
+  suggestedDescriptorId: PayloadValue,
 ): T[] {
   const suggestion = validBnrsDescriptorSuggestion(suggestedDescriptorId, descriptors);
   if (!suggestion) return [...descriptors];

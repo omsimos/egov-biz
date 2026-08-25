@@ -1,3 +1,18 @@
+import type { JsonValue } from "../boundary.js";
+
+/**
+ * One rejected BIR form field, projected from the form schema's own issue list.
+ * `path` keeps the schema's `PropertyKey` segments rather than stringifying them.
+ */
+export type BirFormIssue = {
+  code: string;
+  message: string;
+  path: readonly PropertyKey[];
+};
+
+/** Structured diagnostics attached to a BIR error. */
+export type BirErrorDetails = Readonly<Record<string, JsonValue | readonly BirFormIssue[]>>;
+
 export type BirErrorCode =
   | "INVALID_ACTOR"
   | "INVALID_CONFIGURATION"
@@ -7,9 +22,9 @@ export type BirErrorCode =
 
 export class BirError extends Error {
   readonly code: BirErrorCode;
-  readonly details?: Readonly<Record<string, unknown>>;
+  readonly details?: BirErrorDetails;
 
-  constructor(code: BirErrorCode, message: string, details?: Readonly<Record<string, unknown>>) {
+  constructor(code: BirErrorCode, message: string, details?: BirErrorDetails) {
     super(message);
     this.name = "BirError";
     this.code = code;

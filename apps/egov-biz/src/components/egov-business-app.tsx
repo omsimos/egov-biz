@@ -225,6 +225,8 @@ export function BusinessDetailScreen({
       ) : (
         <Tabs
           className="flex min-h-0 flex-1 flex-col gap-0"
+          // SAFETY: the only triggers in this list are rendered from
+          // `RECORD_TABS`, so the value Tabs reports back is always one of them.
           onValueChange={(value) => setTab(value as RecordTab)}
           value={tab}
         >
@@ -1171,14 +1173,16 @@ export function EgaphBusinessApp({
     initialConversation ? "chat" : requestedChatId ? "restoring" : "home",
   );
   // Which way the last navigation went, derived from the screens' depth rather
-  // than passed in by each of the eleven setScreen callers. Read during the
-  // render where `screen` has already changed but the ref has not, so it still
-  // holds where we came from; the effect then catches it up after paint.
-  const lastDepth = useRef(SCREEN_DEPTH[screen]);
-  const goingBack = SCREEN_DEPTH[screen] < lastDepth.current;
-  useEffect(() => {
-    lastDepth.current = SCREEN_DEPTH[screen];
-  }, [screen]);
+  // than passed in by each of the eleven setScreen callers. The screen we came
+  // from is held in state and compared during render, so the direction is
+  // settled in the same render that swaps the screen — the render
+  // AnimatePresence takes the exiting screen from — and then holds for the
+  // whole exit rather than being caught up after paint.
+  const [nav, setNav] = useState({ back: false, from: screen });
+  if (nav.from !== screen) {
+    setNav({ back: SCREEN_DEPTH[screen] < SCREEN_DEPTH[nav.from], from: screen });
+  }
+  const goingBack = nav.from === screen ? nav.back : SCREEN_DEPTH[screen] < SCREEN_DEPTH[nav.from];
   const [prompt, setPrompt] = useState(initialConversation?.initialPrompt ?? "");
   const [conversation, setConversation] = useState<BusinessConversation | null>(
     initialConversation,
@@ -1226,10 +1230,14 @@ export function EgaphBusinessApp({
   );
   const refreshConversations = useCallback(async () => {
     const response = await fetch("/api/conversations");
-    if (response.ok)
+    if (response.ok) {
+      // SAFETY: a 2xx from this app's own `/api/conversations` GET is always
+      // `{ conversations: await listConversations(...) }`; its error branches
+      // all carry a non-2xx status.
       setConversations(
         ((await response.json()) as { conversations: ConversationSummary[] }).conversations,
       );
+    }
   }, []);
   const refreshBusinessConversations = useCallback(async (businessId: string) => {
     setBusinessConversationsLoading(true);
@@ -1242,6 +1250,9 @@ export function EgaphBusinessApp({
         setBusinessConversations([]);
         return;
       }
+      // SAFETY: a 2xx from this app's own `/api/businesses/[id]/conversations`
+      // GET is always `{ data: ConversationSummary[] }`; the early return above
+      // covers every error branch, which are all non-2xx.
       setBusinessConversations(((await response.json()) as { data: ConversationSummary[] }).data);
     } finally {
       setBusinessConversationsLoading(false);
@@ -1251,6 +1262,9 @@ export function EgaphBusinessApp({
     async (id: string, status?: string | null, serviceType?: PaymentServiceType | null) => {
       const response = await fetch(`/api/conversations/${encodeURIComponent(id)}`);
       if (!response.ok) return;
+      // SAFETY: a 2xx from this app's own `/api/conversations/[id]` GET is always
+      // `{ conversation: BusinessConversation }`; not-found and unauthenticated
+      // both answer non-2xx and returned above.
       const current = ((await response.json()) as { conversation: BusinessConversation })
         .conversation;
       setConversation(current);
@@ -1293,13 +1307,16 @@ export function EgaphBusinessApp({
       let status: string | null = null;
       let serviceType: PaymentServiceType | null = null;
       if (paymentReturn) {
-        const returnedService = url.searchParams.get("paymentService") as PaymentServiceType | null;
-        const statusQuery = new URLSearchParams({
-          conversationId: id,
-          ...(returnedService ? { serviceType: returnedService } : {}),
-        });
+        // The status route parses `serviceType` itself, so this only has to
+        // reach it as the string the citizen came back with.
+        const returnedService = url.searchParams.get("paymentService");
+        const statusQuery = new URLSearchParams({ conversationId: id });
+        if (returnedService) statusQuery.set("serviceType", returnedService);
         const paymentResponse = await fetch(`/api/payments/egovpay/status?${statusQuery}`);
         if (paymentResponse.ok) {
+          // SAFETY: a 2xx from this app's own `/api/payments/egovpay/status`
+          // always carries `payment: { serviceType, status }`; `payment` and its
+          // fields stay optional here so a shorter body falls back below.
           const payment = (
             (await paymentResponse.json()) as {
               payment?: { status?: string; serviceType?: PaymentServiceType };
@@ -1328,6 +1345,9 @@ export function EgaphBusinessApp({
       body: JSON.stringify({ initialPrompt: value }),
     });
     if (!response.ok) return;
+    // SAFETY: a 2xx from this app's own `/api/conversations` POST is always
+    // `{ conversation: await createConversation(...) }`; its validation and
+    // auth branches answer non-2xx and returned above.
     const created = ((await response.json()) as { conversation: BusinessConversation })
       .conversation;
     setConversation(created);
@@ -1344,6 +1364,9 @@ export function EgaphBusinessApp({
       { method: "POST" },
     );
     if (!response.ok) return;
+    // SAFETY: a 201 from this app's own `/api/businesses/[id]/conversations`
+    // POST is always `{ data: conversation }`; its error branches answer non-2xx
+    // and returned above.
     const created = ((await response.json()) as { data: BusinessConversation }).data;
     setSelectedBusinessId(businessId);
     setConversation(created);

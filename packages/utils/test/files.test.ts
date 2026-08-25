@@ -1,3 +1,4 @@
+import { DeleteObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,6 +9,11 @@ import {
   resolveFileStorageConfig,
   type R2ClientLike,
 } from "../src/files/index.js";
+
+type StoredManifest = {
+  garbage: string[];
+  objectName: string;
+};
 
 const completeR2Environment = {
   R2_ACCESS_KEY: "access",
@@ -163,12 +169,12 @@ describe("filesystem file storage", () => {
       await storage.put({ ...input, bytes: new TextEncoder().encode("second") });
       await storage.put({ ...input, bytes: new TextEncoder().encode("third") });
 
-      const manifest = JSON.parse(
+      const manifest: StoredManifest = JSON.parse(
         await readFile(
           join(rootDirectory, "manifests", "bir", "shared", "form-1901.pdf.json"),
           "utf8",
         ),
-      ) as { garbage: string[]; objectName: string };
+      );
       expect(manifest.garbage).toHaveLength(1);
       expect(manifest.garbage).not.toContain(manifest.objectName);
 
@@ -188,17 +194,19 @@ describe("R2 file storage", () => {
     >();
     const client: R2ClientLike = {
       async send(command) {
-        const input = command.input as Record<string, unknown>;
-        const key = String(input.Key);
-        if (command.constructor.name === "PutObjectCommand") {
+        const key = String(command.input.Key);
+        if (command instanceof PutObjectCommand) {
+          // SAFETY: R2FileStorage.put is the only caller, and it always sends the
+          // `Uint8Array.from(input.bytes)` copy it just built as the command body.
+          const body = command.input.Body as Uint8Array;
           objects.set(key, {
-            bytes: input.Body as Uint8Array,
-            contentType: String(input.ContentType),
-            metadata: input.Metadata as Record<string, string>,
+            bytes: body,
+            contentType: String(command.input.ContentType),
+            metadata: command.input.Metadata ?? {},
           });
           return {};
         }
-        if (command.constructor.name === "DeleteObjectCommand") {
+        if (command instanceof DeleteObjectCommand) {
           objects.delete(key);
           return {};
         }

@@ -6,6 +6,7 @@ import type {
   GenerateBirFormInput,
 } from "@omsimos/dx/bir";
 import { mapEgovProfileToBir1901, mapEgovProfileToBir1905 } from "@/lib/bir-form/profile";
+import { isPayloadRecord, type MutablePayloadRecord } from "@/lib/payload";
 import type { BusinessPlan } from "@/lib/questions";
 import { linkBirArtifact } from "@/server/dx/bir-artifacts";
 import { getBir } from "@/server/dx/bir";
@@ -15,19 +16,21 @@ export type BirFormArtifact = DxBirFormArtifact & {
   url: string;
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
 function mergeDefined<T>(base: T, override: T): T {
-  if (!isRecord(base) || !isRecord(override)) return override === undefined ? base : override;
+  if (!isPayloadRecord(base) || !isPayloadRecord(override))
+    return override === undefined ? base : override;
 
-  const merged: Record<string, unknown> = { ...base };
+  const merged: MutablePayloadRecord = { ...base };
   for (const [key, value] of Object.entries(override)) {
     if (value === undefined) continue;
     const current = merged[key];
-    merged[key] = isRecord(current) && isRecord(value) ? mergeDefined(current, value) : value;
+    merged[key] =
+      isPayloadRecord(current) && isPayloadRecord(value) ? mergeDefined(current, value) : value;
   }
+  // SAFETY: `merged` starts as a copy of `base`, and every key it takes from
+  // `override` is a key `override` already carries — both are Ts — so it holds
+  // the fields of a T. TypeScript cannot follow that through the index
+  // signature the merge needs to walk the two objects.
   return merged as T;
 }
 

@@ -40,8 +40,10 @@ const hasNativeDialog = (source: string) =>
   /(?:^|[^.\w$])(?:window\.|globalThis\.)?(?:confirm|alert|prompt)\s*\(/.test(source);
 
 function tsxFiles(): string[] {
-  return readdirSync(SRC, { recursive: true })
-    .filter((entry): entry is string => typeof entry === "string" && entry.endsWith(".tsx"))
+  // `encoding` is Node's own default; naming it is what types the entries as
+  // paths rather than as paths-or-buffers.
+  return readdirSync(SRC, { encoding: "utf8", recursive: true })
+    .filter((entry) => entry.endsWith(".tsx"))
     .map((entry) => entry.replaceAll("\\", "/"));
 }
 
@@ -54,6 +56,8 @@ function readIfExists(file: string): string | null {
   try {
     return read(file);
   } catch (error) {
+    // SAFETY: readFileSync throws a NodeJS.ErrnoException; the line below
+    // rethrows anything whose code is not the missing-file one.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;
   }

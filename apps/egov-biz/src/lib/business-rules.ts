@@ -70,10 +70,13 @@ export const agencyChecks: AgencyCheck[] = [
   },
 ];
 
-export function inferCategory(prompt: string): {
+/** What a prompt says the business is, and the regulatory follow-ups it triggers. */
+export type InferredBusinessCategory = {
   category: BusinessCategory;
   flags: RegulatoryFlag[];
-} {
+};
+
+export function inferCategory(prompt: string): InferredBusinessCategory {
   const value = prompt.toLowerCase();
   if (/car rental|vehicle rental|rent.*car|rent.*vehicle/.test(value)) {
     return { category: "vehicle-rental", flags: ["vehicles"] };

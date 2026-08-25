@@ -27,21 +27,21 @@ export type RecordTone = "blue" | "amber" | "red" | "green" | "grey";
 
 // bg + ink pairs, all from the token layer. Keyed rather than inlined so a row,
 // a group dot and a stat tile that mean the same agency cannot drift apart.
-export const TONE_TILE: Record<RecordTone, string> = {
+export const TONE_TILE = {
   amber: "bg-orange-soft text-orange-ink",
   blue: "bg-secondary text-primary",
   green: "bg-success-soft text-success",
   grey: "bg-muted text-muted-foreground",
   red: "bg-destructive-soft text-[var(--flag-red)]",
-};
+} satisfies Record<RecordTone, string>;
 
-export const TONE_DOT: Record<RecordTone, string> = {
+export const TONE_DOT = {
   amber: "bg-[var(--egov-orange)]",
   blue: "bg-primary",
   green: "bg-success",
   grey: "bg-gray-500",
   red: "bg-[var(--flag-red)]",
-};
+} satisfies Record<RecordTone, string>;
 
 // Order matters: the first pattern that matches wins, so the narrow agencies
 // (fire, health) are tested before the broad local-government one that would
@@ -69,13 +69,13 @@ const RECORD_TITLE_ICONS: [RegExp, PhosphorIcon][] = [
   [/taxpayer|registration|certificate/i, IdentificationBadgeIcon],
 ];
 
-const RECORD_KIND_ICONS: Record<BusinessRecord["kind"], PhosphorIcon> = {
+const RECORD_KIND_ICONS = {
   employer: UsersThreeIcon,
   permit: BuildingsIcon,
   registration: IdentificationBadgeIcon,
   renewal: CalendarCheckIcon,
   tax: ReceiptIcon,
-};
+} satisfies Record<BusinessRecord["kind"], PhosphorIcon>;
 
 /** Title first, kind as the floor: "Books of accounts" is a `tax` record. */
 export function recordIcon(record: BusinessRecord): PhosphorIcon {
