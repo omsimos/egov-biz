@@ -31,7 +31,10 @@ egov-scripts/
 └── .env.sample             # Service base URLs + credential slots
 ```
 
-Tooling: **Bun** workspaces + **Turborepo**, with `oxfmt`/`oxlint` for formatting and linting.
+Tooling: **Bun** workspaces + **Turborepo**, with `oxfmt`/`oxlint` for formatting and
+linting. Both run as Turborepo [root tasks](https://turborepo.dev/docs/guides/tools/oxc)
+(`turbo run //#lint`, `turbo run //#format`) over the whole repo rather than per package,
+configured in `.oxlintrc.json` and `.oxfmtrc.json`.
 
 ## Prerequisites
 
@@ -46,15 +49,16 @@ bun install
 cp .env.sample .env      # fill in the eGov credentials you need
 ```
 
-Root scripts run through Turborepo:
+Root scripts (`lint` and `format` invoke oxc directly; the rest fan out through Turborepo):
 
-| Command                           | What it does                      |
-| --------------------------------- | --------------------------------- |
-| `bun run build`                   | Build all packages/apps           |
-| `bun run test`                    | Run every workspace's tests       |
-| `bun run lint` / `bun run format` | Lint / format all workspaces      |
-| `bun run check-types`             | Type-check all workspaces         |
-| `bun run dev:business`            | Run the eGov Agentic Business app |
+| Command                                 | What it does                      |
+| --------------------------------------- | --------------------------------- |
+| `bun run build`                         | Build all packages/apps           |
+| `bun run test`                          | Run every workspace's tests       |
+| `bun run lint` / `bun run lint:fix`     | Lint the repo (oxlint) / autofix  |
+| `bun run format` / `bun run format:fix` | Check formatting (oxfmt) / write  |
+| `bun run check-types`                   | Type-check all workspaces         |
+| `bun run dev:business`                  | Run the eGov Agentic Business app |
 
 ## Workspaces
 

@@ -9,6 +9,7 @@ on:
       - "package.json"
       - "bun.lock"
       - "turbo.json"
+      - ".oxlintrc.json"
       - ".github/workflows/egov-agentic-biz.yml"
   push:
     branches: [main]
@@ -17,6 +18,7 @@ on:
       - "package.json"
       - "bun.lock"
       - "turbo.json"
+      - ".oxlintrc.json"
       - ".github/workflows/egov-agentic-biz.yml"
   # Lets a failed migration be retried without an empty commit.
   workflow_dispatch:
@@ -76,7 +78,7 @@ jobs:
         working-directory: .
 
       - name: Lint
-        run: bunx turbo run lint --filter=egov-agentic-biz
+        run: bunx turbo run //#lint
         working-directory: .
 
       - name: Test

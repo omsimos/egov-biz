@@ -10,9 +10,6 @@
     "generate:bir-form": "bun scripts/generate-bir-1901.ts --fixture",
     "generate:bir-form:complete": "bun scripts/generate-bir-1901.ts --complete-fixture",
     "check-types": "tsc --noEmit",
-    "format": "oxfmt src scripts drizzle.config.ts package.json tsconfig.json",
-    "format:check": "oxfmt --check src scripts drizzle.config.ts package.json tsconfig.json",
-    "lint": "oxlint src scripts drizzle.config.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "infra:up": "docker compose up -d",
@@ -59,8 +56,6 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "drizzle-kit": "0.31.10",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.10",
     "tailwindcss": "^4.3.3",
     "typescript": "^5"
   },

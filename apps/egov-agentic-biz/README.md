@@ -60,15 +60,15 @@ against the same schema.
 
 Set these in the project (all server-side):
 
-| Variable                                        | Where it comes from                                                             |
-| ----------------------------------------------- | ------------------------------------------------------------------------------- |
-| `TURSO_DATABASE_URL`                            | `turso db show --url <database>`                                                |
-| `TURSO_AUTH_TOKEN`                              | `turso db tokens create <database>`                                             |
-| `DX_TURSO_DATABASE_URL`                         | URL for the separately provisioned DX database                                  |
-| `DX_TURSO_AUTH_TOKEN`                           | Token for the DX database                                                       |
-| `REDIS_URL`                                     | Upstash — the `rediss://` TCP URL                                               |
-| `R2_BASE_URL`, `R2_ACCESS_KEY`, `R2_SECRET_KEY` | Cloudflare R2                                                                   |
-| `EMESSAGE_BASE_URL`, `EMESSAGE_ACCESS_TOKEN`    | eMessage SMS provider                                                           |
+| Variable                                                                  | Where it comes from                                                                             |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `TURSO_DATABASE_URL`                                                      | `turso db show --url <database>`                                                                |
+| `TURSO_AUTH_TOKEN`                                                        | `turso db tokens create <database>`                                                             |
+| `DX_TURSO_DATABASE_URL`                                                   | URL for the separately provisioned DX database                                                  |
+| `DX_TURSO_AUTH_TOKEN`                                                     | Token for the DX database                                                                       |
+| `REDIS_URL`                                                               | Upstash — the `rediss://` TCP URL                                                               |
+| `R2_BASE_URL`, `R2_ACCESS_KEY`, `R2_SECRET_KEY`                           | Cloudflare R2                                                                                   |
+| `EMESSAGE_BASE_URL`, `EMESSAGE_ACCESS_TOKEN`                              | eMessage SMS provider                                                                           |
 | `EGOVPAY_BASE_URL`, `EGOVPAY_API_KEY`, `EGOVPAY_SETTLEMENT_TEMPLATE_UUID` | eGovPay checkout for BNRS and LGU; optional `LGU_EGOVPAY_*` values can override the LGU account |
 
 Create the database once, then run `bun run db:migrate` against it as part of
