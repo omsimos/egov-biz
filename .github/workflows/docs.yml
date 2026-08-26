@@ -1,0 +1,101 @@
+name: docs
+
+# Pull requests cover every branch, and main only runs on push. A branch with an
+# open PR would otherwise build twice for the same commit.
+on:
+  pull_request:
+    paths:
+      - "apps/docs/**"
+      - "package.json"
+      - "bun.lock"
+      - "turbo.json"
+      - ".oxlintrc.json"
+      - ".oxfmtrc.json"
+      - "tools/oxlint/**"
+      - ".github/workflows/docs.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/docs/**"
+      - "package.json"
+      - "bun.lock"
+      - "turbo.json"
+      - ".oxlintrc.json"
+      - ".oxfmtrc.json"
+      - "tools/oxlint/**"
+      - ".github/workflows/docs.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # Keep in step with "packageManager" in the root package.json.
+          bun-version: 1.4.0
+
+      - name: Cache Bun install
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      # Build runs first because `next typegen` writes the route types that
+      # check-types reads, and next-env.d.ts is gitignored.
+      #
+      # A failed diagram does not fail this build: the Mermaid component falls
+      # back to a code block. The check after this step is what catches that.
+      - name: Build
+        run: bunx turbo run build --filter=egov-docs
+
+      # Every ```mermaid fence must have produced an SVG. A fence that renders
+      # as a code block instead means beautiful-mermaid could not parse it, and
+      # that is a broken diagram shipping silently.
+      - name: Diagrams
+        run: |
+          fences=0
+          rendered=0
+          for file in $(find content/docs -name '*.mdx' | sort); do
+            slug=${file#content/docs/}
+            slug=${slug%.mdx}
+            if [ "$slug" = "index" ]; then
+              page="out/index.html"
+            else
+              page="out/$slug.html"
+            fi
+            if [ ! -f "$page" ]; then
+              echo "::error file=$file::no exported page at $page"
+              exit 1
+            fi
+            in_file=$(grep -c '^```mermaid' "$file" || true)
+            out_file=$(grep -o 'style="--bg:var(--color-fd-background)' "$page" | wc -l | tr -d ' ')
+            if [ "$in_file" != "$out_file" ]; then
+              echo "::error file=$file::$in_file mermaid fences but $out_file rendered diagrams"
+              exit 1
+            fi
+            fences=$((fences + in_file))
+            rendered=$((rendered + out_file))
+          done
+          echo "$fences mermaid fences, $rendered rendered as SVG"
+        working-directory: apps/docs
+
+      - name: Types
+        run: bunx turbo run check-types --filter=egov-docs
+
+      - name: Lint
+        run: bunx turbo run //#lint
+
+      - name: Format
+        run: bunx turbo run //#format
