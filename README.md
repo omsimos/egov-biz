@@ -27,6 +27,7 @@ the eGovPH partner services that is developed and versioned separately.
 egov-biz/
 ├── apps/
 │   ├── egov-biz/            # eGov Business. Next.js 16, React 19, AI SDK 7
+│   ├── docs/                # System documentation. Fumadocs, static export
 │   └── egov-stagehand-e2e/  # Browser E2E suite driving the four registration routes
 ├── packages/
 │   ├── db/                  # Shared Turso/libSQL persistence for DX (Drizzle)
@@ -126,6 +127,7 @@ Turborepo.
 | Command                         | What it does                                          |
 | ------------------------------- | ----------------------------------------------------- |
 | `bun run dev:business`          | Start eGov Business on port 3000                      |
+| `bun run dev:docs`              | Start the system documentation on port 3001           |
 | `bun run build`                 | Build every package and app                           |
 | `bun run test`                  | Run every workspace's tests                           |
 | `bun run check-types`           | Type-check every workspace                            |
@@ -149,6 +151,14 @@ eGov Business itself. Next.js 16 with React 19, AI SDK 7 for the agent loop, Dri
 Turso/libSQL for durable chats, Redis pub/sub for resumable streams, and Cloudflare R2 for
 generated PDFs. Its [README](./apps/egov-biz/README.md) covers local setup, schema
 changes, the DX workflow boundary, and Vercel deployment.
+
+### `apps/docs`
+
+System documentation: high-level architecture, the three registration flows and their state
+machines, and every eGov partner API integration point. Built with
+[Fumadocs](https://fumadocs.dev) and exported as static HTML, with Mermaid diagrams rendered
+to SVG at build time so no diagram runtime ships to the browser. Its
+[README](./apps/docs/README.md) covers how to add a page and how the diagram pipeline works.
 
 ### `apps/egov-stagehand-e2e`
 
