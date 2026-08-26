@@ -34,6 +34,7 @@ egov-biz/
 │   ├── utils/               # BIR PDF generation and the private artifact store
 │   └── transcript-scraper/  # Dependency-free YouTube transcript extractor
 ├── scripts/                 # One-off service probes (eMessage, eGovPay)
+├── tools/oxlint/local/      # Repo-local lint rules, loaded as the `local` plugin
 ├── .oxlintrc.json           # Lint config, repo-wide
 ├── .oxfmtrc.json            # Format config, repo-wide
 └── .env.example             # Every credential slot both apps read

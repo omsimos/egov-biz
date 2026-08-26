@@ -157,9 +157,8 @@ type PersistedAskUserOutput = {
 // Decoding it here keeps the label from depending on which client failed.
 const httpFailureSchema = z.object({ status: z.number() });
 
-// A `catch` binding and a rejected promise both hand over whatever was thrown,
-// which the language types as `unknown`. This only turns it into a log label.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters
+// Turns whatever a `catch` binding or rejected promise handed over into a log
+// label.
 function operationalErrorLabel(error: unknown) {
   const name = error instanceof Error && error.name ? error.name : "UnknownError";
   const failure = httpFailureSchema.safeParse(error);

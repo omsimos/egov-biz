@@ -418,7 +418,6 @@ export class ScenarioHarness {
     );
   }
 
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters
   async recordFailure(error: unknown) {
     const message = error instanceof Error ? error.stack || error.message : String(error);
     this.steps.push({

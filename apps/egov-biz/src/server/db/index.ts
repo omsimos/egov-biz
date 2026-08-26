@@ -64,9 +64,7 @@ function ensureLocalSchema(database: Database): Promise<void> {
     await migrate(database, {
       migrationsFolder: path.join(process.cwd(), "drizzle"),
     });
-    // `Promise.catch` receives whatever the body threw, which the language types
-    // as `unknown`; the value is rethrown untouched rather than inspected.
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters
+    // The value is rethrown untouched rather than inspected.
   })().catch((error: unknown) => {
     // Allow the next call to retry instead of caching the failure forever.
     globalCache.__egovBizMigration = undefined;

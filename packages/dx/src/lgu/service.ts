@@ -72,10 +72,8 @@ function comparisonKey(value: string): string {
   return value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleUpperCase("en-PH");
 }
 
-// The eGov SSO profile types `tin_id` as `unknown` — the provider returns a bare
-// string, a number, or a nested object depending on the ID that backs it — so
-// this really is handed an unparsed value.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters
+// The eGov SSO profile types `tin_id` as `unknown`: the provider returns a bare
+// string, a number, or a nested object depending on the ID that backs it.
 export function normalizeLguTin(value: unknown): string | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   const scalar = payloadString(value) ?? payloadNumber(value);
