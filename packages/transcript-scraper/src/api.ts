@@ -41,8 +41,7 @@ function getPath(value: JsonValue | undefined, path: readonly string[]): JsonVal
 
 function getString(value: JsonValue | undefined): string | undefined {
   // YouTube publishes no schema for ytInitialData, so there is nothing to parse
-  // this blob against; this is the leaf that turns a JSON scalar into a string.
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof
+  // this blob against.
   return typeof value === "string" ? value : undefined;
 }
 

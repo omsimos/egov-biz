@@ -11,6 +11,7 @@ on:
       - "bun.lock"
       - "turbo.json"
       - ".oxlintrc.json"
+      - "tools/oxlint/**"
       - ".github/workflows/dx-db.yml"
   push:
     branches: [main]
@@ -21,6 +22,7 @@ on:
       - "bun.lock"
       - "turbo.json"
       - ".oxlintrc.json"
+      - "tools/oxlint/**"
       - ".github/workflows/dx-db.yml"
   # Lets a failed migration be retried without an empty commit.
   workflow_dispatch:

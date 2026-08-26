@@ -8,21 +8,17 @@ export type PaymentNetworkErrorCode =
   | "FETCH_FAILED";
 
 /**
- * A caught value is `unknown` by the language's rules: anything can be thrown,
- * and a failed fetch reports the operating-system error through a `cause` link
- * rather than through its own message. Reading that chain out into text is the
- * one place this file needs to look at an untyped value.
+ * A failed fetch reports the operating-system error through a `cause` link
+ * rather than through its own message, so classification has to read the whole
+ * chain out into text.
  */
-// oxlint-disable-next-line anti-slop/no-unknown-parameters
 function errorChainText(error: unknown): string {
   const parts: string[] = [];
   const seen = new Set<unknown>();
   let current = error;
   while (current && !seen.has(current) && seen.size < 6) {
     seen.add(current);
-    // A thrown value carries no tag but its runtime type; a string, a number and
-    // an error object are all reachable here.
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof
+    // A string, a number and an error object are all reachable here.
     if (typeof current !== "object" || current === null) {
       parts.push("", "", "");
       break;
@@ -37,11 +33,7 @@ function errorChainText(error: unknown): string {
   return parts.join(" ").toUpperCase();
 }
 
-/**
- * Called from a `catch`, so its argument is `unknown` by the language's rules:
- * the payment route hands over whatever the failed request threw.
- */
-// oxlint-disable-next-line anti-slop/no-unknown-parameters
+/** Called from the payment route's `catch`, with whatever the request threw. */
 export function classifyPaymentNetworkError(error: unknown): PaymentNetworkErrorCode | null {
   const values = errorChainText(error);
   if (/ENOTFOUND|DNS_NOT_FOUND|GETADDRINFO.*NOTFOUND/.test(values)) return "DNS_NOT_FOUND";

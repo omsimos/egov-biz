@@ -43,37 +43,23 @@ export interface MutablePayloadRecord {
  * JSON values, which holds because every caller reaches this module with a
  * payload some JSON decoder produced — and nothing reads one of those
  * properties without passing it back through a parser below.
- *
- * `unknown` is what the language gives us at this edge: the argument is whatever
- * the decoder returned, and callers hand over SDK types whose own fields are
- * `unknown`. The escape hatch is answered by confining it to this module rather
- * than repeating it in every caller.
  */
-// oxlint-disable-next-line anti-slop/no-unknown-parameters
 export function isPayloadRecord(value: unknown): value is PayloadRecord {
-  // A decoded value carries no tag but its runtime type; reading that tag is the
-  // work this boundary exists to do.
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 /** The named fields of a decoded value, or none when it has no named fields. */
-// oxlint-disable-next-line anti-slop/no-unknown-parameters
 export function payloadRecord(value: unknown): PayloadRecord {
   return isPayloadRecord(value) ? value : {};
 }
 
 /** The string a decoded value holds, or `""` when it holds anything else. */
 export function payloadText(value: PayloadValue): string {
-  // Which member of the union arrived is only knowable from the runtime tag.
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof
   return typeof value === "string" ? value : "";
 }
 
 /** The number a decoded value holds, or `null` when it holds anything else. */
 export function payloadNumber(value: PayloadValue): number | null {
-  // Which member of the union arrived is only knowable from the runtime tag.
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof
   return typeof value === "number" ? value : null;
 }
 
@@ -85,7 +71,5 @@ export function payloadNumber(value: PayloadValue): number | null {
 export function payloadScalarText(value: PayloadValue): string | null {
   const numeric = payloadNumber(value);
   if (numeric !== null) return String(numeric);
-  // Which member of the union arrived is only knowable from the runtime tag.
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof
   return typeof value === "string" ? value : null;
 }

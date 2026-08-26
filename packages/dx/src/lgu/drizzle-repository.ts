@@ -32,9 +32,8 @@ function applicantRecord(
 
 class LguTransitionRollback extends Error {}
 
-// A promise rejection reason is `unknown` by the language's own rules; this
-// handler only tests it with `instanceof` and rethrows anything it does not own.
-// oxlint-disable-next-line anti-slop/no-unknown-parameters
+// Tests the rejection reason with `instanceof` and rethrows anything it does
+// not own.
 function rollbackToNull(error: unknown): null {
   if (error instanceof LguTransitionRollback) return null;
   throw error;

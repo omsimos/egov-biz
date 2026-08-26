@@ -169,7 +169,7 @@ describe("LGU application workflow", () => {
             // A certificate reaches the service as JSON, so a missing business
             // address is reachable at runtime but has no compile-time spelling —
             // only a chain through `unknown` can construct that payload here.
-            // oxlint-disable-next-line anti-slop/no-chained-type-assertions
+            // oxlint-disable-next-line local/no-chained-type-assertions
             businessAddress: undefined as unknown as typeof certificate.businessAddress,
           },
         }),

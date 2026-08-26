@@ -10,6 +10,7 @@ on:
       - "bun.lock"
       - "turbo.json"
       - ".oxlintrc.json"
+      - "tools/oxlint/**"
       - ".github/workflows/egov-biz.yml"
   push:
     branches: [main]
@@ -19,6 +20,7 @@ on:
       - "bun.lock"
       - "turbo.json"
       - ".oxlintrc.json"
+      - "tools/oxlint/**"
       - ".github/workflows/egov-biz.yml"
   # Lets a failed migration be retried without an empty commit.
   workflow_dispatch:
