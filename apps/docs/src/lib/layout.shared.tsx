@@ -1,5 +1,5 @@
 import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared";
-import { appName, gitConfig, sdkDocsUrl } from "@/lib/shared";
+import { appName, gitConfig, sdkDocsUrl, sdkRepoUrl } from "@/lib/shared";
 
 export function baseOptions(): BaseLayoutProps {
   return {
@@ -8,8 +8,13 @@ export function baseOptions(): BaseLayoutProps {
     },
     links: [
       {
-        text: "egov.js SDK",
+        text: "egov.js docs",
         url: sdkDocsUrl,
+        external: true,
+      },
+      {
+        text: "egov.js source",
+        url: sdkRepoUrl,
         external: true,
       },
     ],

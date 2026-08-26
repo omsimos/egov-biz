@@ -14,3 +14,4 @@ export const gitConfig = {
 };
 
 export const sdkDocsUrl = "https://egov-sdk.omsimos.com";
+export const sdkRepoUrl = "https://github.com/omsimos/egov.js";

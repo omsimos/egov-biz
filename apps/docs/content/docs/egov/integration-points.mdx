@@ -6,8 +6,13 @@ description: Every eGov partner service, which ones are on a runtime path today,
 All nine partner services are reached through one gateway host,
 `https://platforms-api.e.gov.ph`, with a path per service. Every call goes through
 [`egov.js`](https://egov-sdk.omsimos.com), a typed SDK generated from an OpenAPI
-specification with a Fetch client and no runtime dependencies. The SDK is versioned and
+specification with a Fetch client and no runtime dependencies. It is MIT-licensed and
+developed in the open at [omsimos/egov.js](https://github.com/omsimos/egov.js), versioned and
 released separately from this repository.
+
+The service and operation tables below are derived from that SDK's wire contract,
+[`openapi.json`](https://github.com/omsimos/egov.js/blob/main/openapi.json) — 39 operations
+across nine tags. Read it there rather than trusting this page if the two ever disagree.
 
 ## What is wired today
 
