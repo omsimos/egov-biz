@@ -33,6 +33,12 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
+    // The docs app is a Next.js static export, so its build artifacts are
+    // .next/ and the exported out/ directory rather than dist/.
+    "egov-docs#build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**", "out/**"]
+    },
     "check-types": {
       "dependsOn": ["transit"],
       "outputs": []
