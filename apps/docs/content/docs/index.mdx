@@ -40,12 +40,9 @@ graph TB
 ```
 
 Only three of the nine eGov partner services are wired into a runtime path today: SSO for
-sign-in, eGovPay for every fee, and eMessage for SMS. Five of the rest are covered by the SDK
-and have gateway URLs in `.env.example`, but no workspace reads them yet. The sixth, eGov AI,
-was evaluated and deliberately not used — its assistant endpoint generates text and cannot
-host a tool-calling agent loop, which is
-[written up in full](/egov/integration-points#why-the-agent-does-not-run-on-egov-ai). The
-complete list is in [eGov integration points](/egov/integration-points).
+sign-in, eGovPay for every fee, and eMessage for SMS. The other six are covered by the SDK
+and have gateway URLs in `.env.example`, but no workspace reads them yet. The full list, with
+what each one would be used for, is in [eGov integration points](/egov/integration-points).
 
 Every arrow above is outbound. There is one inbound path that this level of detail omits:
 eGovPay posts a payment callback back into the app, which makes it the only route where an

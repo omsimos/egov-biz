@@ -42,58 +42,21 @@ graph LR
   App -.-> Compass
 ```
 
-| Service                    | Status    | Used for                                                         | Credentials                                           |
-| -------------------------- | --------- | ---------------------------------------------------------------- | ----------------------------------------------------- |
-| [eGov SSO](/egov/sso)      | Wired     | Citizen sign-in and profile                                      | `EGOVSSO_PARTNER_CODE`, `EGOVSSO_PARTNER_SECRET`      |
-| [eGovPay](/egov/egovpay)   | Wired     | Every registration fee                                           | `EGOVPAY_API_KEY`, `EGOVPAY_SETTLEMENT_TEMPLATE_UUID` |
-| [eMessage](/egov/emessage) | Wired     | SMS confirmations and reminders                                  | `EMESSAGE_ACCESS_TOKEN`                               |
-| eVerify                    | Available | Identity and QR verification                                     | `EVERIFY_*`                                           |
-| eGov AI                    | Evaluated | [Not used for the agent](#why-the-agent-does-not-run-on-egov-ai) | `EGOVAI_*`                                            |
-| eGovChain                  | Available | EVM-compatible JSON-RPC reads and signed submissions             | `EGOVCHAIN_*`                                         |
-| eReport                    | Available | Complaint submission, OTP, location datasets                     | `EREPORT_*`                                           |
-| Face Liveness              | Available | Liveness sessions and results                                    | `EGOVLIVENESS_*`                                      |
-| Compass                    | Available | Budget releases, allocations, obligations                        | `EGOVCOMPASS_*`                                       |
+| Service                    | Status    | Used for                                             | Credentials                                           |
+| -------------------------- | --------- | ---------------------------------------------------- | ----------------------------------------------------- |
+| [eGov SSO](/egov/sso)      | Wired     | Citizen sign-in and profile                          | `EGOVSSO_PARTNER_CODE`, `EGOVSSO_PARTNER_SECRET`      |
+| [eGovPay](/egov/egovpay)   | Wired     | Every registration fee                               | `EGOVPAY_API_KEY`, `EGOVPAY_SETTLEMENT_TEMPLATE_UUID` |
+| [eMessage](/egov/emessage) | Wired     | SMS confirmations and reminders                      | `EMESSAGE_ACCESS_TOKEN`                               |
+| eVerify                    | Available | Identity and QR verification                         | `EVERIFY_*`                                           |
+| eGov AI                    | Available | Text generation, translation, document extraction    | `EGOVAI_*`                                            |
+| eGovChain                  | Available | EVM-compatible JSON-RPC reads and signed submissions | `EGOVCHAIN_*`                                         |
+| eReport                    | Available | Complaint submission, OTP, location datasets         | `EREPORT_*`                                           |
+| Face Liveness              | Available | Liveness sessions and results                        | `EGOVLIVENESS_*`                                      |
+| Compass                    | Available | Budget releases, allocations, obligations            | `EGOVCOMPASS_*`                                       |
 
-`.env.example` carries gateway URLs for all nine. The five marked available are covered by the
+`.env.example` carries gateway URLs for all nine. The six marked available are covered by the
 SDK and have credential slots, but no workspace reads them yet — they are not dead
-configuration, they are the next integrations. eGov AI is the one deliberate exception, below.
-
-## Why the agent does not run on eGov AI
-
-eGov AI is the one service here that was evaluated and then not used. It is worth recording
-why, because the gap is structural rather than a matter of output quality, and a future
-contributor would otherwise reasonably read the empty row above as an oversight.
-
-The assistant endpoint exposes single-shot text generation:
-
-```ts
-// POST /api/v1/egov/integration/ai_assistant/generate
-type Request = { category: string; prompt: string };
-type Response = { data: string; session_id: string };
-```
-
-A registration is not a text-generation task. The agent that carries one has to call typed
-tools that drive the DX state machines, run a bounded multi-step loop, produce structured
-output, and emit a stream that can be mirrored to Redis so a reconnecting browser can resume
-it. `{ category, prompt }` has no surface for any of that: no tool definitions, no tool
-results, no message history, and a JSON response rather than a stream.
-
-So the loop runs on the [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) with AI SDK 7,
-as described in [chat request lifecycle](/architecture/request-lifecycle). This is a shape
-mismatch, not a verdict on eGov AI's answers — a service that returns a paragraph of guidance
-cannot be the thing that also advances an application from `SCOPE_PENDING` to
-`PAYMENT_READY`.
-
-Three of its other endpoints stay on the table, and the gap they would fill is real:
-
-| Endpoint                        | Would cover                                                                     |
-| ------------------------------- | ------------------------------------------------------------------------------- |
-| `document_extractor/generate`   | Reading fields off an uploaded ID or existing permit instead of asking for them |
-| `translator/generate`           | Conducting intake in Tagalog or a regional language                             |
-| `laws_and_regulations/generate` | Grounding guidance in Philippine law, which today runs through Exa web search   |
-
-That last one overlaps directly with the `webSearch` tool. Comparing an authoritative
-domestic legal corpus against general web search is a live question, not a settled one.
+configuration, they are the next integrations.
 
 ## Operations actually called
 

@@ -29,10 +29,6 @@ sequenceDiagram
   R->>R: persist conversation
 ```
 
-The model runs through the Vercel AI Gateway rather than eGov AI, because the partner
-service's assistant endpoint generates text and has no tool-calling surface — the reasoning is
-in [integration points](/egov/integration-points#why-the-agent-does-not-run-on-egov-ai).
-
 The route reads the session first and rejects anything unauthenticated before the model is
 ever called. The trusted eGov user ID comes from that session, never from the request body —
 see [trust boundaries](/architecture/trust-boundaries#the-actor-is-never-client-supplied).
