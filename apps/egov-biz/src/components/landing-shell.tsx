@@ -28,6 +28,8 @@ const navItems = [
   { href: "https://omsimos.com", label: "Support" },
 ];
 
+const DEMO_URL = "https://www.youtube.com/watch?v=9yPezjsSHcg";
+
 const HEADER_BUTTON = "font-extrabold text-base transition-colors duration-150 disabled:opacity-60";
 
 // Two exports, not one shell: the header spans the stage while the copy is the
@@ -168,21 +170,26 @@ export function LandingCopy({
         >
           Get started <ArrowRightIcon className="size-[18px]" weight="bold" />
         </button>
-        {/* No demo recording exists, so this opens sign-in rather than sitting
-            inert. Point it at a real asset or drop it. */}
-        <button
+        {/* The recording this was waiting for now exists, so it stops
+            borrowing onStart and goes where it says it goes. An anchor cannot
+            be disabled, so collapsed drops it out of the tab order the way the
+            header row does with pointer-events. */}
+        <a
+          aria-label="Watch demo on YouTube (opens in a new tab)"
           className={cn(
             "flex items-center gap-2.5 rounded-[14px] border-[1.5px] border-gray-300 bg-white px-7 py-[17px] text-lg font-extrabold text-foreground",
             "transition-[color,border-color,scale] duration-150 ease-[var(--ease-out)] hover:border-primary hover:text-primary active:scale-[var(--press-md)] motion-reduce:transition-none",
+            collapsed && "pointer-events-none",
             FOCUS_RING,
           )}
           data-cuelume-toggle="page"
-          disabled={collapsed}
-          onClick={onStart}
-          type="button"
+          href={DEMO_URL}
+          rel="noreferrer"
+          tabIndex={collapsed ? -1 : undefined}
+          target="_blank"
         >
           <PlayCircleIcon className="size-5" weight="fill" /> Watch demo
-        </button>
+        </a>
       </div>
       <div className="mt-[34px] flex flex-wrap items-center gap-x-[26px] gap-y-3 text-base font-bold text-gray-800">
         {trustPoints.map(({ Icon, label, tone }) => (
