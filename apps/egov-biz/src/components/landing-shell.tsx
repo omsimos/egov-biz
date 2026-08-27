@@ -24,6 +24,7 @@ const trustPoints = [
 // Links now, not the spans they replace: both leave for a site that exists,
 // rather than targeting a section this one-viewport landing hasn't got.
 const navItems = [
+  { href: "https://egov-biz-docs.omsimos.com", label: "Documentation" },
   { href: "https://egov-sdk.omsimos.com/", label: "egov.js" },
   { href: "https://omsimos.com", label: "Support" },
 ];
